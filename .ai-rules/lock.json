@@ -1,9 +1,9 @@
 {
   "schemaVersion": "0.2",
-  "generatedAtUtc": "2026-10-04T16:37:26.8500469Z",
+  "generatedAtUtc": "2026-10-04T19:17:53.0393084Z",
   "source": {
     "repository": "agent-engineering-kit",
-    "revision": "69a878339048464a66eff48330abff09d4e4ccbd",
+    "revision": "647e09f234160f344979b4c242e152a1aec380ca",
     "dirty": false,
     "catalogVersion": "0.1"
   },
@@ -19,7 +19,7 @@
     "quality",
     "security-and-privacy"
   ],
-  "profiles": ["standard-product"],
+  "profiles": ["public-repository", "standard-product"],
   "files": [
     {
       "source": "rules/CORE.md",
@@ -30,7 +30,13 @@
     {
       "source": "generated/effective-index",
       "target": ".ai-rules/upstream/INDEX.md",
-      "sha256": "7fbc91d24048fc2010afe4c402d2b280a3ee6a61168869da593c5c1f0517506e",
+      "sha256": "1ce2232de9e3f5b6291188186138f77c63e177518bb34414b4173f4fdd1f97d0",
+      "state": "managed"
+    },
+    {
+      "source": "profiles/public-repository.md",
+      "target": ".ai-rules/upstream/profiles/public-repository.md",
+      "sha256": "574bac3c6daf2273f3a7b84eaf56059b40f4e5c6e7962a992e59a7646db34148",
       "state": "managed"
     },
     {
@@ -42,13 +48,13 @@
     {
       "source": "rules/ARCHITECTURE_AND_DATA.md",
       "target": ".ai-rules/upstream/rules/ARCHITECTURE_AND_DATA.md",
-      "sha256": "85c2aa383f32f8ac71f248604bc99f8355947d4429212a96623a695a8ebbd613",
+      "sha256": "92a0a30070054862111793d6919de5cdb1399178318ecbff5f62e78470a09d17",
       "state": "managed"
     },
     {
       "source": "rules/DOCUMENTATION.md",
       "target": ".ai-rules/upstream/rules/DOCUMENTATION.md",
-      "sha256": "17c94fc703b71f5ec5e9baefee199d62e5889518ba0fe8b0095ee87dff969630",
+      "sha256": "a58e6b822af6858d2e541db136d7bdff9f568944394824525d3a7dd2e8f4886d",
       "state": "managed"
     },
     {
