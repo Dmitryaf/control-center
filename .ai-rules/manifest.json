@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "0.2",
+  "source": {
+    "repository": "agent-engineering-kit",
+    "revision": "69a878339048464a66eff48330abff09d4e4ccbd"
+  },
+  "topics": ["project-bootstrap"],
+  "profiles": ["standard-product"]
+}
