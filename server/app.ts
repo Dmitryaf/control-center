@@ -1,5 +1,7 @@
 import express, { type ErrorRequestHandler } from 'express';
 import path from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { z, ZodError } from 'zod';
 import {
   metadataSchema,
@@ -13,11 +15,13 @@ import { Projects } from './projects/projects.js';
 import { exportMetadata } from './projects/metadata.js';
 import { assertProjectAccess } from './filesystem/access.js';
 import { Records } from './records.js';
+import { Checks } from './checks/checks.js';
 
 export function createApp(store: Store, port: number) {
   const app = express();
   const projects = new Projects(store);
   const records = new Records(store);
+  const checks = new Checks(store);
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -48,6 +52,10 @@ export function createApp(store: Store, port: number) {
       relations: records.relations(),
       settings: store.settings(),
       scan: projects.scanInfo,
+      checks: checks.views(),
+      checkEntries: checks.entries(),
+      fileDecisions: projects.decisions.list(),
+      storage: { databasePath: store.path },
     }),
   );
   app.post('/api/scan', async (_req, res) => {
@@ -65,16 +73,34 @@ export function createApp(store: Store, port: number) {
     res.json(settings);
   });
   app.get('/api/projects/:id', async (req, res) => res.json(await projects.refresh(req.params.id)));
-  app.put('/api/projects/:id', (req, res) => {
+  app.put('/api/projects/:id', async (req, res) => {
     const row = projects.require(req.params.id);
     const data = z
-      .object({ metadata: metadataSchema, notes: z.string().max(20000) })
+      .object({
+        metadata: metadataSchema,
+        notes: z.string().max(20000),
+        expectedHash: z.string().nullable().optional(),
+      })
       .parse(req.body);
+    const current = await projects.refresh(row.id);
+    if (data.expectedHash !== undefined && data.expectedHash !== current.snapshot.yaml.hash)
+      throw new HttpError(409, 'PROJECT.yaml изменился. Обновите страницу и сравните версии.');
     store.saveMetadata(row.id, data.metadata, data.notes);
     res.json(projects.view(projects.require(row.id)));
   });
   app.post('/api/projects/:id/use-yaml', async (req, res) => {
     const row = projects.require(req.params.id);
+    const body = z.object({ expectedHash: z.string().nullable() }).parse(req.body);
+    const current = await projects.refresh(row.id);
+    if (
+      !current.available ||
+      current.snapshot.yaml.error ||
+      body.expectedHash !== current.snapshot.yaml.hash
+    )
+      throw new HttpError(
+        409,
+        'PROJECT.yaml изменился или недоступен. Обновите страницу и сравните версии. Локальная версия сохранена.',
+      );
     store.saveMetadata(row.id, null, row.notes);
     res.json(await projects.refresh(row.id));
   });
@@ -82,8 +108,81 @@ export function createApp(store: Store, port: number) {
     const row = projects.require(req.params.id);
     const body = z.object({ expectedHash: z.string().nullable() }).parse(req.body);
     await assertProjectAccess(row.path, store.settings().roots);
+    if ((await projects.refresh(row.id)).yamlConflict)
+      throw new HttpError(409, 'Сначала выберите, какую версию сводки оставить.');
     await exportMetadata(row.path, projects.view(row).metadata, body.expectedHash);
-    res.json(await projects.refresh(row.id));
+    const updated = await projects.refresh(row.id);
+    if (row.metadata)
+      store.saveMetadata(row.id, updated.metadata, row.notes, updated.snapshot.yaml.hash);
+    res.json(projects.view(projects.require(row.id)));
+  });
+  app.post('/api/projects/:id/keep-local', async (req, res) => {
+    const data = z.object({ expectedHash: z.string().nullable() }).parse(req.body);
+    const current = await projects.refresh(req.params.id);
+    if (
+      !current.available ||
+      current.snapshot.yaml.error ||
+      data.expectedHash !== current.snapshot.yaml.hash
+    )
+      throw new HttpError(409, 'Файл изменился или недоступен. Обновите страницу.');
+    store.saveMetadata(current.id, current.metadata, current.notes, data.expectedHash);
+    res.json(projects.view(projects.require(current.id)));
+  });
+  app.post('/api/projects/:id/rebind', async (req, res) => {
+    const body = z.object({ targetId: z.string().uuid() }).parse(req.body);
+    res.json(await projects.rebind(req.params.id, body.targetId));
+  });
+  app.delete('/api/projects/:id', async (req, res) => {
+    await projects.forget(req.params.id);
+    res.json({ ok: true });
+  });
+  app.put('/api/projects/:id/decision-sources', async (req, res) => {
+    const row = projects.require(req.params.id);
+    const body = z
+      .object({ paths: z.array(z.string().trim().min(1).max(2000)).max(20) })
+      .parse(req.body);
+    if (body.paths.some((p) => !path.isAbsolute(p)))
+      throw new HttpError(400, 'Нужны абсолютные пути каталогов.');
+    store.db
+      .prepare('UPDATE projects SET decision_sources=? WHERE id=?')
+      .run(JSON.stringify([...new Set(body.paths.map((p) => path.resolve(p)))]), row.id);
+    await projects.decisions.refresh(row.id);
+    res.json(projects.view(projects.require(row.id)));
+  });
+  app.post('/api/backup', (_req, res) => {
+    const directory = path.join(path.dirname(store.path), 'backups');
+    mkdirSync(directory, { recursive: true });
+    const file = path.join(
+      directory,
+      `control-center-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}.sqlite`,
+    );
+    store.backup(file);
+    res.json({ path: file });
+  });
+  app.post('/api/checks', (req, res) => {
+    const body = z
+      .object({ check: z.unknown(), allowParallel: z.boolean().default(false) })
+      .parse(req.body);
+    res.status(201).json(checks.save(body.check, undefined, body.allowParallel));
+  });
+  app.put('/api/checks/:id', (req, res) => {
+    const body = z
+      .object({ check: z.unknown(), allowParallel: z.boolean().default(false) })
+      .parse(req.body);
+    res.json(checks.save(body.check, req.params.id, body.allowParallel));
+  });
+  app.post('/api/checks/:id/complete', (req, res) =>
+    res.json(checks.complete(req.params.id, req.body)),
+  );
+  app.post('/api/checks/:id/entries', (req, res) =>
+    res.status(201).json(checks.saveEntry(req.params.id, req.body)),
+  );
+  app.put('/api/checks/:id/entries/:entryId', (req, res) =>
+    res.json(checks.saveEntry(req.params.id, req.body, req.params.entryId)),
+  );
+  app.delete('/api/checks/:id/entries/:entryId', (req, res) => {
+    checks.deleteEntry(req.params.id, req.params.entryId);
+    res.json({ ok: true });
   });
   for (const kind of ['tasks', 'ideas', 'decisions'] satisfies RecordKind[]) {
     app.post(`/api/${kind}`, (req, res) => res.status(201).json(records.save(kind, req.body)));

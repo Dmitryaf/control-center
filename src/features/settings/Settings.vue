@@ -6,6 +6,15 @@ const roots = ref(workspace.value!.settings.roots.join('\n'));
 const exclusions = ref(workspace.value!.settings.exclusions.join('\n'));
 const inactivityDays = ref(workspace.value!.settings.inactivityDays);
 const reviewDays = ref(workspace.value!.settings.reviewDays);
+const movementInfoDays = ref(workspace.value!.settings.movementInfoDays);
+const movementAttentionDays = ref(workspace.value!.settings.movementAttentionDays);
+const movementDecisionDays = ref(workspace.value!.settings.movementDecisionDays);
+const backupPath = ref('');
+function backup() {
+  return act(async () => {
+    backupPath.value = (await api<{ path: string }>('/backup', 'POST')).path;
+  }, 'Резервная копия создана и проверена');
+}
 function save() {
   return act(async () => {
     await api('/settings', 'PUT', {
@@ -13,6 +22,9 @@ function save() {
       exclusions: lines(exclusions.value),
       inactivityDays: inactivityDays.value,
       reviewDays: reviewDays.value,
+      movementInfoDays: movementInfoDays.value,
+      movementAttentionDays: movementAttentionDays.value,
+      movementDecisionDays: movementDecisionDays.value,
     });
   }, 'Настройки сохранены. Каталоги проверены.');
 }
@@ -57,6 +69,36 @@ function save() {
       /></label>
     </div>
     <div>
+      <h2>Время без внешнего движения</h2>
+      <p class="help">
+        Только для активных проверок. Интервалы должны возрастать. Git не сбрасывает эти сроки.
+      </p>
+      <div class="form-grid section-space">
+        <label
+          >Информация, дней<input
+            v-model.number="movementInfoDays"
+            type="number"
+            min="1"
+            max="3650"
+            required /></label
+        ><label
+          >Внимание, дней<input
+            v-model.number="movementAttentionDays"
+            type="number"
+            min="1"
+            max="3650"
+            required /></label
+        ><label
+          >Нужно решение, дней<input
+            v-model.number="movementDecisionDays"
+            type="number"
+            min="1"
+            max="3650"
+            required
+        /></label>
+      </div>
+    </div>
+    <div>
       <button class="primary" :disabled="busy">
         {{ busy ? 'Сканирование…' : 'Сохранить и сканировать' }}
       </button>
@@ -64,6 +106,13 @@ function save() {
   </form>
   <div class="panel section-space prose">
     <h2>Как хранятся данные</h2>
+    <p class="source-path">База: {{ workspace!.storage.databasePath }}</p>
+    <button :disabled="busy" @click="backup">Создать резервную копию</button>
+    <p v-if="backupPath" class="source-path">Копия: {{ backupPath }}</p>
+    <p class="help">
+      Для восстановления остановите приложение, сохраните текущую базу вместе с -wal/-shm отдельно и
+      поместите копию под именем control-center.sqlite в указанный каталог. Подробности — в README.
+    </p>
     <p>
       Задачи, идеи, решения, связи, настройки и ваши правки сводок хранятся в локальной SQLite.
       Сканирование читает репозитории без изменения файлов.

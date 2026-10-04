@@ -10,11 +10,15 @@ import { HttpError } from '../errors.js';
 import { assertProjectAccess } from '../filesystem/access.js';
 import { attention } from './attention.js';
 import { discover, inspectProject } from './scan.js';
+import { DecisionIndex } from '../decisions/index.js';
 
 export class Projects {
   scanInfo: ScanInfo = { scannedAt: null, errors: [], running: false };
   private pending: Promise<void> | null = null;
-  constructor(readonly store: Store) {}
+  readonly decisions: DecisionIndex;
+  constructor(readonly store: Store) {
+    this.decisions = new DecisionIndex(store);
+  }
   require(id: string): ProjectRow {
     const row = this.store.project(id);
     if (!row) throw new HttpError(404, 'Проект не найден.');
@@ -26,6 +30,24 @@ export class Projects {
       ? metadataSchema.parse(JSON.parse(row.metadata))
       : (snapshot.yaml.metadata ?? metadataSchema.parse({ name: snapshot.directoryName }));
     const signals = attention(metadata, snapshot, this.store.settings());
+    const yamlConflict =
+      !!row.metadata &&
+      (row.yaml_base_hash !== snapshot.yaml.hash || !!snapshot.yaml.error);
+    if (yamlConflict)
+      signals.push({
+        code: 'yaml-conflict',
+        level: 'attention',
+        message: 'PROJECT.yaml изменился после локального редактирования',
+      });
+    for (const decision of this.decisions.list().filter((d) => d.projectId === row.id)) {
+      if (decision.error)
+        signals.push({
+          code: `decision-file-${decision.key}`,
+          level: 'attention',
+          message: `Решения: ${decision.error}`,
+        });
+      else signals.push(...decision.signals);
+    }
     if (!row.available)
       signals.unshift({
         code: 'unavailable',
@@ -47,6 +69,8 @@ export class Projects {
       notes: row.notes,
       available: !!row.available,
       signals,
+      yamlConflict,
+      decisionSources: JSON.parse(row.decision_sources),
     };
   }
   list() {
@@ -86,16 +110,69 @@ export class Projects {
       scannedAt: new Date().toISOString(),
       errors: discovery.errors,
     };
+    await this.decisions.refreshAll();
   }
   async refresh(id: string): Promise<Project> {
     const row = this.require(id);
     try {
       await assertProjectAccess(row.path, this.store.settings().roots);
       this.store.saveSnapshot(id, await inspectProject(row.path));
-    } catch (error) {
+    } catch {
+      // Preserve the last snapshot and all user data when access is lost.
       this.store.db.prepare('UPDATE projects SET available=0 WHERE id=?').run(id);
-      if (error instanceof HttpError && error.status === 403) return this.view(this.require(id));
     }
+    await this.decisions.refresh(id);
     return this.view(this.require(id));
+  }
+  async rebind(id: string, targetId: string) {
+    if (this.scanInfo.running) throw new HttpError(409, 'Дождитесь сканирования.');
+    if (id === targetId) throw new HttpError(400, 'Выберите другой найденный каталог.');
+    await this.refresh(id);
+    const old = this.require(id);
+    if (old.available)
+      throw new HttpError(409, 'Перепривязка доступна только недоступному проекту.');
+    const candidate = await this.refresh(targetId);
+    if (!candidate.available) throw new HttpError(409, 'Новый каталог недоступен.');
+    const target = this.require(targetId);
+    const used = this.store.db
+      .prepare(
+        `SELECT (
+      (SELECT count(*) FROM records WHERE project_id=?) +
+      (SELECT count(*) FROM checks WHERE project_id=?) +
+      (SELECT count(*) FROM relations WHERE sourceId=? OR targetId=?)
+    ) AS total`,
+      )
+      .get(targetId, targetId, targetId, targetId) as { total: number };
+    if (target.metadata || target.notes || JSON.parse(target.decision_sources).length || used.total)
+      throw new HttpError(
+        409,
+        'У выбранного проекта уже есть свои данные. Автоматическое слияние запрещено. Выберите новый, ещё не настроенный каталог.',
+      );
+    this.store.transaction(() => {
+      this.store.db.prepare('DELETE FROM projects WHERE id=?').run(targetId);
+      this.store.db
+        .prepare('UPDATE projects SET path=?,snapshot=?,available=1 WHERE id=?')
+        .run(target.path, target.snapshot, id);
+    });
+    this.decisions.forget(targetId);
+    await this.decisions.refresh(id);
+    return this.view(this.require(id));
+  }
+  async forget(id: string) {
+    if (this.scanInfo.running) throw new HttpError(409, 'Дождитесь сканирования.');
+    await this.refresh(id);
+    if (this.require(id).available)
+      throw new HttpError(409, 'Можно забыть только недоступный проект.');
+    this.store.transaction(() => {
+      this.store.db
+        .prepare(
+          "UPDATE records SET project_id=NULL,data=json_set(data,'$.projectId',NULL),updated_at=? WHERE project_id=?",
+        )
+        .run(new Date().toISOString(), id);
+      this.store.db.prepare('UPDATE checks SET project_id=NULL WHERE project_id=?').run(id);
+      this.store.db.prepare('DELETE FROM relations WHERE sourceId=? OR targetId=?').run(id, id);
+      this.store.db.prepare('DELETE FROM projects WHERE id=?').run(id);
+    });
+    this.decisions.forget(id);
   }
 }

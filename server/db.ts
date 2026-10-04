@@ -1,6 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { settingsSchema } from '../shared/contracts.js';
+import { snapshotDatabase } from './storage.js';
 import {
   defaultSettings,
   type Metadata,
@@ -15,23 +17,29 @@ export interface ProjectRow {
   metadata: string | null;
   notes: string;
   available: number;
+  yaml_base_hash: string | null;
+  decision_sources: string;
 }
 export class Store {
   readonly db: DatabaseSync;
-  constructor(path: string) {
+  constructor(readonly path: string) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     this.db.exec(
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (version.user_version > 1)
-      throw new Error('База создана более новой версией Control Center.');
-    this.db.exec(`
+    if (![0, 2].includes(version.user_version)) {
+      this.db.close();
+      throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
+    }
+    this.transaction(() =>
+      this.db.exec(`
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS projects (
         id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, snapshot TEXT NOT NULL,
-        metadata TEXT, notes TEXT NOT NULL DEFAULT '', available INTEGER NOT NULL DEFAULT 1
+        metadata TEXT, notes TEXT NOT NULL DEFAULT '', available INTEGER NOT NULL DEFAULT 1,
+        yaml_base_hash TEXT, decision_sources TEXT NOT NULL DEFAULT '[]'
       );
       CREATE TABLE IF NOT EXISTS records (
         id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('tasks','ideas','decisions')),
@@ -44,13 +52,25 @@ export class Store {
         targetId TEXT NOT NULL REFERENCES projects(id), type TEXT NOT NULL,
         UNIQUE(sourceId,targetId,type), CHECK(sourceId != targetId)
       );
-      PRAGMA user_version = 1;
-    `);
+          CREATE TABLE IF NOT EXISTS checks (
+            id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+            idea_id TEXT REFERENCES records(id) ON DELETE SET NULL, data TEXT NOT NULL,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS check_entries (
+            id TEXT PRIMARY KEY, check_id TEXT NOT NULL REFERENCES checks(id) ON DELETE CASCADE,
+            data TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS checks_project ON checks(project_id);
+          CREATE INDEX IF NOT EXISTS entries_check ON check_entries(check_id);
+          PRAGMA user_version = 2;
+        `),
+    );
   }
   settings(): Settings {
     const row = this.db.prepare('SELECT data FROM settings WHERE id=1').get() as
       { data: string } | undefined;
-    return row ? JSON.parse(row.data) : structuredClone(defaultSettings);
+    return row ? settingsSchema.parse(JSON.parse(row.data)) : structuredClone(defaultSettings);
   }
   saveSettings(settings: Settings) {
     this.db
@@ -72,10 +92,32 @@ export class Store {
       )
       .run(id, snapshot.path, JSON.stringify(snapshot));
   }
-  saveMetadata(id: string, metadata: Metadata | null, notes: string) {
+  saveMetadata(id: string, metadata: Metadata | null, notes: string, baseHash?: string | null) {
+    const row = this.project(id)!;
+    const snapshot: Snapshot = JSON.parse(row.snapshot);
+    const firstEdit = !row.metadata;
     this.db
-      .prepare('UPDATE projects SET metadata=?, notes=? WHERE id=?')
-      .run(metadata ? JSON.stringify(metadata) : null, notes, id);
+      .prepare('UPDATE projects SET metadata=?, notes=?, yaml_base_hash=? WHERE id=?')
+      .run(
+        metadata ? JSON.stringify(metadata) : null,
+        notes,
+        baseHash !== undefined ? baseHash : firstEdit ? snapshot.yaml.hash : row.yaml_base_hash,
+        id,
+      );
+  }
+  transaction<T>(action: () => T): T {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const result = action();
+      this.db.exec('COMMIT');
+      return result;
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  backup(destination: string) {
+    snapshotDatabase(this.db, destination);
   }
   close() {
     this.db.close();

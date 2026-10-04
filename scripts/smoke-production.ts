@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
 import { fixture } from '../tests/fixtures.js';
 import type { Workspace } from '../shared/contracts.js';
 
@@ -10,6 +11,7 @@ const repo = await fixtureData.repo('production-project');
 const base = 'http://127.0.0.1:4321';
 let processHandle: ChildProcess | null = null;
 let output = '';
+const dataDirectory = path.join(fixtureData.root, 'data');
 async function start() {
   output = '';
   processHandle = spawn(process.execPath, ['dist/server/server/index.js'], {
@@ -19,7 +21,7 @@ async function start() {
     env: {
       ...process.env,
       PORT: '4321',
-      CONTROL_CENTER_DATA_DIR: path.join(fixtureData.root, 'data'),
+      CONTROL_CENTER_DATA_DIR: dataDirectory,
     },
   });
   processHandle.stdout?.on('data', (chunk) => {
@@ -79,6 +81,43 @@ try {
     projectId: id,
   });
   assert.equal(created.status, 201);
+  const checkResponse = await request('/api/checks', 'POST', {
+    check: {
+      title: 'Production check',
+      projectId: id,
+      question: 'Question',
+      assumption: 'Assumption',
+      expectedExternalResult: 'Result',
+      startedAt: '2020-01-01',
+      continueIf: 'Yes',
+      stopIf: 'No',
+      nextExternalAction: 'Ask',
+    },
+  });
+  assert.equal(checkResponse.status, 201);
+  const check = (await checkResponse.json()) as { id: string };
+  assert.equal(
+    (
+      await request(`/api/checks/${check.id}/entries`, 'POST', {
+        kind: 'evidence',
+        text: 'Preserve evidence',
+        occurredAt: '2020-01-02',
+        type: 'fact',
+        numericValue: 2,
+      })
+    ).status,
+    201,
+  );
+  const backupResponse = await request('/api/backup', 'POST', {});
+  assert.equal(backupResponse.status, 200);
+  const backup = (await backupResponse.json()) as { path: string };
+  const backupDb = new DatabaseSync(backup.path, { readOnly: true });
+  assert.equal(
+    (backupDb.prepare('SELECT COUNT(*) AS n FROM check_entries').get() as { n: number }).n,
+    1,
+  );
+  assert.equal(backupDb.prepare('PRAGMA quick_check').get()?.quick_check, 'ok');
+  backupDb.close();
   assert.match(await (await request(`/projects/${id}`)).text(), /Control Center/);
   await stop();
   await start();
@@ -87,8 +126,11 @@ try {
   assert.equal(restarted.projects[0].id, id);
   assert.equal(restarted.projects[0].available, true);
   assert.ok(restarted.scan.scannedAt);
+  assert.equal(restarted.checks[0].id, check.id);
+  assert.equal(restarted.checkEntries[0].numericValue, 2);
+  await stop();
   console.log(
-    'Production smoke passed: empty configuration, assets, scan, task, restart persistence, deep link.',
+    'Production smoke passed: empty database, assets, scan, task, checks, evidence, verified backup, restart, deep link.',
   );
 } finally {
   await stop();

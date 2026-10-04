@@ -1,8 +1,6 @@
 # Control Center
 
-A local dashboard for your projects, tools, tasks, ideas, and decisions. See what is active, what needs attention, and what to do next.
-
-Works with local repositories, including private projects and projects without a Git remote. The interface is in Russian.
+A local dashboard for projects, tasks, ideas, and hypothesis checks. See what needs attention and choose the next step. Works with private repositories and projects without a Git remote. The interface is in Russian.
 
 ## Get started
 
@@ -15,43 +13,47 @@ npm ci
 npm run dev
 ```
 
-Open [localhost:4310](http://127.0.0.1:4310).
+Open [localhost:4310](http://127.0.0.1:4310), add your project folders in **Settings**, and scan. Open a project to set its focus and next step. Use **Refresh** to reread projects; opening a project also refreshes its files and Git status.
 
-1. Open Settings and add your project folders, such as `C:/Personal`.
-2. Scan the folders and open a project.
-3. Set its status, current focus, and next step.
-4. Add tasks, ideas, decisions, and links between projects.
+## Checks
 
-Projects refresh on startup and when you click Refresh. Opening a project also updates its Git status.
+Start a check from an idea or the **Checks** page. Record the question, expected external result, conditions to continue or stop, and the next external step.
+
+Log **external actions** and **evidence** separately. Dates stay visible. Git commits show development work; they never reset the external-action clock. Evidence has its own date. With no actions, elapsed time starts at the check's launch date.
+
+Reminders appear inside the app: information after **3 days**, attention after **7**, and a decision prompt after **14** without an external action. Change these intervals in Settings or set a review date for a check. Paused checks have no reminders. Completion requires a result and a decision; the check stays in the archive.
 
 ## Your data
 
-Everything stays on your computer. Settings and your entries are stored in `.data/control-center.sqlite`, which is excluded from Git. To back up your data, stop the app and copy the `.data` folder.
+SQLite stores your settings, notes, tasks, ideas, checks, and local decisions. The default database is `control-center.sqlite` in:
 
-Scanning only reads repositories. It does not change files or run project code.
+- Windows: `%LOCALAPPDATA%/ControlCenter`
+- macOS: `~/Library/Application Support/ControlCenter`
+- Linux: `$XDG_DATA_HOME/control-center` or `~/.local/share/control-center`
 
-## Optional project summary
+Set `CONTROL_CENTER_DATA_DIR` to use another directory.
 
-Add a `PROJECT.yaml` file to a project, or create it from the interface:
+**Settings → Create backup** saves and verifies a SQLite copy and shows its path. See [backup and restore](docs/data.md) for recovery instructions.
 
-```yaml
-name: My Project
-type: product
-status: active
-current_focus: Prepare the first release
-next:
-  - Test the main workflow
-```
+Moved a project? Scan its new location, open the unavailable project, and use **Rebind** to keep its ID and history. **Forget project** detaches its records and removes its links; it never deletes repository files.
 
-Projects work without this file. Edits saved in Control Center take priority over YAML. Writing them back to `PROJECT.yaml` requires an explicit export.
+## Project files and decisions
+
+`PROJECT.yaml` is an optional project summary. Local edits take priority. If the file changes, compare versions and choose which to keep. Writing back to YAML is always explicit.
+
+Project decisions stay in `DECISIONS.md` and `decisions/*.md`. Control Center reads Agent Kit YAML front matter, flags due reviews and accepted decisions awaiting implementation, and also displays older Markdown records. It does not edit these files.
+
+To add private decisions, open a project and expand **Additional decision directories**. Directory paths stay in local SQLite and are never exported to YAML. General decisions remain in SQLite; older project-linked local decisions are preserved and labeled.
+
+Everything stays on your computer. No accounts, cloud sync, GitHub API, or external AI services. Scanning reads files without running project code.
 
 ## Development
 
-Built with Vue 3, TypeScript, Vite, a local Node.js API, and SQLite. No accounts, cloud sync, GitHub integration, or AI services.
+Vue 3, TypeScript, Vite, a local Node.js API, and SQLite.
 
 ```sh
-npm run check    # Lint, typecheck, tests, and production build
-npm start        # Run the built app locally
+npm run check            # Lint, typecheck, tests, and build
+npm run test:e2e         # Browser tests; requires Microsoft Edge
+npm run test:production  # Built app, persistence, and backup
+npm start               # Run the built app
 ```
-
-Browser tests: `npm run test:e2e` (requires Microsoft Edge).

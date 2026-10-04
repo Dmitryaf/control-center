@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useRoute } from 'vue-router';
 import type { Decision, DecisionInput } from '../../../shared/contracts';
 import { api, act, busy, workspace } from '../../shared/api';
 import { decisionLabels, date, today } from '../../shared/labels';
 import ProjectSelect from '../../shared/ProjectSelect.vue';
 import ProjectLink from '../../shared/ProjectLink.vue';
-const route = useRoute();
+import RecordDelete from '../../shared/RecordDelete.vue';
+import DecisionFiles from './DecisionFiles.vue';
 const empty = (): DecisionInput => ({
   title: '',
   context: '',
   decision: '',
   reason: '',
-  projectId: String(route.query.project ?? '') || null,
+  projectId: null,
   date: today(),
   status: 'active',
 });
@@ -45,6 +45,12 @@ function edit(decision: Decision) {
       <p class="subtitle">Что выбрано и почему — чтобы не вспоминать заново.</p>
     </div>
   </div>
+  <DecisionFiles />
+  <h2 class="section-space">Общие решения экосистемы</h2>
+  <p class="help">
+    Новые проектные решения добавляйте в канонические файлы. Существующие локальные записи сохранены
+    ниже.
+  </p>
   <form class="panel form" @submit.prevent="save">
     <h2>{{ editingId ? 'Изменить решение' : 'Записать решение' }}</h2>
     <label>Название решения<input v-model="draft.title" required maxlength="240" /></label>
@@ -54,7 +60,7 @@ function edit(decision: Decision) {
     </div>
     <label>Почему<textarea v-model="draft.reason" rows="2" /></label>
     <div class="form-grid">
-      <ProjectSelect v-model="draft.projectId" /><label
+      <ProjectSelect v-if="editingId" v-model="draft.projectId" /><label
         >Статус<select v-model="draft.status">
           <option v-for="(label, key) in decisionLabels" :key="key" :value="key">
             {{ label }}
@@ -90,6 +96,9 @@ function edit(decision: Decision) {
         }}</span>
       </div>
       <h3>{{ decision.title }}</h3>
+      <p class="eyebrow">
+        {{ decision.projectId ? 'Локальное решение Control Center' : 'Общее решение экосистемы' }}
+      </p>
       <p v-if="decision.context" class="muted preserve">{{ decision.context }}</p>
       <p class="preserve">{{ decision.decision }}</p>
       <template v-if="decision.reason"
@@ -99,6 +108,12 @@ function edit(decision: Decision) {
       <div class="row between">
         <small>{{ date(decision.date) }}</small
         ><button @click="edit(decision)">Изменить</button>
+        <RecordDelete
+          :id="decision.id"
+          kind="decisions"
+          :title="decision.title"
+          @deleted="editingId === decision.id && ((editingId = null), (draft = empty()))"
+        />
       </div>
     </article>
   </div>

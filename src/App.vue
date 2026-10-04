@@ -4,10 +4,11 @@ import { act, api, busy, error, notice, reload, workspace } from './shared/api';
 const navigation = [
   ['/', 'Обзор', '01'],
   ['/projects', 'Проекты', '02'],
-  ['/tasks', 'Задачи', '03'],
-  ['/ideas', 'Идеи', '04'],
-  ['/decisions', 'Решения', '05'],
-  ['/settings', 'Настройки', '06'],
+  ['/checks', 'Проверки', '03'],
+  ['/tasks', 'Задачи', '04'],
+  ['/ideas', 'Идеи', '05'],
+  ['/decisions', 'Решения', '06'],
+  ['/settings', 'Настройки', '07'],
 ];
 onMounted(() => act(reload));
 function refresh() {

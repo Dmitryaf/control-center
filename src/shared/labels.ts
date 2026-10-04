@@ -33,7 +33,7 @@ export const relationLabels = {
 export function date(value?: string | null) {
   return value
     ? new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'short', year: 'numeric' }).format(
-        new Date(value),
+        new Date(value.length === 10 ? `${value}T12:00:00` : value),
       )
     : 'Нет данных';
 }

@@ -8,6 +8,8 @@ import Tasks from './features/tasks/Tasks.vue';
 import Ideas from './features/ideas/Ideas.vue';
 import Decisions from './features/decisions/Decisions.vue';
 import Settings from './features/settings/Settings.vue';
+import Checks from './features/checks/Checks.vue';
+import CheckDetail from './features/checks/CheckDetail.vue';
 import './style.css';
 
 const router = createRouter({
@@ -16,6 +18,8 @@ const router = createRouter({
     { path: '/', component: Overview },
     { path: '/projects', component: Projects },
     { path: '/projects/:id', component: ProjectDetail },
+    { path: '/checks', component: Checks },
+    { path: '/checks/:id', component: CheckDetail },
     { path: '/tasks', component: Tasks },
     { path: '/ideas', component: Ideas },
     { path: '/decisions', component: Decisions },

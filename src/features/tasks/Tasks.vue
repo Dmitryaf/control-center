@@ -6,6 +6,7 @@ import { act, api, busy, workspace } from '../../shared/api';
 import { taskLabels, priorityLabels } from '../../shared/labels';
 import ProjectSelect from '../../shared/ProjectSelect.vue';
 import ProjectLink from '../../shared/ProjectLink.vue';
+import RecordDelete from '../../shared/RecordDelete.vue';
 const route = useRoute();
 const initialProject = String(route.query.project ?? '') || null;
 const filter = ref<string | null>(initialProject);
@@ -140,6 +141,12 @@ function edit(task: Task) {
           >
             {{ task.completedAt ? 'Вернуть' : 'Завершить' }}</button
           ><button class="text-button" @click="edit(task)">Изменить</button>
+          <RecordDelete
+            :id="task.id"
+            kind="tasks"
+            :title="task.title"
+            @deleted="editingId === task.id && ((editingId = null), (draft = empty()))"
+          />
         </div>
       </article>
       <p v-if="!tasks.some((t) => t.state === key)" class="empty board-empty">Пока пусто</p>

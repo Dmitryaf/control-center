@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { CheckView, CheckEntry } from './checks.js';
+import type { FileDecision } from './decisions.js';
 
 const text = z.string().trim().max(10000);
 const title = z.string().trim().min(1).max(240);
@@ -18,18 +20,31 @@ export const metadataSchema = z.object({
   last_reviewed: z.string().date().nullable().default(null),
 });
 export type Metadata = z.infer<typeof metadataSchema>;
-export const settingsSchema = z.object({
-  roots: z.array(z.string().trim().min(1).max(2000)).max(30),
-  exclusions: z.array(z.string().trim().min(1).max(100)).max(100),
-  inactivityDays: z.number().int().min(1).max(3650),
-  reviewDays: z.number().int().min(1).max(3650),
-});
+export const settingsSchema = z
+  .object({
+    roots: z.array(z.string().trim().min(1).max(2000)).max(30),
+    exclusions: z.array(z.string().trim().min(1).max(100)).max(100),
+    inactivityDays: z.number().int().min(1).max(3650),
+    reviewDays: z.number().int().min(1).max(3650),
+    movementInfoDays: z.number().int().min(1).max(3650).default(3),
+    movementAttentionDays: z.number().int().min(1).max(3650).default(7),
+    movementDecisionDays: z.number().int().min(1).max(3650).default(14),
+  })
+  .refine(
+    (s) =>
+      s.movementInfoDays < s.movementAttentionDays &&
+      s.movementAttentionDays < s.movementDecisionDays,
+    { message: 'Интервалы должны возрастать', path: ['movementAttentionDays'] },
+  );
 export type Settings = z.infer<typeof settingsSchema>;
 export const defaultSettings: Settings = {
   roots: [],
   exclusions: ['node_modules', 'dist', 'build', 'archive', '.git', '.venv', 'vendor'],
   inactivityDays: 14,
   reviewDays: 30,
+  movementInfoDays: 3,
+  movementAttentionDays: 7,
+  movementDecisionDays: 14,
 };
 const recordBase = { title, projectId: z.string().uuid().nullable().default(null) };
 export const taskSchema = z.object({
@@ -100,6 +115,7 @@ export interface Snapshot {
 export interface Signal {
   code: string;
   message: string;
+  level?: 'info' | 'attention' | 'decision';
 }
 export interface Project {
   id: string;
@@ -110,6 +126,8 @@ export interface Project {
   notes: string;
   available: boolean;
   signals: Signal[];
+  yamlConflict: boolean;
+  decisionSources: string[];
 }
 export interface ScanInfo {
   scannedAt: string | null;
@@ -124,4 +142,8 @@ export interface Workspace {
   relations: Relation[];
   settings: Settings;
   scan: ScanInfo;
+  checks: CheckView[];
+  checkEntries: CheckEntry[];
+  fileDecisions: FileDecision[];
+  storage: { databasePath: string };
 }

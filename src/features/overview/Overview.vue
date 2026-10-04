@@ -3,10 +3,22 @@ import { computed } from 'vue';
 import { workspace } from '../../shared/api';
 import { date } from '../../shared/labels';
 import ProjectCard from '../projects/ProjectCard.vue';
+import CheckCard from '../checks/CheckCard.vue';
+const checks = computed(() => workspace.value!.checks.filter((c) => c.status === 'active'));
+const checkAttention = computed(() =>
+  checks.value.filter((c) => c.signals.some((s) => s.level !== 'info')),
+);
+const noMovement = computed(() =>
+  checks.value.filter(
+    (c) => c.daysWithoutMovement >= workspace.value!.settings.movementAttentionDays,
+  ),
+);
 const active = computed(() =>
   workspace.value!.projects.filter((p) => p.metadata.status === 'active'),
 );
-const attention = computed(() => workspace.value!.projects.filter((p) => p.signals.length));
+const attention = computed(() =>
+  workspace.value!.projects.filter((p) => p.signals.some((s) => s.level !== 'info')),
+);
 const now = computed(() =>
   workspace.value!.tasks.filter((t) => !t.completedAt && t.state === 'now'),
 );
@@ -43,7 +55,9 @@ const recent = computed(() =>
       ><strong>{{ active.length.toString().padStart(2, '0') }}</strong></RouterLink
     ><a href="#attention"
       ><span>Требуют внимания</span
-      ><strong>{{ attention.length.toString().padStart(2, '0') }}</strong></a
+      ><strong>{{
+        (attention.length + checkAttention.length).toString().padStart(2, '0')
+      }}</strong></a
     ><RouterLink to="/tasks"
       ><span>Задач сейчас</span
       ><strong>{{ now.length.toString().padStart(2, '0') }}</strong></RouterLink
@@ -54,6 +68,24 @@ const recent = computed(() =>
   </div>
   <div class="dashboard-columns">
     <section>
+      <section class="checks-overview">
+        <div class="section-heading">
+          <h2>
+            Проверки <span class="count">{{ checks.length }} активных</span>
+          </h2>
+          <RouterLink to="/checks">Все проверки →</RouterLink>
+        </div>
+        <p class="help">
+          Требуют внимания: {{ checkAttention.length }} · Без внешнего движения от
+          {{ workspace!.settings.movementAttentionDays }} дн.: {{ noMovement.length }}
+        </p>
+        <div class="timeline section-space">
+          <CheckCard v-for="check in checks" :key="check.id" :check="check" />
+        </div>
+        <p v-if="!checks.length" class="panel empty">
+          Активных проверок нет. Начните с вопроса, который требует внешнего подтверждения.
+        </p>
+      </section>
       <div class="section-heading">
         <h2>
           Активные проекты <span class="count">{{ active.length }}</span>
@@ -93,17 +125,33 @@ const recent = computed(() =>
           <span class="attention-mark">●</span>
         </div>
         <div class="panel attention-list">
+          <div v-for="check in checkAttention" :key="check.id" class="attention-item">
+            <RouterLink :to="`/checks/${check.id}`">Проверка: {{ check.title }}</RouterLink>
+            <p
+              v-for="signal in check.signals.filter((s) => s.level !== 'info')"
+              :key="signal.code"
+              class="signal"
+              :class="signal.level"
+            >
+              {{ signal.message }}
+            </p>
+          </div>
           <div v-for="project in attention" :key="project.id" class="attention-item">
             <RouterLink :to="`/projects/${project.id}`"
               >{{ project.metadata.name }} <span>↗</span></RouterLink
             >
             <ul>
-              <li v-for="signal in project.signals" :key="signal.code + signal.message">
+              <li
+                v-for="signal in project.signals.filter((s) => s.level !== 'info')"
+                :key="signal.code + signal.message"
+              >
                 {{ signal.message }}
               </li>
             </ul>
           </div>
-          <p v-if="!attention.length" class="empty">По доступным данным сигналов нет.</p>
+          <p v-if="!attention.length && !checkAttention.length" class="empty">
+            По доступным данным сигналов нет.
+          </p>
         </div>
       </section>
       <section class="section-space">

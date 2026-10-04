@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, get } from 'node:http';
+import { writeFile, readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { createApp } from '../server/app.js';
 import { Store } from '../server/db.js';
 import { fixture } from './fixtures.js';
@@ -75,6 +77,70 @@ test('API empty database → scan → metadata → records → relation; validat
   assert.equal(workspace.relations.length, 1);
   assert.ok(workspace.projects[0].signals.some((s) => s.code === 'decision'));
   assert.equal(workspace.tasks[0].state, 'now');
+  const payload = {
+    title: 'API check',
+    projectId: project.id,
+    ideaId: workspace.ideas[0].id,
+    question: 'Question',
+    assumption: 'Assumption',
+    expectedExternalResult: 'Result',
+    startedAt: '2020-01-01',
+    continueIf: 'Yes',
+    stopIf: 'No',
+    nextExternalAction: 'Ask',
+  };
+  const createdCheck = await request('/checks', 'POST', { check: payload });
+  assert.equal(createdCheck.status, 201);
+  const check = (await createdCheck.json()) as { id: string };
+  assert.equal((await request('/checks', 'POST', { check: payload })).status, 409);
+  assert.equal(
+    (await request(`/checks/${check.id}/complete`, 'POST', { outcome: 'stop' })).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request(`/checks/${check.id}/entries`, 'POST', {
+        kind: 'evidence',
+        text: 'Fact',
+        occurredAt: '2020-01-02',
+        numericValue: 2,
+      })
+    ).status,
+    201,
+  );
+  assert.equal(
+    (await request(`/projects/${project.id}/decision-sources`, 'PUT', { paths: ['relative'] }))
+      .status,
+    400,
+  );
+  const yaml = path.join(project.path, 'PROJECT.yaml');
+  await writeFile(yaml, 'name: External\n');
+  assert.equal(
+    (await request(`/projects/${project.id}/export`, 'POST', { expectedHash: null })).status,
+    409,
+  );
+  assert.equal(
+    (await request(`/projects/${project.id}/keep-local`, 'POST', { expectedHash: null })).status,
+    409,
+  );
+  assert.equal(
+    (await request(`/projects/${project.id}/use-yaml`, 'POST', { expectedHash: null })).status,
+    409,
+  );
+  workspace = (await (await request('/workspace')).json()) as Workspace;
+  assert.equal(workspace.projects.find((p) => p.id === project.id)?.metadata.current_focus, 'Ship');
+  const hash = workspace.projects.find((p) => p.id === project.id)!.snapshot.yaml.hash;
+  assert.equal(
+    (await request(`/projects/${project.id}/use-yaml`, 'POST', { expectedHash: hash })).status,
+    200,
+  );
+  assert.equal(await readFile(yaml, 'utf8'), 'name: External\n');
+  for (const kind of ['tasks', 'ideas', 'decisions'] as const) {
+    assert.equal((await request(`/${kind}/${workspace[kind][0].id}`, 'DELETE')).status, 200);
+  }
+  workspace = (await (await request('/workspace')).json()) as Workspace;
+  assert.equal(workspace.checks[0].ideaId, null);
+  assert.equal(workspace.checkEntries.length, 1);
   assert.equal((await request('/tasks', 'POST', { title: '' })).status, 400);
   assert.equal(
     (await request('/settings', 'PUT', { ...workspace.settings, roots: ['relative'] })).status,

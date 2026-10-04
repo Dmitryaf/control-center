@@ -5,6 +5,9 @@ import { api, act, busy, workspace } from '../../shared/api';
 import { ideaLabels, date } from '../../shared/labels';
 import ProjectSelect from '../../shared/ProjectSelect.vue';
 import ProjectLink from '../../shared/ProjectLink.vue';
+import RecordDelete from '../../shared/RecordDelete.vue';
+import { daysBetween } from '../../../shared/time';
+import { today } from '../../shared/labels';
 const empty = (): IdeaInput => ({ title: '', description: '', projectId: null, state: 'new' });
 const draft = ref(empty());
 const editingId = ref<string | null>(null);
@@ -82,6 +85,9 @@ function edit(idea: Idea) {
         <ProjectLink :id="idea.projectId" /><small>{{ date(idea.createdAt) }}</small>
       </div>
       <h3>{{ idea.title }}</h3>
+      <p class="idea-age">
+        Идея существует: {{ daysBetween(idea.createdAt, today()) }} дн. · {{ date(idea.createdAt) }}
+      </p>
       <p class="preserve">{{ idea.description }}</p>
       <div class="row">
         <select
@@ -94,7 +100,24 @@ function edit(idea: Idea) {
             {{ label }}
           </option></select
         ><button @click="edit(idea)">Изменить</button>
+        <RouterLink :to="`/checks?idea=${idea.id}`" class="button">Начать проверку</RouterLink>
+        <RecordDelete
+          :id="idea.id"
+          kind="ideas"
+          :title="idea.title"
+          @deleted="editingId === idea.id && ((editingId = null), (draft = empty()))"
+        />
       </div>
+      <p v-for="check in workspace!.checks.filter((c) => c.ideaId === idea.id)" :key="check.id">
+        <RouterLink :to="`/checks/${check.id}`">{{ check.title }}</RouterLink> ·
+        {{
+          check.status === 'completed'
+            ? 'В архиве'
+            : check.status === 'paused'
+              ? 'На паузе'
+              : 'Активна'
+        }}
+      </p>
     </article>
   </div>
   <p v-if="!workspace!.ideas.length" class="panel empty section-space">

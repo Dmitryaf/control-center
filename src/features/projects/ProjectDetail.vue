@@ -2,6 +2,9 @@
 import { computed, ref, watch, toRaw } from 'vue';
 import { useRoute } from 'vue-router';
 import type { Metadata, Project, Relation } from '../../../shared/contracts';
+import ProjectMaintenance from './ProjectMaintenance.vue';
+import DecisionFiles from '../decisions/DecisionFiles.vue';
+import CheckCard from '../checks/CheckCard.vue';
 import { api, act, busy, error, workspace } from '../../shared/api';
 import {
   date,
@@ -86,6 +89,7 @@ async function save() {
           related: lines(relatedText.value),
         },
         notes: notes.value,
+        expectedHash: project.value!.snapshot.yaml.hash,
       }),
     );
   }, 'Сводка сохранена в Control Center');
@@ -104,7 +108,11 @@ function useYaml() {
   if (!confirm('Убрать локальные правки сводки и использовать PROJECT.yaml? Заметки сохранятся.'))
     return;
   return act(async () => {
-    accept(await api<Project>(`/projects/${project.value!.id}/use-yaml`, 'POST'));
+    accept(
+      await api<Project>(`/projects/${project.value!.id}/use-yaml`, 'POST', {
+        expectedHash: project.value!.snapshot.yaml.hash,
+      }),
+    );
   }, 'Источник сводки обновлён');
 }
 function addRelation() {
@@ -142,6 +150,23 @@ function removeRelation(id: string) {
         {{ editing ? 'Закрыть редактор' : 'Изменить сводку' }}
       </button>
     </div>
+    <ProjectMaintenance :key="project.id" :project="project" @updated="accept" />
+    <section
+      v-if="workspace!.checks.some((c) => c.projectId === project!.id && c.status === 'active')"
+      class="section-space"
+    >
+      <h2>Проверки проекта</h2>
+      <div class="record-list section-space">
+        <CheckCard
+          v-for="check in workspace!.checks.filter(
+            (c) => c.projectId === project!.id && c.status !== 'completed',
+          )"
+          :key="check.id"
+          :check="check"
+        />
+      </div>
+      <RouterLink :to="`/checks?new=1&project=${project.id}`">Новая проверка →</RouterLink>
+    </section>
     <div v-if="!project.available" class="message warning">
       Каталог недоступен или вне настроек. Показан сохранённый снимок.
     </div>
@@ -229,7 +254,7 @@ function removeRelation(id: string) {
         <section class="section-space">
           <div class="section-heading">
             <h2>Решения</h2>
-            <RouterLink :to="`/decisions?project=${project.id}`">Записать решение →</RouterLink>
+            <RouterLink to="/decisions">Все решения →</RouterLink>
           </div>
           <div class="panel compact-list">
             <div v-for="item in decisions" :key="item.id">
@@ -336,6 +361,7 @@ function removeRelation(id: string) {
         </section>
       </aside>
     </div>
+    <DecisionFiles :project-id="project.id" />
     <details class="panel section-space">
       <summary>Информация о репозитории</summary>
       <dl class="repository-info">

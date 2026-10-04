@@ -92,9 +92,6 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await page.getByLabel('Название решения').fill('Хранить данные локально');
     await page.getByLabel('Решение', { exact: true }).fill('Использовать SQLite');
     await page.getByLabel('Почему', { exact: true }).fill('Не нужен отдельный сервер');
-    await page
-      .getByRole('combobox', { name: 'Проект', exact: true })
-      .selectOption({ label: 'local-product' });
     await page.getByRole('button', { name: 'Добавить решение' }).click();
     await expect(
       page.getByRole('heading', { name: 'Хранить данные локально', exact: true }),
