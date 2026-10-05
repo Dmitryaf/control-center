@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { workspace } from '../../shared/api';
+import { computed, ref } from 'vue';
+import { api, workspace } from '../../shared/api';
+import type { FileDecision } from '../../../shared/decisions';
 import { date } from '../../shared/labels';
 import ProjectLink from '../../shared/ProjectLink.vue';
 const props = defineProps<{ projectId?: string }>();
@@ -19,6 +20,26 @@ const implementation = {
   partial: 'Частично',
   implemented: 'Реализовано',
 };
+const contents = ref<Record<string, string>>({});
+const errors = ref<Record<string, string>>({});
+async function read(record: FileDecision, event: Event) {
+  if (!(event.target as HTMLDetailsElement).open) {
+    delete contents.value[record.key];
+    return;
+  }
+  delete contents.value[record.key];
+  delete errors.value[record.key];
+  try {
+    const result = await api<{ body: string }>(
+      `/projects/${record.projectId}/decision-content`,
+      'POST',
+      { key: record.key },
+    );
+    contents.value[record.key] = result.body;
+  } catch (error) {
+    errors.value[record.key] = (error as Error).message;
+  }
+}
 </script>
 <template>
   <section class="section-space">
@@ -34,7 +55,11 @@ const implementation = {
         <div class="row between">
           <h3>{{ record.metadata?.id }} {{ record.title }}</h3>
           <span class="badge">{{
-            record.source === 'private' ? 'Приватный источник' : 'Репозиторий'
+            record.source === 'repository'
+              ? 'Проектное решение · repository'
+              : record.source === 'private_context'
+                ? 'Проектное решение · private context'
+                : 'Проектное решение · приватный каталог решений'
           }}</span>
         </div>
         <p class="source-path">{{ record.sourcePath }}</p>
@@ -70,9 +95,13 @@ const implementation = {
           </details></template
         >
         <p v-else class="muted">Неструктурированная запись решения</p>
-        <details v-if="record.body">
+        <details v-if="record.hasContent" @toggle="read(record, $event)">
           <summary>Читать решение</summary>
-          <pre class="decision-body">{{ record.body }}</pre>
+          <p v-if="errors[record.key]" role="alert">{{ errors[record.key] }}</p>
+          <pre v-else-if="contents[record.key] !== undefined" class="decision-body">{{
+            contents[record.key]
+          }}</pre>
+          <p v-else>Чтение исходного файла…</p>
         </details>
       </article>
     </div>

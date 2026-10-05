@@ -3,9 +3,10 @@ import { computed, ref, watch, toRaw } from 'vue';
 import { useRoute } from 'vue-router';
 import type { Metadata, Project, Relation } from '../../../shared/contracts';
 import ProjectMaintenance from './ProjectMaintenance.vue';
+import ProjectContext from './ProjectContext.vue';
 import DecisionFiles from '../decisions/DecisionFiles.vue';
 import CheckCard from '../checks/CheckCard.vue';
-import { api, act, busy, error, workspace } from '../../shared/api';
+import { api, act, busy, error, workspace, reload } from '../../shared/api';
 import {
   date,
   lines,
@@ -46,6 +47,7 @@ watch(
     loading.value = true;
     try {
       const result = await api<Project>(`/projects/${id}`);
+      await reload();
       if (version === loadVersion) accept(result);
     } catch (cause) {
       if (version === loadVersion) error.value = (cause as Error).message;
@@ -150,6 +152,7 @@ function removeRelation(id: string) {
         {{ editing ? 'Закрыть редактор' : 'Изменить сводку' }}
       </button>
     </div>
+    <ProjectContext :key="project.id" :project="project" @updated="accept" />
     <ProjectMaintenance :key="project.id" :project="project" @updated="accept" />
     <section
       v-if="workspace!.checks.some((c) => c.projectId === project!.id && c.status === 'active')"
@@ -253,7 +256,7 @@ function removeRelation(id: string) {
         </section>
         <section class="section-space">
           <div class="section-heading">
-            <h2>Решения</h2>
+            <h2>Локальные решения Control Center</h2>
             <RouterLink to="/decisions">Все решения →</RouterLink>
           </div>
           <div class="panel compact-list">
@@ -262,7 +265,7 @@ function removeRelation(id: string) {
               <p>{{ item.decision }}</p>
               <small>{{ decisionLabels[item.status] }} · {{ date(item.date) }}</small>
             </div>
-            <p v-if="!decisions.length" class="muted">Решений пока нет.</p>
+            <p v-if="!decisions.length" class="muted">Локальных решений пока нет.</p>
           </div>
         </section>
         <section v-if="project.notes" class="panel prose section-space">

@@ -3,6 +3,7 @@ import { once } from 'node:events';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { fixture } from '../tests/fixtures.js';
 import type { Workspace } from '../shared/contracts.js';
 
@@ -75,6 +76,37 @@ try {
   const workspace = (await (await request('/api/workspace')).json()) as Workspace;
   assert.equal(workspace.projects.length, 1);
   const id = workspace.projects[0].id;
+  const privateRoot = path.join(fixtureData.root, 'private-context');
+  await mkdir(privateRoot);
+  await writeFile(
+    path.join(privateRoot, 'DECISIONS.md'),
+    '# Private production choice\nCanonical private body',
+  );
+  await writeFile(path.join(repo, 'DECISIONS.md'), '# Public production choice');
+  fixtureData.git(repo, 'add', 'DECISIONS.md');
+  assert.equal(
+    (
+      await request(`/api/projects/${id}/context`, 'PUT', {
+        visibility: 'public',
+        privateContextPath: privateRoot,
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await request(`/api/projects/${id}/publication-allowlist`, 'PUT', {
+        path: 'DECISIONS.md',
+        allowed: true,
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await request(`/api/projects/${id}/export`, 'POST', { expectedHash: null })).status,
+    200,
+  );
+  assert.ok(!(await readFile(path.join(repo, 'PROJECT.yaml'), 'utf8')).includes(privateRoot));
   assert.equal(workspace.projects[0].snapshot.yaml.exists, false);
   const created = await request('/api/tasks', 'POST', {
     title: 'Persists across restart',
@@ -117,6 +149,11 @@ try {
     1,
   );
   assert.equal(backupDb.prepare('PRAGMA quick_check').get()?.quick_check, 'ok');
+  assert.equal(
+    backupDb.prepare('SELECT private_context_path FROM projects WHERE id=?').get(id)
+      ?.private_context_path,
+    privateRoot,
+  );
   backupDb.close();
   assert.match(await (await request(`/projects/${id}`)).text(), /Control Center/);
   await stop();
@@ -128,9 +165,21 @@ try {
   assert.ok(restarted.scan.scannedAt);
   assert.equal(restarted.checks[0].id, check.id);
   assert.equal(restarted.checkEntries[0].numericValue, 2);
+  assert.equal(restarted.projects[0].context.visibility, 'public');
+  assert.equal(restarted.projects[0].context.privateStatus, 'connected');
+  assert.deepEqual(restarted.projects[0].context.allowlist, ['DECISIONS.md']);
+  assert.deepEqual(restarted.projects[0].context.audit.findings, []);
+  const privateDecision = restarted.fileDecisions.find(
+    (record) => record.source === 'private_context',
+  )!;
+  assert.equal(privateDecision.body, '');
+  const content = await request(`/api/projects/${id}/decision-content`, 'POST', {
+    key: privateDecision.key,
+  });
+  assert.match((await content.json()).body, /Canonical private body/);
   await stop();
   console.log(
-    'Production smoke passed: empty database, assets, scan, task, checks, evidence, verified backup, restart, deep link.',
+    'Production smoke passed: assets, scan, tasks, checks, private context, audit allowlist, canonical text, safe export, backup, restart, deep link.',
   );
 } finally {
   await stop();

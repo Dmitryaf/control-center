@@ -7,17 +7,20 @@ import {
 } from '../../shared/contracts.js';
 import { Store, type ProjectRow } from '../db.js';
 import { HttpError } from '../errors.js';
-import { assertProjectAccess } from '../filesystem/access.js';
+import { assertProjectAccess, within } from '../filesystem/access.js';
 import { attention } from './attention.js';
 import { discover, inspectProject } from './scan.js';
 import { DecisionIndex } from '../decisions/index.js';
+import { ContextIndex } from './context.js';
 
 export class Projects {
   scanInfo: ScanInfo = { scannedAt: null, errors: [], running: false };
   private pending: Promise<void> | null = null;
   readonly decisions: DecisionIndex;
+  readonly context: ContextIndex;
   constructor(readonly store: Store) {
     this.decisions = new DecisionIndex(store);
+    this.context = new ContextIndex(store);
   }
   require(id: string): ProjectRow {
     const row = this.store.project(id);
@@ -30,9 +33,58 @@ export class Projects {
       ? metadataSchema.parse(JSON.parse(row.metadata))
       : (snapshot.yaml.metadata ?? metadataSchema.parse({ name: snapshot.directoryName }));
     const signals = attention(metadata, snapshot, this.store.settings());
+    const context = {
+      visibility: row.visibility,
+      privateContextPath: row.private_context_path,
+      hadPrivateRecords: !!row.private_context_had_records,
+      allowlist: JSON.parse(row.publication_allowlist) as string[],
+      ...this.decisions.context(row.id),
+      audit: this.context.audit(row.id),
+    };
+    if (row.visibility === 'public') {
+      if (context.audit.status === 'unavailable')
+        signals.push({
+          code: 'publication-unavailable',
+          level: 'attention',
+          message: 'Не удалось проверить отслеживаемые Git файлы',
+        });
+      const infrastructure = context.audit.findings.filter(
+        (finding) => finding.kind === 'infrastructure',
+      );
+      if (infrastructure.length)
+        signals.push({
+          code: 'publication-infrastructure',
+          level: 'attention',
+          message:
+            'В публичном Git отслеживается внутренняя инфраструктура: ' +
+            [
+              ...new Set(
+                infrastructure.map((finding) =>
+                  finding.path.startsWith('.ai-rules/')
+                    ? '.ai-rules/'
+                    : finding.path.startsWith('.local/')
+                      ? '.local/'
+                      : finding.path,
+                ),
+              ),
+            ].join(', '),
+        });
+      const documents = context.audit.findings.filter((finding) => finding.kind === 'document');
+      if (documents.length)
+        signals.push({
+          code: 'publication-documents',
+          level: 'attention',
+          message: `Документы требуют проверки публикации: ${documents.length}`,
+        });
+      if (context.privateStatus === 'unavailable' && context.hadPrivateRecords)
+        signals.push({
+          code: 'private-context-unavailable',
+          level: 'attention',
+          message: 'Не найден ранее подключённый приватный контекст',
+        });
+    }
     const yamlConflict =
-      !!row.metadata &&
-      (row.yaml_base_hash !== snapshot.yaml.hash || !!snapshot.yaml.error);
+      !!row.metadata && (row.yaml_base_hash !== snapshot.yaml.hash || !!snapshot.yaml.error);
     if (yamlConflict)
       signals.push({
         code: 'yaml-conflict',
@@ -71,6 +123,7 @@ export class Projects {
       signals,
       yamlConflict,
       decisionSources: JSON.parse(row.decision_sources),
+      context,
     };
   }
   list() {
@@ -111,6 +164,7 @@ export class Projects {
       errors: discovery.errors,
     };
     await this.decisions.refreshAll();
+    for (const row of this.store.projects()) await this.context.refresh(row);
   }
   async refresh(id: string): Promise<Project> {
     const row = this.require(id);
@@ -122,6 +176,7 @@ export class Projects {
       this.store.db.prepare('UPDATE projects SET available=0 WHERE id=?').run(id);
     }
     await this.decisions.refresh(id);
+    await this.context.refresh(this.require(id));
     return this.view(this.require(id));
   }
   async rebind(id: string, targetId: string) {
@@ -134,6 +189,15 @@ export class Projects {
     const candidate = await this.refresh(targetId);
     if (!candidate.available) throw new HttpError(409, 'Новый каталог недоступен.');
     const target = this.require(targetId);
+    if (
+      old.private_context_path &&
+      (within(target.path, old.private_context_path) ||
+        within(old.private_context_path, target.path))
+    )
+      throw new HttpError(
+        409,
+        'Новый репозиторий пересекается с приватным контекстом. Сначала измените связь.',
+      );
     const used = this.store.db
       .prepare(
         `SELECT (
@@ -143,7 +207,15 @@ export class Projects {
     ) AS total`,
       )
       .get(targetId, targetId, targetId, targetId) as { total: number };
-    if (target.metadata || target.notes || JSON.parse(target.decision_sources).length || used.total)
+    if (
+      target.metadata ||
+      target.notes ||
+      JSON.parse(target.decision_sources).length ||
+      target.visibility !== 'unknown' ||
+      target.private_context_path ||
+      JSON.parse(target.publication_allowlist).length ||
+      used.total
+    )
       throw new HttpError(
         409,
         'У выбранного проекта уже есть свои данные. Автоматическое слияние запрещено. Выберите новый, ещё не настроенный каталог.',
@@ -155,7 +227,9 @@ export class Projects {
         .run(target.path, target.snapshot, id);
     });
     this.decisions.forget(targetId);
+    this.context.forget(targetId);
     await this.decisions.refresh(id);
+    await this.context.refresh(this.require(id));
     return this.view(this.require(id));
   }
   async forget(id: string) {
@@ -174,5 +248,6 @@ export class Projects {
       this.store.db.prepare('DELETE FROM projects WHERE id=?').run(id);
     });
     this.decisions.forget(id);
+    this.context.forget(id);
   }
 }

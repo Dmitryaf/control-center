@@ -17,7 +17,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: 'node --import tsx server/index.ts --dev',
+    command: 'npm run build && node dist/server/server/index.js',
     url: 'http://127.0.0.1:4319',
     reuseExistingServer: false,
     env: { PORT: '4319', CONTROL_CENTER_DATA_DIR: data },

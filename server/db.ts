@@ -19,6 +19,10 @@ export interface ProjectRow {
   available: number;
   yaml_base_hash: string | null;
   decision_sources: string;
+  visibility: 'unknown' | 'private' | 'public';
+  private_context_path: string | null;
+  private_context_had_records: number;
+  publication_allowlist: string;
 }
 export class Store {
   readonly db: DatabaseSync;
@@ -29,7 +33,7 @@ export class Store {
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (![0, 2].includes(version.user_version)) {
+    if (![0, 2, 3].includes(version.user_version)) {
       this.db.close();
       throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
     }
@@ -63,9 +67,22 @@ export class Store {
           );
           CREATE INDEX IF NOT EXISTS checks_project ON checks(project_id);
           CREATE INDEX IF NOT EXISTS entries_check ON check_entries(check_id);
-          PRAGMA user_version = 2;
         `),
     );
+    this.transaction(() => {
+      const columns = this.db.prepare('PRAGMA table_info(projects)').all() as { name: string }[];
+      for (const [name, definition] of Object.entries({
+        visibility:
+          "TEXT NOT NULL DEFAULT 'unknown' CHECK(visibility IN ('unknown','private','public'))",
+        private_context_path: 'TEXT',
+        private_context_had_records: 'INTEGER NOT NULL DEFAULT 0',
+        publication_allowlist: "TEXT NOT NULL DEFAULT '[]'",
+      })) {
+        if (!columns.some((column) => column.name === name))
+          this.db.exec(`ALTER TABLE projects ADD COLUMN ${name} ${definition}`);
+      }
+      this.db.exec('PRAGMA user_version = 3');
+    });
   }
   settings(): Settings {
     const row = this.db.prepare('SELECT data FROM settings WHERE id=1').get() as

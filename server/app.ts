@@ -149,6 +149,24 @@ export function createApp(store: Store, port: number) {
     await projects.decisions.refresh(row.id);
     res.json(projects.view(projects.require(row.id)));
   });
+  app.put('/api/projects/:id/context', async (req, res) => {
+    projects.require(req.params.id);
+    await projects.context.save(req.params.id, req.body);
+    res.json(await projects.refresh(req.params.id));
+  });
+  app.put('/api/projects/:id/publication-allowlist', async (req, res) => {
+    projects.require(req.params.id);
+    const body = z
+      .object({ path: z.string().min(1).max(4000), allowed: z.boolean() })
+      .parse(req.body);
+    await projects.context.allow(req.params.id, body.path, body.allowed);
+    res.json(await projects.refresh(req.params.id));
+  });
+  app.post('/api/projects/:id/decision-content', async (req, res) => {
+    projects.require(req.params.id);
+    const body = z.object({ key: z.string().min(1).max(6000) }).parse(req.body);
+    res.json(await projects.decisions.content(req.params.id, body.key));
+  });
   app.post('/api/backup', (_req, res) => {
     const directory = path.join(path.dirname(store.path), 'backups');
     mkdirSync(directory, { recursive: true });

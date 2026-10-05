@@ -1,6 +1,6 @@
 # Control Center
 
-A local dashboard for projects, tasks, ideas, and hypothesis checks. See what needs attention and choose the next step. Works with private repositories and projects without a Git remote. The interface is in Russian.
+A local dashboard for projects, tasks, ideas, and hypothesis checks. See what needs attention and choose the next step. Works with public or private repositories and projects without a Git remote. The interface is in Russian.
 
 ## Get started
 
@@ -43,7 +43,22 @@ Moved a project? Scan its new location, open the unavailable project, and use **
 
 Project decisions stay in `DECISIONS.md` and `decisions/*.md`. Control Center reads Agent Kit YAML front matter, flags due reviews and accepted decisions awaiting implementation, and also displays older Markdown records. It does not edit these files.
 
-To add private decisions, open a project and expand **Additional decision directories**. Directory paths stay in local SQLite and are never exported to YAML. General decisions remain in SQLite; older project-linked local decisions are preserved and labeled.
+Open **Источники контекста → Настройки контекста** on a project to explicitly select **Репозиторий публичный**, **Репозиторий приватный**, or **Не указано**. Visibility is a local setting; it is never guessed from a remote URL or changed on GitHub.
+
+Link a separate local folder using **Каталог приватного контекста**. Control Center reads its `DECISIONS.md` and `decisions/*.md`, and reports whether `PROJECT_MAP.md` exists. Other folders, such as `research/`, `hypotheses/`, and `agent/`, are allowed but not indexed yet. Keep the context outside the project repository and arrange its private versioning and backup yourself.
+
+Repository and private-context decisions share one list with visible sources. Conflicting IDs show both entries; neither wins automatically. Text is read from its canonical file when opened. **Отключить приватный контекст** removes the local link after confirmation and leaves every file intact. An unavailable source loses its temporary index; a public project with previously seen private records gets an attention signal. Existing additional decision directories and SQLite decisions remain supported without automatic migration.
+
+The separation is:
+
+- **Repository**: source code and documents intended for its readers.
+- **Agent Kit**: local working infrastructure (`AGENTS.md`, `.ai-rules/`), connected separately after cloning.
+- **Private Project Context**: long-lived internal documents in a separate private source.
+- **Control Center**: combines these sources with local tasks, ideas, and checks.
+
+For public projects, **Проверка публикации** inspects `git ls-files`, including staged changes. Tracked `.ai-rules/`, `AGENTS.md`, and `.local/` are strong internal-infrastructure signals. Decision records and project maps require an audience check; their names do not prove a leak. Choose **Этот путь намеренно публичный** to suppress the signal for that exact path. Review or remove confirmations under **Намеренно публичные пути**. This does not inspect remote publication, history, file contents for secrets, or future edits to an allowed path.
+
+Visibility, private paths, publication confirmations, and the fact that private records were previously found stay only in SQLite and its private backups. They are never added to `PROJECT.yaml`, repository decisions, or Git configuration. Document bodies are not stored in SQLite. Only actionable publication/context problems are added to the overview. Control Center never installs Kit, moves source files, commits, pushes, or publishes automatically.
 
 Everything stays on your computer. No accounts, cloud sync, GitHub API, or external AI services. Scanning reads files without running project code.
 

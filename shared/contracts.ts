@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { CheckView, CheckEntry } from './checks.js';
 import type { FileDecision } from './decisions.js';
+import type { ProjectContext } from './context.js';
 
 const text = z.string().trim().max(10000);
 const title = z.string().trim().min(1).max(240);
@@ -128,6 +129,7 @@ export interface Project {
   signals: Signal[];
   yamlConflict: boolean;
   decisionSources: string[];
+  context: ProjectContext;
 }
 export interface ScanInfo {
   scannedAt: string | null;

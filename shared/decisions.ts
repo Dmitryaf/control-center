@@ -18,10 +18,11 @@ export interface FileDecision {
   key: string;
   projectId: string;
   sourcePath: string;
-  source: 'repository' | 'private';
+  source: 'repository' | 'private_context' | 'private';
   metadata: FileDecisionMetadata | null;
   title: string;
   body: string;
+  hasContent?: boolean;
   error: string | null;
   signals: Signal[];
 }
