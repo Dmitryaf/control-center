@@ -170,7 +170,9 @@ export class Projects {
     const row = this.require(id);
     try {
       await assertProjectAccess(row.path, this.store.settings().roots);
-      this.store.saveSnapshot(id, await inspectProject(row.path));
+      const snapshot = await inspectProject(row.path);
+      this.require(id);
+      this.store.saveSnapshot(id, snapshot);
     } catch {
       // Preserve the last snapshot and all user data when access is lost.
       this.store.db.prepare('UPDATE projects SET available=0 WHERE id=?').run(id);
@@ -234,10 +236,11 @@ export class Projects {
   }
   async forget(id: string) {
     if (this.scanInfo.running) throw new HttpError(409, 'Дождитесь сканирования.');
-    await this.refresh(id);
-    if (this.require(id).available)
-      throw new HttpError(409, 'Можно забыть только недоступный проект.');
+    const row = this.require(id);
     this.store.transaction(() => {
+      const settings = this.store.settings();
+      settings.excludedProjectPaths = [...new Set([...settings.excludedProjectPaths, row.path])];
+      this.store.saveSettings(settings);
       this.store.db
         .prepare(
           "UPDATE records SET project_id=NULL,data=json_set(data,'$.projectId',NULL),updated_at=? WHERE project_id=?",

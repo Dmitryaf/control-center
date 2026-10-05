@@ -35,7 +35,7 @@ Set `CONTROL_CENTER_DATA_DIR` to use another directory.
 
 **Settings → Create backup** saves and verifies a SQLite copy and shows its path. See [backup and restore](docs/data.md) for recovery instructions.
 
-Moved a project? Scan its new location, open the unavailable project, and use **Rebind** to keep its ID and history. **Forget project** detaches its records and removes its links; it never deletes repository files.
+Moved a project? Scan its new location, open the unavailable project, and use **Rebind** to keep its ID and history. **Удалить из Control Center** removes any project after confirmation and excludes its directory from future scans. Records and checks remain unassigned; relations, local metadata and project notes are removed. Repository and private-context files stay intact. To discover it again, remove its path under **Settings → Проекты, удалённые из Control Center** and save settings. It receives a new ID; removed local data and former record links are not restored.
 
 ## Project files and decisions
 

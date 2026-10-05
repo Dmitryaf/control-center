@@ -65,9 +65,16 @@ export function createApp(store: Store, port: number) {
   app.put('/api/settings', async (req, res) => {
     if (projects.scanInfo.running) throw new HttpError(409, 'Дождитесь завершения сканирования.');
     const settings = settingsSchema.parse(req.body);
-    if (settings.roots.some((root) => !path.isAbsolute(root)))
+    if (req.body.excludedProjectPaths === undefined)
+      settings.excludedProjectPaths = store.settings().excludedProjectPaths;
+    if (
+      [...settings.roots, ...settings.excludedProjectPaths].some((root) => !path.isAbsolute(root))
+    )
       throw new HttpError(400, 'Укажите абсолютные пути каталогов.');
     settings.roots = [...new Set(settings.roots.map((root) => path.resolve(root)))];
+    settings.excludedProjectPaths = [
+      ...new Set(settings.excludedProjectPaths.map((directory) => path.resolve(directory))),
+    ];
     store.saveSettings(settings);
     await projects.scan();
     res.json(settings);

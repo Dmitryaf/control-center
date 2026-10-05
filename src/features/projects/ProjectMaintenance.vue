@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
 import type { Project } from '../../../shared/contracts';
 import { act, api, busy, workspace } from '../../shared/api';
 import { lines } from '../../shared/labels';
 const props = defineProps<{ project: Project }>();
 const emit = defineEmits<{ updated: [project: Project] }>();
-const router = useRouter();
 const candidate = ref('');
 const sources = ref(props.project.decisionSources.join('\n'));
 const candidates = computed(() =>
@@ -40,18 +38,6 @@ async function rebind() {
       }),
     );
   }, 'Проект перепривязан, история сохранена');
-}
-async function forget() {
-  if (
-    !confirm(
-      'Забыть недоступный проект? Задачи, идеи, локальные решения и проверки останутся общими. Связи, заметки и локальная сводка проекта будут удалены. Файлы не изменятся.',
-    )
-  )
-    return;
-  const ok = await act(async () => {
-    await api(`/projects/${props.project.id}`, 'DELETE');
-  }, 'Проект забыт. Связанные записи сохранены как общие.');
-  if (ok) await router.push('/projects');
 }
 function keepLocal() {
   return act(async () => {
@@ -108,8 +94,7 @@ function saveSources() {
         </select></label
       >
       <div class="row">
-        <button :disabled="busy || !candidate">Перепривязать</button
-        ><button type="button" :disabled="busy" @click="forget">Забыть проект</button>
+        <button :disabled="busy || !candidate">Перепривязать</button>
       </div>
     </form>
   </section>

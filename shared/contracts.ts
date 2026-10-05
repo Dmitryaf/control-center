@@ -25,6 +25,7 @@ export const settingsSchema = z
   .object({
     roots: z.array(z.string().trim().min(1).max(2000)).max(30),
     exclusions: z.array(z.string().trim().min(1).max(100)).max(100),
+    excludedProjectPaths: z.array(z.string().trim().min(1).max(2000)).default([]),
     inactivityDays: z.number().int().min(1).max(3650),
     reviewDays: z.number().int().min(1).max(3650),
     movementInfoDays: z.number().int().min(1).max(3650).default(3),
@@ -41,6 +42,7 @@ export type Settings = z.infer<typeof settingsSchema>;
 export const defaultSettings: Settings = {
   roots: [],
   exclusions: ['node_modules', 'dist', 'build', 'archive', '.git', '.venv', 'vendor'],
+  excludedProjectPaths: [],
   inactivityDays: 14,
   reviewDays: 30,
   movementInfoDays: 3,

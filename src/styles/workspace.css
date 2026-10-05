@@ -87,8 +87,12 @@ main {
   margin-bottom: 26px;
 }
 .page-heading > button,
-.page-heading > .button {
+.page-heading > .button,
+.page-heading > .row {
   flex-shrink: 0;
+}
+.page-heading > .row {
+  max-width: 100%;
 }
 .scan-stamp {
   text-align: right;

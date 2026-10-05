@@ -19,6 +19,11 @@ export async function discover(settings: Settings): Promise<{ paths: string[]; e
   const paths: string[] = [];
   const errors: string[] = [];
   const seen = new Set<string>();
+  const pathKey = (directory: string) => {
+    const resolved = path.resolve(directory);
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  };
+  const excludedProjects = new Set(settings.excludedProjectPaths.map(pathKey));
   const excluded = new Set(
     [...alwaysExcluded, ...settings.exclusions].map((value) => value.toLowerCase()),
   );
@@ -33,7 +38,7 @@ export async function discover(settings: Settings): Promise<{ paths: string[]; e
       if ((await lstat(directory)).isSymbolicLink()) return;
       const canonical = await realpath(directory);
       const key = process.platform === 'win32' ? canonical.toLowerCase() : canonical;
-      if (seen.has(key)) return;
+      if (seen.has(key) || excludedProjects.has(key)) return;
       seen.add(key);
       visited++;
       const entries = await readdir(canonical, { withFileTypes: true });

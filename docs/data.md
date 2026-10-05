@@ -10,6 +10,8 @@ Repository files, private-context folders, local Agent Kit files, and external d
 
 ## Restore
 
+Project-removal exclusions are stored in local settings and included in backups. Older settings without `excludedProjectPaths` use an empty list. Removing a project changes only the database: its records and check history are preserved without a project link, while project notes, metadata overrides and relations are removed. Rediscovery creates a new project; recovering the former local state requires a backup from before removal.
+
 1. Note the active database path in Settings and stop every Control Center process.
 2. Move the current `control-center.sqlite` and any matching `control-center.sqlite-wal` and `control-center.sqlite-shm` files together to a separate recovery directory. Keep them until recovery is confirmed.
 3. Copy the selected verified backup into the active data directory as `control-center.sqlite`. Do not reuse the old WAL/SHM files with this copy.

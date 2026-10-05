@@ -4,6 +4,7 @@ import { api, act, busy, workspace } from '../../shared/api';
 import { lines } from '../../shared/labels';
 const roots = ref(workspace.value!.settings.roots.join('\n'));
 const exclusions = ref(workspace.value!.settings.exclusions.join('\n'));
+const excludedProjectPaths = ref(workspace.value!.settings.excludedProjectPaths.join('\n'));
 const inactivityDays = ref(workspace.value!.settings.inactivityDays);
 const reviewDays = ref(workspace.value!.settings.reviewDays);
 const movementInfoDays = ref(workspace.value!.settings.movementInfoDays);
@@ -20,6 +21,7 @@ function save() {
     await api('/settings', 'PUT', {
       roots: lines(roots.value),
       exclusions: lines(exclusions.value),
+      excludedProjectPaths: lines(excludedProjectPaths.value),
       inactivityDays: inactivityDays.value,
       reviewDays: reviewDays.value,
       movementInfoDays: movementInfoDays.value,
@@ -51,6 +53,17 @@ function save() {
       каталогом. Символические ссылки не обходятся.
     </p>
     <label>Исключённые имена каталогов<textarea v-model="exclusions" rows="4" /></label>
+    <details v-if="excludedProjectPaths || workspace!.settings.excludedProjectPaths.length">
+      <summary>Проекты, удалённые из Control Center</summary>
+      <label class="section-space">
+        Исключённые пути проектов, каждый с новой строки
+        <textarea v-model="excludedProjectPaths" rows="3" />
+      </label>
+      <p class="help">
+        Чтобы вернуть проект, удалите его путь из этого списка и сохраните настройки. Проект будет
+        найден заново; удалённые заметки, сводка и связи не восстанавливаются.
+      </p>
+    </details>
     <div class="form-grid">
       <label
         >Нет новых commits, дней<input

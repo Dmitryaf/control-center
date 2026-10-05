@@ -17,6 +17,8 @@ Use a stable OS user-data directory and explicit reconciliation for repository m
 ## Consequences
 Backups use SQLite snapshots, including committed WAL data. Rebinding preserves the old project ID and accepts only an unused discovered target; merging two independently edited project records requires a separate explicit workflow. Forgetting detaches records and removes relations, never repository files.
 
+Project removal is available regardless of directory availability. The same transaction adds its full path to settings exclusions and detaches its records, so the next scan cannot silently recreate it. Exclusions match the directory path rather than its name, leaving unrelated same-name projects visible. Clearing an exclusion deliberately discovers a new project; former local metadata and associations require restoring a prior backup. This avoids a separate hidden-project store and preserves explicit reconciliation.
+
 Local metadata stores the YAML hash it was based on. A changed hash requires choosing a source; no field merging.
 
 ## Implementation and review

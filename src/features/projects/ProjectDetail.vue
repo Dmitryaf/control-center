@@ -3,6 +3,7 @@ import { computed, ref, watch, toRaw } from 'vue';
 import { useRoute } from 'vue-router';
 import type { Metadata, Project, Relation } from '../../../shared/contracts';
 import ProjectMaintenance from './ProjectMaintenance.vue';
+import ProjectRemoval from './ProjectRemoval.vue';
 import ProjectContext from './ProjectContext.vue';
 import DecisionFiles from '../decisions/DecisionFiles.vue';
 import CheckCard from '../checks/CheckCard.vue';
@@ -153,9 +154,12 @@ function removeRelation(id: string) {
           ><span v-if="project.metadata.stage" class="muted">{{ project.metadata.stage }}</span>
         </div>
       </div>
-      <button :disabled="busy" @click="editing = !editing">
-        {{ editing ? 'Закрыть редактор' : 'Изменить сводку' }}
-      </button>
+      <div class="row">
+        <button :disabled="busy" @click="editing = !editing">
+          {{ editing ? 'Закрыть редактор' : 'Изменить сводку' }}
+        </button>
+        <ProjectRemoval :project="project" />
+      </div>
     </div>
     <div v-if="!project.available" class="message warning">
       Каталог недоступен или вне настроек. Показан сохранённый снимок.

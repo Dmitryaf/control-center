@@ -153,8 +153,8 @@ test('idea → check → external action/evidence → archive; canonical sources
     await page.getByRole('button', { name: 'Сохранить и сканировать' }).click();
     await expect(page.getByRole('status')).toContainText('Настройки сохранены');
     await page.goto(`/projects/${project.id}`);
-    await page.getByRole('button', { name: 'Забыть проект' }).click();
-    await expect(page.getByRole('status')).toContainText('Проект забыт');
+    await page.getByRole('button', { name: 'Удалить из Control Center' }).click();
+    await expect(page.getByRole('status')).toContainText('Проект удалён из Control Center');
     expect((await state()).checks.find((c) => c.id === checkId)?.projectId).toBe(null);
     await page.goto('/ideas');
     await page
