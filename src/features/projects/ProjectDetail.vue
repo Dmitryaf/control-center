@@ -64,6 +64,11 @@ watch(
     if (updated && !editing.value) accept(updated);
   },
 );
+const unfinishedChecks = computed(() =>
+  workspace.value!.checks.filter(
+    (check) => check.projectId === project.value?.id && check.status !== 'completed',
+  ),
+);
 const tasks = computed(() =>
   workspace.value!.tasks.filter((t) => t.projectId === project.value?.id && !t.completedAt),
 );
@@ -206,20 +211,10 @@ function removeRelation(id: string) {
           </ol>
           <p v-else class="muted">Добавьте один конкретный следующий шаг.</p>
         </section>
-        <section
-          v-if="workspace!.checks.some((c) => c.projectId === project!.id && c.status === 'active')"
-          class="section-space"
-        >
+        <section v-if="unfinishedChecks.length" class="section-space">
           <h2>Проверки проекта</h2>
           <div class="check-register section-space">
-            <CheckCard
-              v-for="check in workspace!.checks.filter(
-                (c) => c.projectId === project!.id && c.status !== 'completed',
-              )"
-              :key="check.id"
-              :check="check"
-              compact
-            />
+            <CheckCard v-for="check in unfinishedChecks" :key="check.id" :check="check" compact />
           </div>
           <RouterLink :to="`/checks?new=1&project=${project.id}`">Новая проверка →</RouterLink>
         </section>

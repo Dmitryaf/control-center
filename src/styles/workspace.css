@@ -86,6 +86,10 @@ main {
   gap: 24px;
   margin-bottom: 26px;
 }
+.page-heading > button,
+.page-heading > .button {
+  flex-shrink: 0;
+}
 .scan-stamp {
   text-align: right;
   color: var(--muted);

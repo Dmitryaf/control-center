@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import { designFixture } from './design-fixture';
 
-test('journal hierarchy, long content, time semantics and responsive reading', async ({ page }) => {
+// Screenshots support manual review; assertions cover DOM, geometry and interactions only.
+test('journal hierarchy, time semantics, overflow and keyboard contracts', async ({ page }) => {
   const data = designFixture();
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -81,6 +82,7 @@ test('journal hierarchy, long content, time semantics and responsive reading', a
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/checks/check-0');
+  // Root-size overflow smoke only: fixed px text does not all grow. Readability needs manual review.
   await page.evaluate(() => (document.documentElement.style.fontSize = '28px'));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.evaluate(() => (document.documentElement.style.fontSize = ''));
@@ -96,7 +98,7 @@ test('journal hierarchy, long content, time semantics and responsive reading', a
   expect(errors).toEqual([]);
 });
 
-test('loading, disabled refresh and recoverable error remain readable', async ({ page }) => {
+test('loading, disabled refresh and error recovery states are exposed', async ({ page }) => {
   let release!: () => void;
   const waiting = new Promise<void>((resolve) => {
     release = resolve;
