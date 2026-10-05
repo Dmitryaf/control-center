@@ -53,7 +53,7 @@ function edit(task: Task) {
 <template>
   <div class="page-heading">
     <div>
-      <p class="eyebrow">ПЛАН РАБОТЫ</p>
+      <p class="section-label">План работы</p>
       <h1>Задачи</h1>
       <p class="subtitle">Три состояния, чтобы выбрать главное.</p>
     </div>

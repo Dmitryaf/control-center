@@ -138,7 +138,7 @@ function removeRelation(id: string) {
     <RouterLink to="/projects" class="back-link">← Все проекты</RouterLink>
     <div class="page-heading">
       <div>
-        <p class="eyebrow">{{ typeLabels[project.metadata.type] }}</p>
+        <p class="section-label">{{ typeLabels[project.metadata.type] }}</p>
         <h1>{{ project.metadata.name }}</h1>
         <div class="row">
           <span class="badge" :class="project.metadata.status">{{
@@ -152,24 +152,6 @@ function removeRelation(id: string) {
         {{ editing ? 'Закрыть редактор' : 'Изменить сводку' }}
       </button>
     </div>
-    <ProjectContext :key="project.id" :project="project" @updated="accept" />
-    <ProjectMaintenance :key="project.id" :project="project" @updated="accept" />
-    <section
-      v-if="workspace!.checks.some((c) => c.projectId === project!.id && c.status === 'active')"
-      class="section-space"
-    >
-      <h2>Проверки проекта</h2>
-      <div class="record-list section-space">
-        <CheckCard
-          v-for="check in workspace!.checks.filter(
-            (c) => c.projectId === project!.id && c.status !== 'completed',
-          )"
-          :key="check.id"
-          :check="check"
-        />
-      </div>
-      <RouterLink :to="`/checks?new=1&project=${project.id}`">Новая проверка →</RouterLink>
-    </section>
     <div v-if="!project.available" class="message warning">
       Каталог недоступен или вне настроек. Показан сохранённый снимок.
     </div>
@@ -211,9 +193,9 @@ function removeRelation(id: string) {
         ><button type="button" @click="draft.last_reviewed = today()">Пересмотрено сегодня</button>
       </div>
     </form>
-    <div class="detail-columns section-space">
+    <div class="project-dossier section-space">
       <div>
-        <section class="panel prose">
+        <section class="project-brief prose">
           <h2>Зачем существует</h2>
           <p class="preserve">{{ project.metadata.goal || 'Цель пока не описана.' }}</p>
           <h2>Сейчас</h2>
@@ -224,6 +206,24 @@ function removeRelation(id: string) {
           </ol>
           <p v-else class="muted">Добавьте один конкретный следующий шаг.</p>
         </section>
+        <section
+          v-if="workspace!.checks.some((c) => c.projectId === project!.id && c.status === 'active')"
+          class="section-space"
+        >
+          <h2>Проверки проекта</h2>
+          <div class="check-register section-space">
+            <CheckCard
+              v-for="check in workspace!.checks.filter(
+                (c) => c.projectId === project!.id && c.status !== 'completed',
+              )"
+              :key="check.id"
+              :check="check"
+              compact
+            />
+          </div>
+          <RouterLink :to="`/checks?new=1&project=${project.id}`">Новая проверка →</RouterLink>
+        </section>
+
         <section class="section-space">
           <div class="section-heading">
             <h2>
@@ -276,9 +276,23 @@ function removeRelation(id: string) {
       <aside>
         <section class="panel prose">
           <h2>Требуют внимания</h2>
-          <ul v-if="project.signals.length">
-            <li v-for="signal in project.signals" :key="signal.code + signal.message">
-              {{ signal.message }}
+          <ul v-if="project.signals.length" class="project-signals">
+            <li
+              v-for="signal in project.signals"
+              :key="signal.code + signal.message"
+              class="signal"
+              :class="signal.level || 'attention'"
+            >
+              <strong
+                >{{
+                  signal.level === 'info'
+                    ? 'Информация'
+                    : signal.level === 'decision'
+                      ? 'Решение'
+                      : 'Внимание'
+                }}.</strong
+              >
+              <span>{{ signal.message }}</span>
             </li>
           </ul>
           <p v-else class="muted">По доступным данным сигналов нет.</p>
@@ -288,6 +302,7 @@ function removeRelation(id: string) {
           </ul>
           <p v-else class="muted">Не указаны.</p>
         </section>
+        <ProjectContext :key="project.id" :project="project" @updated="accept" />
         <section class="panel section-space">
           <h2>Связи</h2>
           <div v-for="relation in relations" :key="relation.id" class="relation-item">
@@ -365,6 +380,7 @@ function removeRelation(id: string) {
       </aside>
     </div>
     <DecisionFiles :project-id="project.id" />
+    <ProjectMaintenance :key="project.id" :project="project" @updated="accept" />
     <details class="panel section-space">
       <summary>Информация о репозитории</summary>
       <dl class="repository-info">

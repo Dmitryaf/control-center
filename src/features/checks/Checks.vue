@@ -34,7 +34,7 @@ const checks = computed(() => workspace.value!.checks.filter((c) => c.status ===
 <template>
   <div class="page-heading">
     <div>
-      <p class="eyebrow">ОТ ПРЕДПОЛОЖЕНИЯ К СВИДЕТЕЛЬСТВАМ</p>
+      <p class="section-label">От предположения к свидетельствам</p>
       <h1>Проверки</h1>
       <p class="subtitle">Внешние шаги, результаты и время принять решение.</p>
     </div>
@@ -61,7 +61,7 @@ const checks = computed(() => workspace.value!.checks.filter((c) => c.status ===
         {{ label }} · {{ workspace!.checks.filter((c) => c.status === key).length }}
       </button>
     </div>
-    <div class="record-list section-space">
+    <div class="check-register section-space">
       <CheckCard v-for="check in checks" :key="check.id" :check="check" />
     </div>
     <p v-if="!checks.length" class="panel empty section-space">

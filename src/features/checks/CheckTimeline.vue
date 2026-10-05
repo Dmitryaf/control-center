@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, nextTick } from 'vue';
 import type { CheckView, CheckEntry, CheckEntryInput } from '../../../shared/checks';
 import { api, act, busy, workspace } from '../../shared/api';
 import { date, today } from '../../shared/labels';
@@ -14,6 +14,7 @@ const empty = (): CheckEntryInput => ({
 });
 const draft = ref(empty());
 const editingId = ref<string | null>(null);
+const entryText = ref<HTMLTextAreaElement | null>(null);
 const entries = computed(() =>
   workspace
     .value!.checkEntries.filter((e) => e.checkId === props.check.id)
@@ -44,6 +45,7 @@ async function save() {
 function edit(entry: CheckEntry) {
   draft.value = { ...entry };
   editingId.value = entry.id;
+  void nextTick(() => entryText.value?.focus());
 }
 function remove(entry: CheckEntry) {
   if (!confirm('Удалить запись? Даты последнего действия и свидетельства будут пересчитаны.'))
@@ -58,73 +60,76 @@ function remove(entry: CheckEntry) {
 }
 </script>
 <template>
-  <section class="section-space">
+  <section class="section-space check-history">
     <h2>Действия и свидетельства</h2>
-    <form class="panel form section-space" @submit.prevent="save">
-      <h3>{{ editingId ? 'Изменить запись' : 'Добавить запись' }}</h3>
-      <div class="form-grid">
-        <label
-          >Вид записи<select v-model="draft.kind">
-            <option value="action">Внешнее действие</option>
-            <option value="evidence">Свидетельство</option>
-          </select></label
-        ><label
-          >Дата события<input
-            v-model="draft.occurredAt"
-            type="date"
-            required
-            :min="check.startedAt"
-            :max="check.completedAt || today()"
-        /></label>
+    <div class="history-columns">
+      <div class="timeline section-space">
+        <article v-for="entry in entries" :key="entry.id" class="history-entry" :class="entry.kind">
+          <div class="row between">
+            <strong>{{ entry.kind === 'action' ? 'Внешнее действие' : 'Свидетельство' }}</strong
+            ><time>{{ date(entry.occurredAt) }}</time>
+          </div>
+          <p class="preserve">{{ entry.text }}</p>
+          <p v-if="entry.kind === 'evidence'" class="muted">
+            {{ entry.type ? types[entry.type] : 'Без типа'
+            }}<span v-if="entry.numericValue !== null"> · {{ entry.numericValue }}</span>
+          </p>
+          <a v-if="entry.url" :href="entry.url" target="_blank" rel="noopener noreferrer"
+            >Открыть источник ↗</a
+          >
+          <div class="row">
+            <button :disabled="busy" @click="edit(entry)">Изменить</button
+            ><button :disabled="busy" @click="remove(entry)">Удалить запись</button>
+          </div>
+        </article>
+        <p v-if="!entries.length" class="muted">Внешние шаги и свидетельства ещё не записаны.</p>
       </div>
-      <label>Что произошло<textarea v-model="draft.text" required rows="3" /></label
-      ><label
-        >Ссылка (необязательно)<input v-model="draft.url" type="url" placeholder="https://"
-      /></label>
-      <div v-if="draft.kind === 'evidence'" class="form-grid">
-        <label
-          >Тип свидетельства<select v-model="draft.type">
-            <option :value="null">Не указан</option>
-            <option v-for="(label, key) in types" :key="key" :value="key">{{ label }}</option>
-          </select></label
-        ><label
-          >Числовое значение<input v-model.number="draft.numericValue" type="number" step="any"
-        /></label>
-      </div>
-      <div class="row">
-        <button class="primary" :disabled="busy">Сохранить запись</button
-        ><button
-          v-if="editingId"
-          type="button"
-          @click="
-            editingId = null;
-            draft = empty();
-          "
-        >
-          Отмена
-        </button>
-      </div>
-    </form>
-    <div class="timeline section-space">
-      <article v-for="entry in entries" :key="entry.id" class="panel">
-        <div class="row between">
-          <strong>{{ entry.kind === 'action' ? 'Внешнее действие' : 'Свидетельство' }}</strong
-          ><time>{{ date(entry.occurredAt) }}</time>
+      <form class="entry-editor form" @submit.prevent="save">
+        <h3>{{ editingId ? 'Изменить запись' : 'Добавить запись' }}</h3>
+        <div class="form-grid">
+          <label
+            >Вид записи<select v-model="draft.kind">
+              <option value="action">Внешнее действие</option>
+              <option value="evidence">Свидетельство</option>
+            </select></label
+          ><label
+            >Дата события<input
+              v-model="draft.occurredAt"
+              type="date"
+              required
+              :min="check.startedAt"
+              :max="check.completedAt || today()"
+          /></label>
         </div>
-        <p class="preserve">{{ entry.text }}</p>
-        <p v-if="entry.kind === 'evidence'" class="muted">
-          {{ entry.type ? types[entry.type] : 'Без типа'
-          }}<span v-if="entry.numericValue !== null"> · {{ entry.numericValue }}</span>
-        </p>
-        <a v-if="entry.url" :href="entry.url" target="_blank" rel="noopener noreferrer"
-          >Открыть источник ↗</a
-        >
+        <label
+          >Что произошло<textarea ref="entryText" v-model="draft.text" required rows="3" /></label
+        ><label
+          >Ссылка (необязательно)<input v-model="draft.url" type="url" placeholder="https://"
+        /></label>
+        <div v-if="draft.kind === 'evidence'" class="form-grid">
+          <label
+            >Тип свидетельства<select v-model="draft.type">
+              <option :value="null">Не указан</option>
+              <option v-for="(label, key) in types" :key="key" :value="key">{{ label }}</option>
+            </select></label
+          ><label
+            >Числовое значение<input v-model.number="draft.numericValue" type="number" step="any"
+          /></label>
+        </div>
         <div class="row">
-          <button :disabled="busy" @click="edit(entry)">Изменить</button
-          ><button :disabled="busy" @click="remove(entry)">Удалить запись</button>
+          <button class="primary" :disabled="busy">Сохранить запись</button
+          ><button
+            v-if="editingId"
+            type="button"
+            @click="
+              editingId = null;
+              draft = empty();
+            "
+          >
+            Отмена
+          </button>
         </div>
-      </article>
-      <p v-if="!entries.length" class="muted">Внешние шаги и свидетельства ещё не записаны.</p>
+      </form>
     </div>
   </section>
 </template>

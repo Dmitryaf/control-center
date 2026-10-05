@@ -97,9 +97,9 @@ test('complete personal workspace workflow from an empty database', async ({ pag
       page.getByRole('heading', { name: 'Хранить данные локально', exact: true }),
     ).toBeVisible();
     await page.getByRole('navigation').getByRole('link', { name: /Обзор/ }).click();
-    await expect(page.getByRole('link', { name: /Активных проектов/ })).toContainText('01');
-    await expect(page.getByRole('link', { name: /Задач сейчас/ })).toContainText('01');
-    await expect(page.getByRole('link', { name: /Идей на рассмотрении/ })).toContainText('01');
+    await expect(page.getByRole('heading', { name: 'Активные проекты 1' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Задачи · 1 →' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Идеи · 1 →' })).toBeVisible();
     await expect(page.getByText('Проверить первый выпуск', { exact: true })).toBeVisible();
     await page.screenshot({ path: '.local/overview-desktop.png', fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });

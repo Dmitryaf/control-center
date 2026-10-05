@@ -4,20 +4,41 @@ import { workspace } from '../../shared/api';
 import { date } from '../../shared/labels';
 import ProjectCard from '../projects/ProjectCard.vue';
 import CheckCard from '../checks/CheckCard.vue';
-const checks = computed(() => workspace.value!.checks.filter((c) => c.status === 'active'));
-const checkAttention = computed(() =>
-  checks.value.filter((c) => c.signals.some((s) => s.level !== 'info')),
-);
-const noMovement = computed(() =>
-  checks.value.filter(
-    (c) => c.daysWithoutMovement >= workspace.value!.settings.movementAttentionDays,
-  ),
+const checks = computed(() =>
+  workspace
+    .value!.checks.filter((c) => c.status === 'active')
+    .sort(
+      (a, b) =>
+        Number(b.signals.some((s) => s.level === 'decision')) -
+          Number(a.signals.some((s) => s.level === 'decision')) ||
+        b.daysWithoutMovement - a.daysWithoutMovement,
+    ),
 );
 const active = computed(() =>
   workspace.value!.projects.filter((p) => p.metadata.status === 'active'),
 );
 const attention = computed(() =>
-  workspace.value!.projects.filter((p) => p.signals.some((s) => s.level !== 'info')),
+  [
+    ...checks.value.map((c) => ({
+      signals: c.signals,
+      title: c.title,
+      to: `/checks/${c.id}`,
+      kind: 'Проверка',
+    })),
+    ...workspace.value!.projects.map((p) => ({
+      signals: p.signals,
+      title: p.metadata.name,
+      to: `/projects/${p.id}`,
+      kind: 'Проект',
+    })),
+  ]
+    .map((item) => ({
+      ...item,
+      signals: item.signals.filter((s) => s.level !== 'info'),
+      level: item.signals.some((s) => s.level === 'decision') ? 'decision' : 'attention',
+    }))
+    .filter((item) => item.signals.length)
+    .sort((a, b) => Number(b.level === 'decision') - Number(a.level === 'decision')),
 );
 const now = computed(() =>
   workspace.value!.tasks.filter((t) => !t.completedAt && t.state === 'now'),
@@ -38,139 +59,128 @@ const recent = computed(() =>
 <template>
   <div class="page-heading">
     <div>
-      <p class="eyebrow">ВАША ЭКОСИСТЕМА</p>
+      <p class="section-label">Состояние экосистемы</p>
       <h1>Сейчас</h1>
-      <p class="subtitle">Что движется вперёд и где нужно ваше внимание.</p>
     </div>
-    <span class="muted">{{ date(new Date().toISOString()) }}</span>
+    <p class="scan-stamp">
+      Снимок данных<br /><time>{{
+        workspace!.scan.scannedAt
+          ? new Date(workspace!.scan.scannedAt).toLocaleString('ru')
+          : 'Сканирования ещё не было'
+      }}</time>
+    </p>
   </div>
   <div v-if="!workspace!.settings.roots.length" class="panel welcome">
     <h2>Начните с каталога проектов</h2>
     <p>Укажите, где лежат ваши репозитории. GitHub и PROJECT.yaml не обязательны.</p>
     <RouterLink to="/settings" class="button primary">Добавить каталог →</RouterLink>
   </div>
-  <div class="stats">
-    <RouterLink to="/projects?filter=active"
-      ><span>Активных проектов</span
-      ><strong>{{ active.length.toString().padStart(2, '0') }}</strong></RouterLink
-    ><a href="#attention"
-      ><span>Требуют внимания</span
-      ><strong>{{
-        (attention.length + checkAttention.length).toString().padStart(2, '0')
-      }}</strong></a
-    ><RouterLink to="/tasks"
-      ><span>Задач сейчас</span
-      ><strong>{{ now.length.toString().padStart(2, '0') }}</strong></RouterLink
-    ><RouterLink to="/ideas"
-      ><span>Идей на рассмотрении</span
-      ><strong>{{ inbox.length.toString().padStart(2, '0') }}</strong></RouterLink
+  <section id="attention" class="attention-queue" aria-labelledby="attention-heading">
+    <div class="section-heading">
+      <h2 id="attention-heading">
+        Требуют внимания <span class="count">{{ attention.length }}</span>
+      </h2>
+      <span class="help">Сначала — решения, затем — сигналы</span>
+    </div>
+    <div
+      v-for="item in attention"
+      :key="item.to"
+      class="attention-line"
+      :class="item.level || 'attention'"
     >
-  </div>
-  <div class="dashboard-columns">
-    <section>
-      <section class="checks-overview">
+      <span class="signal-label">{{ item.level === 'decision' ? 'Решение' : 'Внимание' }}</span>
+      <RouterLink :to="item.to"
+        ><small>{{ item.kind }}</small
+        >{{ item.title }}</RouterLink
+      >
+      <ul class="signal-reasons">
+        <li v-for="signal in item.signals" :key="signal.code + signal.message">
+          {{ signal.message }}
+        </li>
+      </ul>
+    </div>
+    <p v-if="!attention.length" class="empty">По доступным данным сигналов нет.</p>
+  </section>
+  <div class="journal-columns">
+    <div>
+      <section class="checks-overview" aria-labelledby="checks-heading">
         <div class="section-heading">
-          <h2>
-            Проверки <span class="count">{{ checks.length }} активных</span>
+          <h2 id="checks-heading">
+            Внешнее движение <span class="count">{{ checks.length }} проверок</span>
           </h2>
           <RouterLink to="/checks">Все проверки →</RouterLink>
         </div>
         <p class="help">
-          Требуют внимания: {{ checkAttention.length }} · Без внешнего движения от
-          {{ workspace!.settings.movementAttentionDays }} дн.: {{ noMovement.length }}
+          Время без внешнего шага. Свидетельства и commits не обнуляют этот отсчёт.
         </p>
-        <div class="timeline section-space">
-          <CheckCard v-for="check in checks" :key="check.id" :check="check" />
+        <div class="check-register">
+          <CheckCard v-for="check in checks" :key="check.id" :check="check" compact />
         </div>
-        <p v-if="!checks.length" class="panel empty">
+        <p v-if="!checks.length" class="empty">
           Активных проверок нет. Начните с вопроса, который требует внешнего подтверждения.
         </p>
       </section>
-      <div class="section-heading">
-        <h2>
-          Активные проекты <span class="count">{{ active.length }}</span>
-        </h2>
-        <RouterLink to="/projects">Все проекты →</RouterLink>
-      </div>
-      <div class="project-grid">
-        <ProjectCard v-for="project in active" :key="project.id" :project="project" />
-      </div>
-      <p v-if="!active.length" class="panel empty">
-        Активных проектов пока нет. Откройте найденный проект и задайте статус.
-      </p>
       <section class="section-space">
         <div class="section-heading">
-          <h2>Последние изменения</h2>
-          <span class="muted">По истории Git</span>
+          <h2>
+            Активные проекты <span class="count">{{ active.length }}</span>
+          </h2>
+          <RouterLink to="/projects">Все проекты →</RouterLink>
         </div>
-        <div class="panel activity-list">
+        <div class="project-register">
+          <ProjectCard v-for="project in active" :key="project.id" :project="project" />
+        </div>
+        <p v-if="!active.length" class="empty">
+          Активных проектов пока нет. Откройте найденный проект и задайте статус.
+        </p>
+      </section>
+      <section class="section-space">
+        <div class="section-heading">
+          <h2>Изменения в Git</h2>
+          <span class="help">Внутренняя работа</span>
+        </div>
+        <div class="activity-list">
           <div v-for="item in recent" :key="item.project.id + item.commit.hash" class="activity">
-            <span class="activity-dot" />
+            <time>{{ date(item.commit.date) }}</time>
             <div>
               <RouterLink :to="`/projects/${item.project.id}`">{{
                 item.project.metadata.name
               }}</RouterLink>
               <p>{{ item.commit.subject }}</p>
             </div>
-            <time>{{ date(item.commit.date) }}</time>
           </div>
           <p v-if="!recent.length" class="empty">История commits появится после сканирования.</p>
         </div>
       </section>
-    </section>
-    <aside>
-      <section id="attention">
-        <div class="section-heading">
-          <h2>Требуют внимания</h2>
-          <span class="attention-mark">●</span>
-        </div>
-        <div class="panel attention-list">
-          <div v-for="check in checkAttention" :key="check.id" class="attention-item">
-            <RouterLink :to="`/checks/${check.id}`">Проверка: {{ check.title }}</RouterLink>
-            <p
-              v-for="signal in check.signals.filter((s) => s.level !== 'info')"
-              :key="signal.code"
-              class="signal"
-              :class="signal.level"
-            >
-              {{ signal.message }}
-            </p>
-          </div>
-          <div v-for="project in attention" :key="project.id" class="attention-item">
-            <RouterLink :to="`/projects/${project.id}`"
-              >{{ project.metadata.name }} <span>↗</span></RouterLink
-            >
-            <ul>
-              <li
-                v-for="signal in project.signals.filter((s) => s.level !== 'info')"
-                :key="signal.code + signal.message"
-              >
-                {{ signal.message }}
-              </li>
-            </ul>
-          </div>
-          <p v-if="!attention.length && !checkAttention.length" class="empty">
-            По доступным данным сигналов нет.
-          </p>
-        </div>
-      </section>
-      <section class="section-space">
+    </div>
+    <aside class="working-notes">
+      <section>
         <div class="section-heading">
           <h2>В работе</h2>
-          <RouterLink to="/tasks">Задачи →</RouterLink>
+          <RouterLink to="/tasks">Задачи · {{ now.length }} →</RouterLink>
         </div>
-        <div class="panel compact-list">
-          <p v-for="task in now" :key="task.id">{{ task.title }}</p>
-          <p v-if="!now.length" class="muted">Выберите задачи на сейчас.</p>
-        </div>
+        <ul class="work-list">
+          <li v-for="task in now" :key="task.id">
+            <RouterLink :to="task.projectId ? `/tasks?project=${task.projectId}` : '/tasks'">{{
+              task.title
+            }}</RouterLink>
+          </li>
+        </ul>
+        <p v-if="!now.length" class="muted">Выберите задачи на сейчас.</p>
       </section>
       <section v-if="pending.length" class="section-space">
-        <div class="section-heading"><h2>Ожидают решения</h2></div>
-        <div class="panel compact-list">
+        <h2>Ожидают решения</h2>
+        <div class="compact-list">
           <RouterLink v-for="decision in pending" :key="decision.id" to="/decisions">{{
             decision.title
           }}</RouterLink>
         </div>
+      </section>
+      <section class="section-space">
+        <h2>На рассмотрении</h2>
+        <p class="section-space">
+          <RouterLink to="/ideas">Идеи · {{ inbox.length }} →</RouterLink>
+        </p>
       </section>
     </aside>
   </div>

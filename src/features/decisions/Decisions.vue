@@ -40,7 +40,7 @@ function edit(decision: Decision) {
 <template>
   <div class="page-heading">
     <div>
-      <p class="eyebrow">ЖУРНАЛ</p>
+      <p class="section-label">Журнал</p>
       <h1>Решения</h1>
       <p class="subtitle">Что выбрано и почему — чтобы не вспоминать заново.</p>
     </div>
@@ -96,7 +96,7 @@ function edit(decision: Decision) {
         }}</span>
       </div>
       <h3>{{ decision.title }}</h3>
-      <p class="eyebrow">
+      <p class="section-label">
         {{ decision.projectId ? 'Локальное решение Control Center' : 'Общее решение экосистемы' }}
       </p>
       <p v-if="decision.context" class="muted preserve">{{ decision.context }}</p>

@@ -32,7 +32,7 @@ function save() {
 <template>
   <div class="page-heading">
     <div>
-      <p class="eyebrow">ЛОКАЛЬНОЕ ПРОСТРАНСТВО</p>
+      <p class="section-label">Локальное пространство</p>
       <h1>Настройки</h1>
       <p class="subtitle">Откуда читать проекты и когда обращать на них внимание.</p>
     </div>

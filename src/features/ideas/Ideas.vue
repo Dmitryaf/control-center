@@ -38,7 +38,7 @@ function edit(idea: Idea) {
 <template>
   <div class="page-heading">
     <div>
-      <p class="eyebrow">ВХОДЯЩИЕ</p>
+      <p class="section-label">Входящие</p>
       <h1>Идеи</h1>
       <p class="subtitle">Сохранить мысль сейчас, разобраться позже.</p>
     </div>

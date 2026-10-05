@@ -30,7 +30,7 @@ const projects = computed(() =>
 <template>
   <div class="page-heading">
     <div>
-      <p class="eyebrow">КАТАЛОГ</p>
+      <p class="section-label">Каталог</p>
       <h1>
         Проекты <span class="count">{{ workspace!.projects.length }}</span>
       </h1>
@@ -52,7 +52,7 @@ const projects = computed(() =>
     </div>
     <input v-model="query" aria-label="Поиск проектов" placeholder="Найти проект…" type="search" />
   </div>
-  <div class="project-grid">
+  <div class="project-register">
     <ProjectCard v-for="project in projects" :key="project.id" :project="project" />
   </div>
   <div v-if="!projects.length" class="panel empty">

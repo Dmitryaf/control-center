@@ -63,22 +63,30 @@ async function complete() {
       @saved="editing = false"
       @cancel="editing = false"
     />
-    <CheckCard :check="check" class="section-space" />
-    <section class="panel prose section-space">
+    <CheckCard :check="check" detail class="section-space" />
+    <section class="check-criteria prose section-space">
       <h2>Условия проверки</h2>
-      <h3>Предположение</h3>
-      <p>{{ check.assumption }}</p>
-      <h3>Ожидаемый внешний результат</h3>
-      <p>{{ check.expectedExternalResult }}</p>
-      <h3>Продолжаем, если</h3>
-      <p>{{ check.continueIf }}</p>
-      <h3>Останавливаемся, если</h3>
-      <p>{{ check.stopIf }}</p>
-      <h3>Пересмотр</h3>
-      <p>
-        {{ check.reviewCondition || 'Условие не задано'
-        }}<span v-if="check.reviewAt"> · {{ date(check.reviewAt) }}</span>
-      </p>
+      <div class="criteria-grid">
+        <div>
+          <h3>Предположение</h3>
+          <p>{{ check.assumption }}</p>
+          <h3>Ожидаемый внешний результат</h3>
+          <p>{{ check.expectedExternalResult }}</p>
+        </div>
+        <div>
+          <h3>Продолжаем, если</h3>
+          <p>{{ check.continueIf }}</p>
+          <h3>Останавливаемся, если</h3>
+          <p>{{ check.stopIf }}</p>
+        </div>
+        <div class="review-condition">
+          <h3>Пересмотр</h3>
+          <p>
+            {{ check.reviewCondition || 'Условие не задано'
+            }}<span v-if="check.reviewAt"> · {{ date(check.reviewAt) }}</span>
+          </p>
+        </div>
+      </div>
       <p v-if="check.ideaId">
         Идея: {{ workspace!.ideas.find((i) => i.id === check?.ideaId)?.title }} ·
         <RouterLink to="/ideas">Открыть идеи</RouterLink>
