@@ -47,7 +47,7 @@ test('idea → check → external action/evidence → archive; canonical sources
     await page.getByRole('button', { name: 'Сохранить источники решений' }).click();
     await expect(page.getByRole('heading', { name: 'Private rationale' })).toBeVisible();
     await page.getByRole('button', { name: 'Изменить сводку' }).click();
-    await page.getByLabel('Текущий фокус').fill('Keep local focus');
+    await page.getByLabel('Зачем существует', { exact: true }).fill('Keep local goal');
     await page.getByRole('button', { name: 'Сохранить сводку', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Сводка сохранена');
     await page.getByRole('button', { name: 'Создать PROJECT.yaml' }).click();

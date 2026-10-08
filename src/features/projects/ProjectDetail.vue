@@ -24,7 +24,6 @@ const route = useRoute();
 const project = ref<Project | null>(null);
 const draft = ref<Metadata | null>(null);
 const notes = ref('');
-const nextText = ref('');
 const blockedText = ref('');
 const relatedText = ref('');
 const editing = ref(false);
@@ -37,7 +36,6 @@ function accept(value: Project) {
   project.value = value;
   draft.value = structuredClone(toRaw(value.metadata));
   notes.value = value.notes;
-  nextText.value = value.metadata.next.join('\n');
   blockedText.value = value.metadata.blocked_by.join('\n');
   relatedText.value = value.metadata.related.join('\n');
 }
@@ -95,8 +93,10 @@ async function save() {
       await api<Project>(`/projects/${project.value!.id}`, 'PUT', {
         metadata: {
           ...draft.value,
+          // JSON omits these fields; the server retains the current legacy plan.
+          current_focus: undefined,
+          next: undefined,
           last_reviewed: draft.value?.last_reviewed || null,
-          next: lines(nextText.value),
           blocked_by: lines(blockedText.value),
           related: lines(relatedText.value),
         },
@@ -209,8 +209,6 @@ function removeRelation(id: string) {
         ><label>Дата пересмотра<input v-model="draft.last_reviewed" type="date" /></label>
       </div>
       <label>Зачем существует<textarea v-model="draft.goal" rows="2" /></label
-      ><label>Текущий фокус<textarea v-model="draft.current_focus" rows="2" /></label
-      ><label>Следующие шаги, по одному на строку<textarea v-model="nextText" rows="3" /></label
       ><label>Блокировки, по одной на строку<textarea v-model="blockedText" rows="2" /></label
       ><label>Связанные имена для PROJECT.yaml<textarea v-model="relatedText" rows="2" /></label
       ><label>Заметки<textarea v-model="notes" rows="3" /></label>
@@ -233,8 +231,6 @@ function removeRelation(id: string) {
             </li>
           </ul>
           <p v-else class="muted">Задачи на сейчас ещё не выбраны.</p>
-          <h3>Фокус из сводки</h3>
-          <p class="preserve">{{ project.metadata.current_focus || 'Фокус пока не задан.' }}</p>
           <h2>Следующий шаг</h2>
           <ol v-if="tasks.some((task) => task.state === 'next')">
             <li v-for="task in tasks.filter((task) => task.state === 'next')" :key="task.id">
@@ -244,15 +240,24 @@ function removeRelation(id: string) {
             </li>
           </ol>
           <p v-else class="muted">Следующие задачи ещё не выбраны.</p>
-          <details v-if="project.metadata.next.length" class="section-space">
-            <summary>Прежние шаги из сводки</summary>
+          <details
+            v-if="project.metadata.current_focus || project.metadata.next.length"
+            class="section-space legacy-plan"
+          >
+            <summary>Прежний план из сводки</summary>
+            <p v-if="project.metadata.current_focus" class="preserve">
+              <strong>Фокус:</strong> {{ project.metadata.current_focus }}
+            </p>
             <ol>
               <li v-for="item in project.metadata.next" :key="item">{{ item }}</li>
             </ol>
             <p>
-              Текущая работа ведётся на доске. Перенос сохранит эту сводку и существующие задачи.
+              Текущая работа редактируется на доске задач. Прежний план доступен только для чтения;
+              экспорт сохраняет его и не заменяет задачами.
             </p>
-            <button :disabled="busy" @click="importPlan">Добавить шаги на доску</button>
+            <button v-if="project.metadata.next.length" :disabled="busy" @click="importPlan">
+              Добавить шаги на доску
+            </button>
           </details>
         </section>
         <section v-if="unfinishedChecks.length" class="section-space">
@@ -404,7 +409,8 @@ function removeRelation(id: string) {
             }}</strong>
           </p>
           <p class="help">
-            Экспорт записывает сохранённую сводку в PROJECT.yaml. Неизвестные поля сохраняются.
+            Экспорт записывает сводку и сохранённый прежний план в PROJECT.yaml. Задачи и результаты
+            остаются в Control Center. Неизвестные поля сохраняются.
           </p>
           <div class="form">
             <button :disabled="busy || editing || !project.available" @click="exportYaml">

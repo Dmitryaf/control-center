@@ -16,6 +16,10 @@ test('complete personal workspace workflow from an empty database', async ({ pag
   });
   try {
     const product = await f.repo('local-product');
+    await writeFile(
+      path.join(product, 'PROJECT.yaml'),
+      'current_focus: Проверить первый выпуск\nnext:\n  - Пройти основной сценарий\n',
+    );
     await f.repo('local-tool');
     await writeFile(path.join(product, 'work.txt'), 'dirty working tree');
     await page.goto('/');
@@ -41,12 +45,12 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await page
       .getByLabel('Зачем существует', { exact: true })
       .fill('Локальный продукт для проверки рабочего сценария.');
-    await page.getByLabel('Текущий фокус').fill('Проверить первый выпуск');
-    await page.getByLabel('Следующие шаги').fill('Пройти основной сценарий');
+    await expect(page.getByLabel('Текущий фокус')).toHaveCount(0);
+    await expect(page.getByLabel('Следующие шаги')).toHaveCount(0);
     await page.getByRole('button', { name: 'Пересмотрено сегодня' }).click();
     await page.getByRole('button', { name: 'Сохранить сводку', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Сводка сохранена');
-    await page.getByRole('button', { name: 'Создать PROJECT.yaml' }).click();
+    await page.getByRole('button', { name: 'Обновить PROJECT.yaml' }).click();
     await expect(page.getByRole('status')).toContainText('PROJECT.yaml записан');
     expect(await readFile(path.join(product, 'PROJECT.yaml'), 'utf8')).toContain(
       'Проверить первый выпуск',
@@ -97,10 +101,11 @@ test('complete personal workspace workflow from an empty database', async ({ pag
       page.getByRole('heading', { name: 'Хранить данные локально', exact: true }),
     ).toBeVisible();
     await page.getByRole('navigation').getByRole('link', { name: /Обзор/ }).click();
+    await page.locator('.overview-details > summary').click();
     await expect(page.getByRole('heading', { name: 'Активные проекты 1' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Задачи · 1 →' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Идеи · 1 →' })).toBeVisible();
-    await expect(page.getByText('Проверить первый выпуск', { exact: true })).toBeVisible();
+    await expect(page.locator('.current-work')).toContainText('Проверить выпуск');
     await page.screenshot({ path: '.local/overview-desktop.png', fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.getByRole('heading', { name: 'Сейчас', exact: true })).toBeVisible();

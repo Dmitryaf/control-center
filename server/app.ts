@@ -93,7 +93,10 @@ export function createApp(store: Store, port: number) {
     const row = projects.require(req.params.id);
     const data = z
       .object({
-        metadata: metadataSchema,
+        metadata: metadataSchema.extend({
+          current_focus: metadataSchema.shape.current_focus.unwrap().optional(),
+          next: metadataSchema.shape.next.unwrap().optional(),
+        }),
         notes: z.string().max(20000),
         expectedHash: z.string().nullable().optional(),
       })
@@ -101,7 +104,18 @@ export function createApp(store: Store, port: number) {
     const current = await projects.refresh(row.id);
     if (data.expectedHash !== undefined && data.expectedHash !== current.snapshot.yaml.hash)
       throw new HttpError(409, 'PROJECT.yaml изменился. Обновите страницу и сравните версии.');
-    store.saveMetadata(row.id, data.metadata, data.notes);
+    store.transaction(() => {
+      const latest = projects.view(projects.require(row.id)).metadata;
+      store.saveMetadata(
+        row.id,
+        {
+          ...data.metadata,
+          current_focus: data.metadata.current_focus ?? latest.current_focus,
+          next: data.metadata.next ?? latest.next,
+        },
+        data.notes,
+      );
+    });
     res.json(projects.view(projects.require(row.id)));
   });
   app.post('/api/projects/:id/use-yaml', async (req, res) => {

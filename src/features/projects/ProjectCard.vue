@@ -40,9 +40,6 @@ const latestAction = computed(() =>
       <p class="help">
         Далее · {{ next[0] ? `${next[0].code} · ${next[0].title}` : 'Следующие задачи не выбраны' }}
       </p>
-      <p v-if="project.metadata.current_focus" class="help">
-        Фокус из сводки · <span>{{ project.metadata.current_focus }}</span>
-      </p>
     </div>
     <div class="project-activity">
       <ProjectFreshness :project="project" />

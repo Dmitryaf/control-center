@@ -82,7 +82,7 @@ test('production timer → saved snapshot → open draft, YAML conflict, freshne
     await expect(page.getByText('Интервал обновления проектов: 1 мин.')).toBeVisible();
     await page.getByRole('button', { name: 'Изменить сводку' }).focus();
     await page.keyboard.press('Enter');
-    await page.getByLabel('Текущий фокус').fill('Мой несохранённый черновик');
+    await page.getByLabel('Зачем существует', { exact: true }).fill('Мой несохранённый черновик');
     const prior = (await readWorkspace()).projects.find((p) => p.id === project.id)!;
     const lastSnapshot = prior.snapshot.scannedAt;
     const undiscovered = await f.repo('not-discovered-by-timer');
@@ -122,12 +122,16 @@ test('production timer → saved snapshot → open draft, YAML conflict, freshne
       'datetime',
       updated.snapshot.scannedAt,
     );
-    await expect(page.getByLabel('Текущий фокус')).toHaveValue('Мой несохранённый черновик');
+    await expect(page.getByLabel('Зачем существует', { exact: true })).toHaveValue(
+      'Мой несохранённый черновик',
+    );
     await page.getByRole('button', { name: 'Сохранить сводку', exact: true }).click();
     await expect(page.getByRole('alert', { name: 'Ошибка действия' })).toContainText(
       'PROJECT.yaml изменился',
     );
-    await expect(page.getByLabel('Текущий фокус')).toHaveValue('Мой несохранённый черновик');
+    await expect(page.getByLabel('Зачем существует', { exact: true })).toHaveValue(
+      'Мой несохранённый черновик',
+    );
     expect(await readFile(yaml, 'utf8')).toBe('name: Изменено вне приложения\n');
     await mkdir('.local/project-refresh-review', { recursive: true });
     await page.screenshot({

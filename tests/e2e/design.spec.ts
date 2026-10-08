@@ -5,6 +5,9 @@ import { designFixture } from './design-fixture';
 // Screenshots support manual review; assertions cover DOM, geometry and interactions only.
 test('journal hierarchy, time semantics, overflow and keyboard contracts', async ({ page }) => {
   const data = designFixture();
+  await page.route('**/api/task-history?**', (route) =>
+    route.fulfill({ json: { total: 0, items: [] } }),
+  );
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.route('**/api/workspace', (route) => route.fulfill({ json: data }));
@@ -28,6 +31,7 @@ test('journal hierarchy, time semantics, overflow and keyboard contracts', async
         true,
       );
       if (name === 'overview') {
+        await page.locator('.overview-details > summary').click();
         await expect(page.locator('.attention-line').first()).toHaveClass(/decision/);
         expect((await page.locator('#attention').boundingBox())!.y).toBeLessThan(
           (await page.locator('.checks-overview').boundingBox())!.y,
