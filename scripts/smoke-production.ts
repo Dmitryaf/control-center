@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { fixture } from '../tests/fixtures.js';
-import type { Workspace } from '../shared/contracts.js';
+import type { Workspace, Task, TaskHistoryPage } from '../shared/contracts.js';
 
 const fixtureData = await fixture();
 const repo = await fixtureData.repo('production-project');
@@ -113,6 +113,17 @@ try {
     projectId: id,
   });
   assert.equal(created.status, 201);
+  const task = (await created.json()) as Task;
+  const completedResponse = await request(`/api/tasks/${task.id}/complete`, 'POST', {
+    revision: task.revision,
+    result: { summary: 'Production result', verified: 'Production HTTP' },
+  });
+  assert.equal(completedResponse.status, 200);
+  const history = (await (
+    await request(`/api/task-history?identifier=${task.code}`)
+  ).json()) as TaskHistoryPage;
+  assert.equal(history.total, 1);
+  assert.equal(history.items[0].task.result?.summary, 'Production result');
   const checkResponse = await request('/api/checks', 'POST', {
     check: {
       title: 'Production check',
@@ -149,6 +160,7 @@ try {
     1,
   );
   assert.equal(backupDb.prepare('PRAGMA quick_check').get()?.quick_check, 'ok');
+  assert.equal(backupDb.prepare('SELECT COUNT(*) AS n FROM task_history').get()?.n, 1);
   assert.equal(
     backupDb.prepare('SELECT private_context_path FROM projects WHERE id=?').get(id)
       ?.private_context_path,
@@ -160,6 +172,11 @@ try {
   await start();
   const restarted = (await (await request('/api/workspace')).json()) as Workspace;
   assert.equal(restarted.tasks[0].title, 'Persists across restart');
+  assert.deepEqual(
+    await (await request(`/api/task-history?identifier=${task.code}`)).json(),
+    history,
+  );
+  assert.match(await (await request(`/history?task=${task.code}`)).text(), /Control Center/);
   assert.equal(restarted.projects[0].id, id);
   assert.equal(restarted.projects[0].available, true);
   assert.ok(restarted.scan.scannedAt);
@@ -179,7 +196,7 @@ try {
   assert.match((await content.json()).body, /Canonical private body/);
   await stop();
   console.log(
-    'Production smoke passed: assets, scan, tasks, checks, private context, audit allowlist, canonical text, safe export, backup, restart, deep link.',
+    'Production smoke passed: assets, scan, tasks, work history, checks, private context, audit allowlist, canonical text, safe export, backup, restart, deep links.',
   );
 } finally {
   await stop();

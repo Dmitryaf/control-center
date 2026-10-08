@@ -106,6 +106,33 @@ export interface RecordStamp {
   updatedAt: string;
 }
 export type Task = TaskInput & RecordStamp & { number: number; code: string; revision: number };
+export interface TaskHistoryEntry {
+  id: number;
+  kind: 'baseline' | 'result' | 'completed' | 'reopened';
+  recordedAt: string;
+  projectId: string | null;
+  projectName: string | null;
+  task: Task;
+  taskExists: boolean;
+}
+export interface TaskHistoryPage {
+  total: number;
+  items: TaskHistoryEntry[];
+}
+export const taskHistoryQuerySchema = z
+  .object({
+    projectId: z.string().uuid().nullable().optional(),
+    identifier: z.string().trim().min(1).max(240).optional(),
+    from: z.string().date().optional(),
+    to: z.string().date().optional(),
+    offset: z.number().int().min(0).default(0),
+    limit: z.number().int().min(1).max(100).default(50),
+  })
+  .strict()
+  .refine((q) => !q.from || !q.to || q.from <= q.to, {
+    message: 'Начало периода должно быть не позже окончания.',
+    path: ['to'],
+  });
 export type Idea = IdeaInput & RecordStamp;
 export type Decision = DecisionInput & RecordStamp;
 export type RecordKind = 'tasks' | 'ideas' | 'decisions';

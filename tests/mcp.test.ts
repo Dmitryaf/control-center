@@ -67,7 +67,7 @@ test('real stdio clients without UI: project/worktree, bidirectional HTTP tasks,
   });
   const tools = (await a.client.listTools()).tools;
   assert.match(a.client.getInstructions() ?? '', /Незавершённую работу сохраняйте task_update/);
-  assert.equal(tools.length, 7);
+  assert.equal(tools.length, 8);
   assert.equal(
     tools.some((tool) => /delete|shell|exec|file/.test(tool.name)),
     false,
@@ -176,6 +176,20 @@ test('real stdio clients without UI: project/worktree, bidirectional HTTP tasks,
     change: { completedAt: null },
   });
   assert.equal(restored.value.result.summary, 'Done');
+  const history = await a.call('task_history', { identifier: current.code, projectId: project.id });
+  assert.equal(history.isError, false);
+  assert.equal(history.value.items[0].kind, 'reopened');
+  assert.equal(history.value.items[1].kind, 'completed');
+  assert.equal(history.value.items[1].task.result.summary, 'Done');
+  assert.equal(
+    (await b.call('task_history', { identifier: current.id })).value.total,
+    history.value.total,
+  );
+  assert.equal((await a.call('task_history', { limit: 101 })).isError, true);
+  assert.equal(
+    (await a.call('task_history', { from: '2026-10-09', to: '2026-10-08' })).isError,
+    true,
+  );
   const replay = await a.call('task_create', {
     title: 'MCP without interface',
     projectId: project.id,

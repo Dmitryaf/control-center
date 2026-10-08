@@ -1,6 +1,6 @@
 # Backup and restore
 
-The database contains local settings, discovered project IDs and snapshots, metadata overrides, notes, records, relations, checks, their history, repository visibility, private-context and legacy decision-directory paths, publication confirmations, and whether private canonical records were previously found. Treat backups as private data. Canonical document bodies are not stored in the database.
+The database contains local settings, discovered project IDs and snapshots, metadata overrides, notes, records, relations, checks, their history, saved task work history, repository visibility, private-context and legacy decision-directory paths, publication confirmations, and whether private canonical records were previously found. Treat backups as private data. Canonical document bodies are not stored in the database.
 
 ## Create a backup
 
@@ -21,4 +21,8 @@ Use the current application version or a newer compatible version. An older app 
 
 Schema version 3 adds context settings to existing projects, with visibility `unknown`, no private-context link, and no publication confirmations. Legacy decision directories, local decisions, checks, and IDs are preserved. Existing supported databases upgrade on opening; keep a backup made with the previous app before upgrading if you need to return to that version. Downgrading a version 3 database is not supported.
 
-Schema version 4 adds task numbers, revisions and creation request keys in a separate table, preserving UUIDs and existing record JSON. Opening an existing supported database first creates a verified `backups/before-tasks-v4-*.sqlite` snapshot; failure stops the upgrade. Reopening does not renumber tasks. Stop older app/MCP processes before upgrading; older builds reject schema 4. See the [task migration guide](codex.md#данные-и-переход).
+Schema version 4 introduced task numbers, revisions and creation request keys in a separate table, preserving UUIDs and existing record JSON. Upgrading a pre-v4 supported database uses a verified `backups/before-tasks-v4-*.sqlite` snapshot; failure stops the upgrade. Reopening does not renumber tasks. See the [task migration guide](codex.md#данные-и-переход).
+
+Schema version 5 adds read-only task work history. A version 4 database first receives a verified `backups/before-history-v5-*.sqlite` backup; earlier supported versions use the previous `before-tasks-v4` prefix and upgrade in the same transaction. Only known results or completions are seeded as baseline records, using the last task-save time; unknown earlier work is not reconstructed. Migration preserves record JSON, IDs, links, numbers and revisions. Backup failure leaves the old schema untouched, and reopening does not duplicate history. Stop **all** older app and MCP writers before upgrading; a schema 5 database must not be opened by an older build. Restore the pre-upgrade backup to return to the previous version.
+
+Deleting a task preserves its work history; removing a project clears live history links but retains its historical name and task snapshots. These remain private database data until the database is removed or replaced through restore. No history-edit/delete API, automatic retention cleanup, export to repositories or cloud upload is provided. A backup includes the history, and restoring it replaces the current history along with other database state.

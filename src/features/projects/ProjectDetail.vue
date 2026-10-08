@@ -269,6 +269,7 @@ function removeRelation(id: string) {
               Задачи <span class="count">{{ tasks.length }}</span>
             </h2>
             <RouterLink :to="`/tasks?project=${project.id}`">Добавить задачу →</RouterLink>
+            <RouterLink :to="`/history?project=${project.id}`">История работы →</RouterLink>
           </div>
           <div class="panel compact-list">
             <div v-for="task in tasks" :key="task.id" class="row between">

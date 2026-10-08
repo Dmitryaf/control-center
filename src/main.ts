@@ -5,6 +5,7 @@ import Overview from './features/overview/Overview.vue';
 import Projects from './features/projects/Projects.vue';
 import ProjectDetail from './features/projects/ProjectDetail.vue';
 import Tasks from './features/tasks/Tasks.vue';
+import TaskHistory from './features/tasks/TaskHistory.vue';
 import Ideas from './features/ideas/Ideas.vue';
 import Decisions from './features/decisions/Decisions.vue';
 import Settings from './features/settings/Settings.vue';
@@ -21,6 +22,7 @@ const router = createRouter({
     { path: '/checks', component: Checks },
     { path: '/checks/:id', component: CheckDetail },
     { path: '/tasks', component: Tasks },
+    { path: '/history', component: TaskHistory },
     { path: '/ideas', component: Ideas },
     { path: '/decisions', component: Decisions },
     { path: '/settings', component: Settings },

@@ -10,6 +10,10 @@ const navigation = [
   ['/decisions', 'Решения'],
   ['/settings', 'Настройки'],
 ];
+const selected = (path: string, current: string) =>
+  path === '/'
+    ? current === '/'
+    : current.startsWith(path) || (path === '/tasks' && current === '/history');
 onMounted(() => act(reload));
 let interval: ReturnType<typeof setInterval>;
 async function refreshSavedData() {
@@ -47,10 +51,8 @@ function refresh() {
           v-for="[path, label] in navigation"
           :key="path"
           :to="path"
-          :class="{ selected: path === '/' ? $route.path === '/' : $route.path.startsWith(path) }"
-          :aria-current="
-            (path === '/' ? $route.path === '/' : $route.path.startsWith(path)) ? 'page' : undefined
-          "
+          :class="{ selected: selected(path, $route.path) }"
+          :aria-current="selected(path, $route.path) ? 'page' : undefined"
           >{{ label }}</RouterLink
         >
       </nav>

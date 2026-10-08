@@ -265,10 +265,11 @@ export class Projects {
         `SELECT (
       (SELECT count(*) FROM records WHERE project_id=?) +
       (SELECT count(*) FROM checks WHERE project_id=?) +
-      (SELECT count(*) FROM relations WHERE sourceId=? OR targetId=?)
+      (SELECT count(*) FROM relations WHERE sourceId=? OR targetId=?) +
+      (SELECT count(*) FROM task_history WHERE project_id=?)
     ) AS total`,
       )
-      .get(targetId, targetId, targetId, targetId) as { total: number };
+      .get(targetId, targetId, targetId, targetId, targetId) as { total: number };
     if (
       target.metadata ||
       target.notes ||

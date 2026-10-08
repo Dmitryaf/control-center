@@ -35,15 +35,16 @@ export class Store {
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (![0, 2, 3, 4].includes(version.user_version)) {
+    if (![0, 2, 3, 4, 5].includes(version.user_version)) {
       this.db.close();
       throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
     }
     try {
-      if (existing && version.user_version < 4) {
+      if (existing && version.user_version < 5) {
         const directory = join(dirname(path), 'backups');
         mkdirSync(directory, { recursive: true });
-        snapshotDatabase(this.db, join(directory, `before-tasks-v4-${randomUUID()}.sqlite`));
+        const prefix = version.user_version < 4 ? 'before-tasks-v4' : 'before-history-v5';
+        snapshotDatabase(this.db, join(directory, `${prefix}-${randomUUID()}.sqlite`));
       }
       this.transaction(() => {
         this.db.exec(`
@@ -97,8 +98,35 @@ export class Store {
           INSERT INTO task_identity(record_id)
             SELECT id FROM records WHERE kind='tasks' AND id NOT IN (SELECT record_id FROM task_identity)
             ORDER BY created_at, id;
-          PRAGMA user_version = 4;
         `);
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS task_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL, revision INTEGER NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('baseline','result','completed','reopened')),
+            recorded_at TEXT NOT NULL,
+            project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+            project_name TEXT, snapshot TEXT NOT NULL,
+            UNIQUE(task_id,revision)
+          );
+          CREATE INDEX IF NOT EXISTS task_history_project_time ON task_history(project_id,recorded_at);
+        `);
+        // Another process may have upgraded while this connection made its backup.
+        const lockedVersion = this.db.prepare('PRAGMA user_version').get() as {
+          user_version: number;
+        };
+        if (lockedVersion.user_version < 5)
+          this.db.exec(`
+          INSERT INTO task_history(task_id,revision,kind,recorded_at,project_id,project_name,snapshot)
+          SELECT r.id,t.revision,'baseline',r.updated_at,r.project_id,
+            COALESCE(json_extract(p.metadata,'$.name'),json_extract(p.snapshot,'$.yaml.metadata.name'),json_extract(p.snapshot,'$.directoryName')),
+            json_set(r.data,'$.id',r.id,'$.projectId',r.project_id,'$.number',t.number,'$.code','CC-'||t.number,
+              '$.revision',t.revision,'$.createdAt',r.created_at,'$.updatedAt',r.updated_at)
+          FROM records r JOIN task_identity t ON t.record_id=r.id LEFT JOIN projects p ON p.id=r.project_id
+          WHERE r.kind='tasks' AND (json_extract(r.data,'$.result') IS NOT NULL OR json_extract(r.data,'$.completedAt') IS NOT NULL)
+          ORDER BY r.updated_at,r.id;
+        `);
+        this.db.exec('PRAGMA user_version = 5;');
       });
     } catch (error) {
       this.db.close();

@@ -1,6 +1,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z, ZodError } from 'zod';
-import { taskSchema, taskPatchSchema, taskResultSchema } from '../../shared/contracts.js';
+import {
+  taskSchema,
+  taskPatchSchema,
+  taskResultSchema,
+  taskHistoryQuerySchema,
+} from '../../shared/contracts.js';
+import { TaskHistory } from '../task-history.js';
 import { Store } from '../db.js';
 import { Tasks } from '../tasks.js';
 import { Projects } from '../projects/projects.js';
@@ -226,6 +232,16 @@ export function createMcpServer(store: Store) {
       annotations: { ...write, idempotentHint: true },
     },
     (input) => handled(() => tasks.save(input)),
+  );
+  server.registerTool(
+    'task_history',
+    {
+      description:
+        'История сохранённых результатов, завершения и возврата задач, включая удалённые. Фильтры по проекту, CC-N/UUID и UTC датам from/to включительно. baseline — только известная запись при переходе, не восстановленная история. Результаты сообщены пользователем или агентом и не подтверждают фактические проверки.',
+      inputSchema: taskHistoryQuerySchema,
+      annotations: readOnly,
+    },
+    (input) => handled(() => new TaskHistory(store).list(input)),
   );
   server.registerTool(
     'task_update',

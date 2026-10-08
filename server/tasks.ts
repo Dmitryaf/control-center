@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { taskSchema, taskPatchSchema, taskResultSchema, type Task } from '../shared/contracts.js';
 import { Store } from './db.js';
 import { HttpError } from './errors.js';
+import { TaskHistory } from './task-history.js';
 
 interface TaskRow {
   id: string;
@@ -108,7 +109,17 @@ export class Tasks {
         this.store.db
           .prepare('UPDATE task_identity SET revision=revision+1 WHERE record_id=?')
           .run(existing.id);
-        return this.read(existing.id);
+        const saved = this.read(existing.id);
+        const kind =
+          saved.completedAt && saved.completedAt !== existing.completedAt
+            ? 'completed'
+            : existing.completedAt && !saved.completedAt
+              ? 'reopened'
+              : JSON.stringify(saved.result) !== JSON.stringify(existing.result)
+                ? 'result'
+                : null;
+        if (kind) new TaskHistory(this.store).append(saved, kind);
+        return saved;
       }
       this.store.db
         .prepare(
@@ -118,7 +129,10 @@ export class Tasks {
       this.store.db
         .prepare('INSERT INTO task_identity(record_id,request_key,request_hash) VALUES(?,?,?)')
         .run(id, options.requestKey ?? null, options.requestKey ? hash : null);
-      return this.read(id);
+      const saved = this.read(id);
+      if (saved.completedAt || saved.result)
+        new TaskHistory(this.store).append(saved, saved.completedAt ? 'completed' : 'result');
+      return saved;
     });
   }
 

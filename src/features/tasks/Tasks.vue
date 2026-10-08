@@ -131,6 +131,9 @@ watch(
         Все задачи в одном месте. Передайте Codex номер CC-N, чтобы начать работу.
       </p>
     </div>
+    <RouterLink class="button" :to="filter ? `/history?project=${filter}` : '/history'"
+      >История работы →</RouterLink
+    >
   </div>
   <form class="panel form" @submit.prevent="save">
     <h2>{{ editingId ? 'Изменить задачу' : 'Новая задача' }}</h2>
@@ -269,6 +272,7 @@ watch(
           ><button :disabled="busy" @click="finish(task)">
             {{ task.completedAt ? 'Вернуть' : 'Завершить' }}</button
           ><button class="text-button" @click="edit(task)">Изменить</button>
+          <RouterLink :to="`/history?task=${task.code}`">История</RouterLink>
           <RecordDelete
             :id="task.id"
             kind="tasks"

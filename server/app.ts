@@ -18,6 +18,7 @@ import { assertProjectAccess } from './filesystem/access.js';
 import { Records } from './records.js';
 import { Checks } from './checks/checks.js';
 import { Tasks } from './tasks.js';
+import { TaskHistory } from './task-history.js';
 
 export function createApp(store: Store, port: number) {
   const app = express();
@@ -216,6 +217,19 @@ export function createApp(store: Store, port: number) {
   app.delete('/api/checks/:id/entries/:entryId', (req, res) => {
     checks.deleteEntry(req.params.id, req.params.entryId);
     res.json({ ok: true });
+  });
+  app.get('/api/task-history', (req, res) => {
+    const { offset, limit, projectId, ...query } = req.query;
+    res.json(
+      new TaskHistory(store).list({
+        ...query,
+        ...(projectId === undefined
+          ? {}
+          : { projectId: projectId === '__general__' ? null : projectId }),
+        ...(offset === undefined ? {} : { offset: Number(offset) }),
+        ...(limit === undefined ? {} : { limit: Number(limit) }),
+      }),
+    );
   });
   app.get('/api/tasks/:id', (req, res) => res.json(tasks.read(req.params.id)));
   app.post('/api/projects/:id/import-plan', (req, res) => {
