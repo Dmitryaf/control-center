@@ -70,7 +70,7 @@ For public projects, **Проверка публикации** inspects `git ls-
 
 Visibility, private paths, publication confirmations, and the fact that private records were previously found stay only in SQLite and its private backups. They are never added to `PROJECT.yaml`, repository decisions, or Git configuration. Document bodies are not stored in SQLite. Only actionable publication/context problems are added to the overview. Control Center never installs Kit, moves source files, commits, pushes, or publishes automatically.
 
-Everything stays on your computer. No accounts, cloud sync, GitHub API, or external AI services. Scanning reads files without running project code.
+Storage and scanning stay on your computer; scanning never runs project code. There are no accounts, cloud sync or GitHub API calls. Optional **Анализ проектов**, reached from the overview, sends an explicitly reviewed packet to OpenAI only when you request it. It proposes tasks; you choose, edit and create each one. See [setup, data and request limits](docs/analysis.md).
 
 ## Development
 

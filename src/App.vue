@@ -13,7 +13,9 @@ const navigation = [
 const selected = (path: string, current: string) =>
   path === '/'
     ? current === '/'
-    : current.startsWith(path) || (path === '/tasks' && current === '/history');
+    : current.startsWith(path) ||
+      (path === '/tasks' && current === '/history') ||
+      (path === '/projects' && current === '/analysis');
 onMounted(() => act(reload));
 let interval: ReturnType<typeof setInterval>;
 async function refreshSavedData() {

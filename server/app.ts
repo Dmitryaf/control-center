@@ -19,8 +19,9 @@ import { Records } from './records.js';
 import { Checks } from './checks/checks.js';
 import { Tasks } from './tasks.js';
 import { TaskHistory } from './task-history.js';
+import { ProjectAnalysis } from './analysis/analysis.js';
 
-export function createApp(store: Store, port: number) {
+export function createApp(store: Store, port: number, analysis = new ProjectAnalysis(store)) {
   const app = express();
   const projects = new Projects(store);
   const refresh = new ProjectRefresh(projects);
@@ -48,6 +49,9 @@ export function createApp(store: Store, port: number) {
     next();
   });
   app.use(express.json({ limit: '256kb' }));
+  app.get('/api/analysis/status', (_req, res) => res.json(analysis.status()));
+  app.post('/api/analysis/prepare', (req, res) => res.json(analysis.prepare(req.body)));
+  app.post('/api/analysis/run', async (req, res) => res.json(await analysis.run(req.body)));
   app.get('/api/workspace', (_req, res) =>
     res.json({
       projects: projects.list(),
@@ -287,5 +291,5 @@ export function createApp(store: Store, port: number) {
         .json({ error: 'Операция не выполнена. Проверьте доступ к файлам и повторите.' });
   };
   app.use(onError);
-  return { app, projects, refresh };
+  return { app, projects, refresh, analysis };
 }

@@ -128,6 +128,7 @@ const recent = computed(() =>
   </section>
   <RecentWork />
   <div class="row overview-links section-space">
+    <RouterLink to="/analysis">Анализ проектов →</RouterLink>
     <RouterLink to="/projects">Все проекты · {{ workspace!.projects.length }} →</RouterLink>
     <RouterLink to="/ideas">Идеи · {{ inbox.length }} →</RouterLink>
     <RouterLink v-if="pending.length" to="/decisions"

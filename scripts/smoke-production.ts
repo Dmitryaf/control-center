@@ -23,6 +23,8 @@ async function start() {
       ...process.env,
       PORT: '4321',
       CONTROL_CENTER_DATA_DIR: dataDirectory,
+      OPENAI_API_KEY: '',
+      CONTROL_CENTER_OPENAI_MODEL: '',
     },
   });
   processHandle.stdout?.on('data', (chunk) => {
@@ -76,6 +78,19 @@ try {
   const workspace = (await (await request('/api/workspace')).json()) as Workspace;
   assert.equal(workspace.projects.length, 1);
   const id = workspace.projects[0].id;
+  const analysisStatus = await (await request('/api/analysis/status')).json();
+  assert.equal(analysisStatus.ready, false);
+  assert.equal(analysisStatus.model, null);
+  const previewResponse = await request('/api/analysis/prepare', 'POST', { projectIds: [id] });
+  assert.equal(previewResponse.status, 200);
+  const analysisPreview = await previewResponse.json();
+  assert.ok(!JSON.stringify(analysisPreview).includes(repo));
+  assert.equal(
+    (await request('/api/analysis/run', 'POST', { previewId: analysisPreview.id, consent: true }))
+      .status,
+    503,
+  );
+  assert.match(await (await request('/analysis')).text(), /Control Center/);
   const privateRoot = path.join(fixtureData.root, 'private-context');
   await mkdir(privateRoot);
   await writeFile(
@@ -171,6 +186,11 @@ try {
   await stop();
   await start();
   const restarted = (await (await request('/api/workspace')).json()) as Workspace;
+  assert.equal(
+    (await request('/api/analysis/run', 'POST', { previewId: analysisPreview.id, consent: true }))
+      .status,
+    410,
+  );
   assert.equal(restarted.tasks[0].title, 'Persists across restart');
   assert.deepEqual(
     await (await request(`/api/task-history?identifier=${task.code}`)).json(),
@@ -196,7 +216,7 @@ try {
   assert.match((await content.json()).body, /Canonical private body/);
   await stop();
   console.log(
-    'Production smoke passed: assets, scan, tasks, work history, checks, private context, audit allowlist, canonical text, safe export, backup, restart, deep links.',
+    'Production smoke passed: assets, scan, tasks, work history, optional analysis configuration/expiry, checks, private context, audit allowlist, canonical text, safe export, backup, restart, deep links.',
   );
 } finally {
   await stop();
