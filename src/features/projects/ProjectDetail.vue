@@ -5,6 +5,7 @@ import type { Metadata, Project, Relation } from '../../../shared/contracts';
 import ProjectMaintenance from './ProjectMaintenance.vue';
 import ProjectRemoval from './ProjectRemoval.vue';
 import ProjectContext from './ProjectContext.vue';
+import ProjectFreshness from './ProjectFreshness.vue';
 import DecisionFiles from '../decisions/DecisionFiles.vue';
 import CheckCard from '../checks/CheckCard.vue';
 import { api, act, busy, error, workspace, reload } from '../../shared/api';
@@ -27,6 +28,7 @@ const nextText = ref('');
 const blockedText = ref('');
 const relatedText = ref('');
 const editing = ref(false);
+const editHash = ref<string | null>(null);
 const loading = ref(false);
 let loadVersion = 0;
 const targetId = ref('');
@@ -62,7 +64,9 @@ watch(
   () => workspace.value?.projects,
   (items) => {
     const updated = items?.find((item) => item.id === project.value?.id);
-    if (updated && !editing.value) accept(updated);
+    if (!updated) return;
+    if (editing.value) project.value = updated;
+    else accept(updated);
   },
 );
 const unfinishedChecks = computed(() =>
@@ -97,7 +101,7 @@ async function save() {
           related: lines(relatedText.value),
         },
         notes: notes.value,
-        expectedHash: project.value!.snapshot.yaml.hash,
+        expectedHash: editHash.value,
       }),
     );
   }, 'Сводка сохранена в Control Center');
@@ -107,6 +111,13 @@ function importPlan() {
   return act(async () => {
     await api(`/projects/${project.value!.id}/import-plan`, 'POST');
   }, 'Следующие шаги добавлены на доску. Прежняя сводка сохранена.');
+}
+function toggleEditing() {
+  if (!editing.value) {
+    editHash.value = project.value!.snapshot.yaml.hash;
+    accept(project.value!);
+  }
+  editing.value = !editing.value;
 }
 function exportYaml() {
   return act(async () => {
@@ -158,9 +169,10 @@ function removeRelation(id: string) {
           ><span class="muted">Приоритет: {{ priorityLabels[project.metadata.priority] }}</span
           ><span v-if="project.metadata.stage" class="muted">{{ project.metadata.stage }}</span>
         </div>
+        <ProjectFreshness :project="project" />
       </div>
       <div class="row">
-        <button :disabled="busy" @click="editing = !editing">
+        <button :disabled="busy" @click="toggleEditing">
           {{ editing ? 'Закрыть редактор' : 'Изменить сводку' }}
         </button>
         <ProjectRemoval :project="project" />

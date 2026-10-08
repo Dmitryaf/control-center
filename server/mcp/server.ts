@@ -108,8 +108,7 @@ export function createMcpServer(store: Store) {
     (input) =>
       handled(async () => {
         const row = await resolveProject(store, input);
-        await projects.decisions.refresh(row.id);
-        const project = projects.view(projects.require(row.id));
+        const project = await projects.refresh(row.id);
         return {
           project: {
             id: project.id,
@@ -119,6 +118,11 @@ export function createMcpServer(store: Store) {
             notes: project.notes,
             available: project.available,
             snapshotAt: project.snapshot.scannedAt,
+            git: project.snapshot.git,
+            readErrors: [
+              ...project.snapshot.errors,
+              ...(project.snapshot.yaml.error ? [project.snapshot.yaml.error] : []),
+            ],
             yamlConflict: project.yamlConflict,
           },
           taskSource: 'tasks',

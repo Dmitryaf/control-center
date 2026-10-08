@@ -38,7 +38,9 @@ test('remove an available project, cancel, recover from failure, rescan and rest
     });
     page.once('dialog', (dialog) => dialog.accept());
     await remove.click();
-    await expect(page.getByRole('alert')).toContainText('Дождитесь сканирования');
+    await expect(page.getByRole('alert', { name: 'Ошибка действия' })).toContainText(
+      'Дождитесь сканирования',
+    );
     await expect(remove).toBeEnabled();
     expect((await state()).projects.some((p) => p.id === project.id)).toBe(true);
     await page.unroute(`**/api/projects/${project.id}`);

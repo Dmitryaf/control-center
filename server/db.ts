@@ -123,10 +123,12 @@ export class Store {
       ProjectRow | undefined;
   }
   saveSnapshot(id: string, snapshot: Snapshot) {
+    // HTTP and MCP may inspect concurrently; an earlier read must not replace a later snapshot.
     this.db
       .prepare(
         `INSERT INTO projects(id,path,snapshot) VALUES(?,?,?) ON CONFLICT(path)
-      DO UPDATE SET snapshot=excluded.snapshot, available=1`,
+      DO UPDATE SET snapshot=excluded.snapshot, available=1
+      WHERE julianday(json_extract(excluded.snapshot,'$.scannedAt')) >= COALESCE(julianday(json_extract(projects.snapshot,'$.scannedAt')),0)`,
       )
       .run(id, snapshot.path, JSON.stringify(snapshot));
   }

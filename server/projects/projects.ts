@@ -16,6 +16,7 @@ import { ContextIndex } from './context.js';
 export class Projects {
   scanInfo: ScanInfo = { scannedAt: null, errors: [], running: false };
   private pending: Promise<void> | null = null;
+  private refreshing = new Map<string, Promise<Project>>();
   readonly decisions: DecisionIndex;
   readonly context: ContextIndex;
   constructor(readonly store: Store) {
@@ -132,10 +133,12 @@ export class Projects {
   scan(): Promise<void> {
     if (this.pending) return this.pending;
     this.scanInfo.running = true;
-    this.pending = this.performScan().finally(() => {
-      this.pending = null;
-      this.scanInfo.running = false;
-    });
+    this.pending = Promise.allSettled([...this.refreshing.values()])
+      .then(() => this.performScan())
+      .finally(() => {
+        this.pending = null;
+        this.scanInfo.running = false;
+      });
     return this.pending;
   }
   private async performScan() {
@@ -151,7 +154,11 @@ export class Projects {
     }
     this.store.db.exec('BEGIN');
     try {
-      this.store.db.exec('UPDATE projects SET available=0');
+      const found = new Set(snapshots.map((snapshot) => snapshot.path));
+      for (const row of this.store.projects()) {
+        if (!found.has(row.path))
+          this.store.db.prepare('UPDATE projects SET available=0 WHERE id=?').run(row.id);
+      }
       for (const snapshot of snapshots) this.store.saveSnapshot(randomUUID(), snapshot);
       this.store.db.exec('COMMIT');
     } catch (error) {
@@ -167,15 +174,68 @@ export class Projects {
     for (const row of this.store.projects()) await this.context.refresh(row);
   }
   async refresh(id: string): Promise<Project> {
+    if (this.pending) await this.pending;
+    const existing = this.refreshing.get(id);
+    if (existing) return existing;
+    const pending = this.performRefresh(id).finally(() => this.refreshing.delete(id));
+    this.refreshing.set(id, pending);
+    return pending;
+  }
+  async refreshKnown(signal?: AbortSignal): Promise<string[]> {
+    const errors: string[] = [];
+    for (const row of this.store.projects()) {
+      if (signal?.aborted || this.scanInfo.running) break;
+      if (!this.store.project(row.id)) continue;
+      const settings = this.store.settings();
+      if (
+        !settings.roots.some((root) => within(root, row.path)) ||
+        settings.excludedProjectPaths.some(
+          (excluded) => within(excluded, row.path) && within(row.path, excluded),
+        )
+      ) {
+        this.store.db.prepare('UPDATE projects SET available=0 WHERE id=?').run(row.id);
+        continue;
+      }
+      try {
+        const project = await this.refresh(row.id);
+        if (
+          !project.available ||
+          project.snapshot.git.error ||
+          project.snapshot.yaml.error ||
+          project.snapshot.errors.length
+        )
+          errors.push(
+            `${project.metadata.name}: не все данные удалось прочитать. Показаны доступные данные.`,
+          );
+      } catch {
+        // Removal during a read must not restore the removed project or stop the remaining pass.
+        if (this.store.project(row.id))
+          errors.push(
+            `${this.view(this.require(row.id)).metadata.name}: не удалось обновить состояние.`,
+          );
+      }
+    }
+    return errors;
+  }
+  private async performRefresh(id: string): Promise<Project> {
     const row = this.require(id);
     try {
       await assertProjectAccess(row.path, this.store.settings().roots);
       const snapshot = await inspectProject(row.path);
-      this.require(id);
+      const roots = this.store.settings().roots;
+      await assertProjectAccess(row.path, roots);
+      if (JSON.stringify(roots) !== JSON.stringify(this.store.settings().roots))
+        throw new HttpError(409, 'Настройки каталогов изменились. Повторите обновление.');
+      if (this.require(id).path !== row.path)
+        throw new HttpError(409, 'Каталог проекта изменился. Повторите обновление.');
       this.store.saveSnapshot(id, snapshot);
-    } catch {
+    } catch (error) {
+      const current = this.require(id);
+      if (current.path !== row.path) throw error;
       // Preserve the last snapshot and all user data when access is lost.
-      this.store.db.prepare('UPDATE projects SET available=0 WHERE id=?').run(id);
+      this.store.db
+        .prepare('UPDATE projects SET available=0 WHERE id=? AND snapshot=?')
+        .run(id, row.snapshot);
     }
     await this.decisions.refresh(id);
     await this.context.refresh(this.require(id));

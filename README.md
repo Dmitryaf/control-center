@@ -15,6 +15,8 @@ npm run dev
 
 Open [localhost:4310](http://127.0.0.1:4310), add your project folders in **Settings**, and scan. Open a project to set its focus and next step. Use **Refresh** to reread projects; opening a project also refreshes its files and Git status.
 
+While the local server runs, known projects are reread automatically, with a one-minute pause between passes by default. Settings allow 0–60 minutes; 0 disables this. New projects are discovered on startup or by scanning. Project rows show the snapshot time; failed reads preserve saved data and show a warning. Automatic reads do not write repository files or alter tasks and manual metadata.
+
 ## Tasks and Codex
 
 Tasks have stable `CC-N` identifiers, search, project/state filters, priorities and saved results. A local stdio MCP server shares the same SQLite database and works without the UI. See the [Russian Codex setup and task guide](docs/codex.md).

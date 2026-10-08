@@ -63,6 +63,7 @@ export async function discover(settings: Settings): Promise<{ paths: string[]; e
   return { paths: paths.sort(), errors };
 }
 export async function inspectProject(directory: string): Promise<Snapshot> {
+  const scannedAt = new Date().toISOString();
   const entries = await readdir(directory, { withFileTypes: true });
   const files = entries
     .filter((entry) => entry.isFile() && !entry.isSymbolicLink())
@@ -114,7 +115,7 @@ export async function inspectProject(directory: string): Promise<Snapshot> {
   return {
     path: directory,
     directoryName: path.basename(directory),
-    scannedAt: new Date().toISOString(),
+    scannedAt,
     git,
     yaml,
     files: files

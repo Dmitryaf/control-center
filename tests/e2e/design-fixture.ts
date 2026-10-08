@@ -152,6 +152,7 @@ export function designFixture(): Workspace {
     return checkView(check, entries, defaultSettings, projects[0]!.snapshot, '2026-10-05');
   });
   return {
+    refresh: { running: false, lastAttemptAt: null, errors: [] },
     projects,
     checks,
     checkEntries: entries,

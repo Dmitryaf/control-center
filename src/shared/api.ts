@@ -5,6 +5,7 @@ export const workspace = ref<Workspace | null>(null);
 export const busy = ref(false);
 export const error = ref('');
 export const notice = ref('');
+export const connectionLost = ref(false);
 let reloadVersion = 0;
 export async function api<T>(path: string, method = 'GET', data?: unknown): Promise<T> {
   const response = await fetch(`/api${path}`, {
@@ -24,8 +25,16 @@ export async function api<T>(path: string, method = 'GET', data?: unknown): Prom
 }
 export async function reload() {
   const version = ++reloadVersion;
-  const result = await api<Workspace>('/workspace');
-  if (version === reloadVersion) workspace.value = result;
+  try {
+    const result = await api<Workspace>('/workspace');
+    if (version === reloadVersion) {
+      workspace.value = result;
+      connectionLost.value = false;
+    }
+  } catch (cause) {
+    if (version === reloadVersion) connectionLost.value = true;
+    throw cause;
+  }
 }
 export async function act(action: () => Promise<void>, message = ''): Promise<boolean> {
   if (busy.value) return false;

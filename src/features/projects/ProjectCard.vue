@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import type { Project } from '../../../shared/contracts';
 import { workspace } from '../../shared/api';
 import { statusLabels, typeLabels, date } from '../../shared/labels';
+import ProjectFreshness from './ProjectFreshness.vue';
 const props = defineProps<{ project: Project }>();
 const checks = computed(() =>
   workspace.value!.checks.filter((c) => c.projectId === props.project.id && c.status === 'active'),
@@ -44,6 +45,7 @@ const latestAction = computed(() =>
       </p>
     </div>
     <div class="project-activity">
+      <ProjectFreshness :project="project" />
       <p>{{ checks.length }} активных проверок</p>
       <p class="help">
         Внешний шаг: {{ latestAction ? date(latestAction) : 'нет записи в активных проверках' }}

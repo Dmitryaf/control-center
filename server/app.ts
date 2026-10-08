@@ -12,6 +12,7 @@ import {
 import { Store } from './db.js';
 import { HttpError } from './errors.js';
 import { Projects } from './projects/projects.js';
+import { ProjectRefresh } from './projects/refresh.js';
 import { exportMetadata } from './projects/metadata.js';
 import { assertProjectAccess } from './filesystem/access.js';
 import { Records } from './records.js';
@@ -21,6 +22,7 @@ import { Tasks } from './tasks.js';
 export function createApp(store: Store, port: number) {
   const app = express();
   const projects = new Projects(store);
+  const refresh = new ProjectRefresh(projects);
   const records = new Records(store);
   const checks = new Checks(store);
   const tasks = new Tasks(store);
@@ -54,6 +56,7 @@ export function createApp(store: Store, port: number) {
       relations: records.relations(),
       settings: store.settings(),
       scan: projects.scanInfo,
+      refresh: refresh.info,
       checks: checks.views(),
       checkEntries: checks.entries(),
       fileDecisions: projects.decisions.list(),
@@ -69,6 +72,8 @@ export function createApp(store: Store, port: number) {
     const settings = settingsSchema.parse(req.body);
     if (req.body.excludedProjectPaths === undefined)
       settings.excludedProjectPaths = store.settings().excludedProjectPaths;
+    if (req.body.autoRefreshMinutes === undefined)
+      settings.autoRefreshMinutes = store.settings().autoRefreshMinutes;
     if (
       [...settings.roots, ...settings.excludedProjectPaths].some((root) => !path.isAbsolute(root))
     )
@@ -78,6 +83,7 @@ export function createApp(store: Store, port: number) {
       ...new Set(settings.excludedProjectPaths.map((directory) => path.resolve(directory))),
     ];
     store.saveSettings(settings);
+    refresh.reschedule();
     await projects.scan();
     res.json(settings);
   });
@@ -253,5 +259,5 @@ export function createApp(store: Store, port: number) {
         .json({ error: 'Операция не выполнена. Проверьте доступ к файлам и повторите.' });
   };
   app.use(onError);
-  return { app, projects };
+  return { app, projects, refresh };
 }

@@ -28,6 +28,7 @@ export const settingsSchema = z
     excludedProjectPaths: z.array(z.string().trim().min(1).max(2000)).default([]),
     inactivityDays: z.number().int().min(1).max(3650),
     reviewDays: z.number().int().min(1).max(3650),
+    autoRefreshMinutes: z.number().int().min(0).max(60).default(1),
     movementInfoDays: z.number().int().min(1).max(3650).default(3),
     movementAttentionDays: z.number().int().min(1).max(3650).default(7),
     movementDecisionDays: z.number().int().min(1).max(3650).default(14),
@@ -45,6 +46,7 @@ export const defaultSettings: Settings = {
   excludedProjectPaths: [],
   inactivityDays: 14,
   reviewDays: 30,
+  autoRefreshMinutes: 1,
   movementInfoDays: 3,
   movementAttentionDays: 7,
   movementDecisionDays: 14,
@@ -163,6 +165,11 @@ export interface ScanInfo {
   errors: string[];
   running: boolean;
 }
+export interface ProjectRefreshInfo {
+  running: boolean;
+  lastAttemptAt: string | null;
+  errors: string[];
+}
 export interface Workspace {
   projects: Project[];
   tasks: Task[];
@@ -171,6 +178,7 @@ export interface Workspace {
   relations: Relation[];
   settings: Settings;
   scan: ScanInfo;
+  refresh: ProjectRefreshInfo;
   checks: CheckView[];
   checkEntries: CheckEntry[];
   fileDecisions: FileDecision[];

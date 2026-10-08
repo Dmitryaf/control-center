@@ -46,7 +46,9 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
     });
     expect(changed.isError).toBe(false);
     await page.getByRole('button', { name: 'Сохранить задачу', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText('уже изменена');
+    await expect(page.getByRole('alert', { name: 'Ошибка действия' })).toContainText(
+      'уже изменена',
+    );
     await expect(page.getByLabel('Название задачи')).toHaveValue('Мой несохранённый текст');
     await page.getByRole('button', { name: 'Отмена', exact: true }).click();
     await expect(card.getByText('Изменено другим агентом', { exact: true })).toBeVisible();

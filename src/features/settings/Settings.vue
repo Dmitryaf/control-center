@@ -7,6 +7,7 @@ const exclusions = ref(workspace.value!.settings.exclusions.join('\n'));
 const excludedProjectPaths = ref(workspace.value!.settings.excludedProjectPaths.join('\n'));
 const inactivityDays = ref(workspace.value!.settings.inactivityDays);
 const reviewDays = ref(workspace.value!.settings.reviewDays);
+const autoRefreshMinutes = ref(workspace.value!.settings.autoRefreshMinutes);
 const movementInfoDays = ref(workspace.value!.settings.movementInfoDays);
 const movementAttentionDays = ref(workspace.value!.settings.movementAttentionDays);
 const movementDecisionDays = ref(workspace.value!.settings.movementDecisionDays);
@@ -24,6 +25,7 @@ function save() {
       excludedProjectPaths: lines(excludedProjectPaths.value),
       inactivityDays: inactivityDays.value,
       reviewDays: reviewDays.value,
+      autoRefreshMinutes: autoRefreshMinutes.value,
       movementInfoDays: movementInfoDays.value,
       movementAttentionDays: movementAttentionDays.value,
       movementDecisionDays: movementDecisionDays.value,
@@ -64,6 +66,20 @@ function save() {
         найден заново; удалённые заметки, сводка и связи не восстанавливаются.
       </p>
     </details>
+    <h2>Обновление состояния проектов</h2>
+    <label
+      >Интервал обновления, минут<input
+        v-model.number="autoRefreshMinutes"
+        type="number"
+        min="0"
+        max="60"
+        required
+    /></label>
+    <p class="help">
+      0 отключает автоматическое обновление. Пока запущен локальный сервер, он перечитывает Git,
+      сводки и решения известных проектов. Новые каталоги находятся при сканировании. Файлы, задачи
+      и ваши правки сводок не меняются.
+    </p>
     <div class="form-grid">
       <label
         >Нет новых commits, дней<input

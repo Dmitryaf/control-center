@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue';
-import { act, api, busy, error, notice, reload, workspace } from './shared/api';
+import { act, api, busy, error, notice, reload, workspace, connectionLost } from './shared/api';
 const navigation = [
   ['/', 'Обзор'],
   ['/projects', 'Проекты'],
@@ -17,7 +17,7 @@ async function refreshSavedData() {
   try {
     await reload();
   } catch {
-    /* The next refresh retries; explicit actions show errors. */
+    /* reload preserves saved data and records the latest connection state. */
   }
 }
 onMounted(() => {
@@ -60,14 +60,47 @@ function refresh() {
     </header>
     <div class="main-shell">
       <main id="content" tabindex="-1">
-        <div v-if="error" class="message error" role="alert">
+        <div v-if="error" class="message error" role="alert" aria-label="Ошибка действия">
           {{ error }} <button :disabled="busy" @click="act(reload)">Повторить загрузку</button>
         </div>
         <div v-if="notice" class="message success" role="status">{{ notice }}</div>
+        <div
+          v-if="workspace && connectionLost"
+          class="message warning"
+          role="alert"
+          aria-label="Связь с сервером"
+        >
+          Нет связи с локальным сервером. Показаны ранее загруженные данные; загрузка повторится
+          автоматически.
+        </div>
         <div v-if="workspace?.scan.errors.length" class="message warning">
           <strong>Не все каталоги удалось проверить</strong>
           <p v-for="item in workspace.scan.errors" :key="item">{{ item }}</p>
         </div>
+        <template v-if="workspace">
+          <p class="help" aria-live="polite">
+            {{
+              workspace.refresh.running
+                ? 'Читаем состояние проектов…'
+                : workspace.settings.autoRefreshMinutes
+                  ? `Интервал обновления проектов: ${workspace.settings.autoRefreshMinutes} мин.`
+                  : 'Автоматическое обновление проектов отключено.'
+            }}
+          </p>
+          <div
+            v-if="workspace.refresh.errors.length"
+            class="message warning"
+            role="alert"
+            aria-label="Обновление проектов"
+          >
+            <strong>При автоматическом обновлении не все данные удалось прочитать</strong>
+            <p v-if="workspace.refresh.lastAttemptAt" class="help">
+              Последняя попытка:
+              {{ new Date(workspace.refresh.lastAttemptAt).toLocaleString('ru') }}
+            </p>
+            <p v-for="item in workspace.refresh.errors" :key="item">{{ item }}</p>
+          </div>
+        </template>
         <RouterView v-if="workspace" />
         <p v-else class="empty">
           {{

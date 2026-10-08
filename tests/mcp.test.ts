@@ -10,6 +10,41 @@ import { createApp } from '../server/app.js';
 import { Projects } from '../server/projects/projects.js';
 import { defaultSettings } from '../shared/contracts.js';
 
+test('project context refreshes saved Git and YAML in a standalone MCP process without UI or a background timer', async (t) => {
+  const f = await fixture();
+  const data = path.join(f.root, 'data');
+  const store = new Store(path.join(data, 'control-center.sqlite'));
+  const repo = await f.repo('context-freshness');
+  store.saveSettings({ ...defaultSettings, roots: [repo], autoRefreshMinutes: 0 });
+  await new Projects(store).scan();
+  const id = store.projects()[0]!.id;
+  const previousSnapshot = store.project(id)!.snapshot;
+  await writeFile(
+    path.join(repo, 'PROJECT.yaml'),
+    'name: Fresh context\ncurrent_focus: New context\n',
+  );
+  f.git(repo, 'switch', '-c', 'context-work');
+  const mcp = await connectMcp(data, f.root);
+  t.after(async () => {
+    await mcp.close();
+    store.close();
+    await f.cleanup();
+  });
+  const result = await mcp.call('project_context', { projectId: id });
+  assert.equal(result.isError, false);
+  assert.equal(result.value.project.name, 'Fresh context');
+  assert.equal(result.value.project.metadata.current_focus, 'New context');
+  assert.equal(result.value.project.git.branch, 'context-work');
+  assert.equal(result.value.project.git.dirty, true);
+  assert.deepEqual(result.value.project.readErrors, []);
+  assert.notEqual(store.project(id)!.snapshot, previousSnapshot);
+  const saved = JSON.parse(store.project(id)!.snapshot);
+  assert.equal(saved.git.branch, 'context-work');
+  assert.equal(saved.git.dirty, true);
+  assert.equal(result.value.project.snapshotAt, saved.scannedAt);
+  assert.equal(store.settings().autoRefreshMinutes, 0);
+});
+
 test('real stdio clients without UI: project/worktree, bidirectional HTTP tasks, concurrent edits, idempotency and denied capabilities', async (t) => {
   const f = await fixture();
   const data = path.join(f.root, 'data');
