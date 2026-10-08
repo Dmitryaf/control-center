@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "tsx server/index.ts --dev",
     "start": "node dist/server/server/index.js",
+    "mcp": "node dist/server/server/mcp/index.js",
     "build": "vite build && tsc -p tsconfig.server.json",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
     "lint": "eslint . && tsx scripts/check-boundaries.ts",
@@ -19,6 +20,7 @@
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
     "express": "^5.2.1",
     "vue": "3.5",
     "vue-router": "^4.6.4",

@@ -7,6 +7,11 @@ const props = defineProps<{ project: Project }>();
 const checks = computed(() =>
   workspace.value!.checks.filter((c) => c.projectId === props.project.id && c.status === 'active'),
 );
+const tasks = computed(() =>
+  workspace.value!.tasks.filter((task) => task.projectId === props.project.id && !task.completedAt),
+);
+const current = computed(() => tasks.value.filter((task) => task.state === 'now'));
+const next = computed(() => tasks.value.filter((task) => task.state === 'next'));
 const latestAction = computed(() =>
   checks.value
     .map((c) => c.lastExternalActionAt)
@@ -27,8 +32,16 @@ const latestAction = computed(() =>
       <p v-if="project.metadata.priority === 'high'" class="priority">↑ Высокий приоритет</p>
     </div>
     <div class="project-focus">
-      <p>{{ project.metadata.current_focus || 'Текущий фокус ещё не задан' }}</p>
-      <p class="help">Далее · {{ project.metadata.next[0] || 'Шаг пока не определён' }}</p>
+      <p v-if="current.length">
+        {{ current.map((task) => `${task.code} · ${task.title}`).join('; ') }}
+      </p>
+      <p v-else>Задачи на сейчас ещё не выбраны</p>
+      <p class="help">
+        Далее · {{ next[0] ? `${next[0].code} · ${next[0].title}` : 'Следующие задачи не выбраны' }}
+      </p>
+      <p v-if="project.metadata.current_focus" class="help">
+        Фокус из сводки · <span>{{ project.metadata.current_focus }}</span>
+      </p>
     </div>
     <div class="project-activity">
       <p>{{ checks.length }} активных проверок</p>

@@ -261,7 +261,7 @@ test('old SQLite v2 migrates without moving local decisions, legacy paths or che
   for (let i = 0; i < 2; i++) {
     const store = new Store(dbPath);
     try {
-      assert.equal(store.db.prepare('PRAGMA user_version').get()?.user_version, 3);
+      assert.equal(store.db.prepare('PRAGMA user_version').get()?.user_version, 4);
       const row = store.project('project-id')!;
       assert.equal(row.visibility, 'unknown');
       assert.equal(row.private_context_path, null);

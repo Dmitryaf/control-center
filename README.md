@@ -15,6 +15,10 @@ npm run dev
 
 Open [localhost:4310](http://127.0.0.1:4310), add your project folders in **Settings**, and scan. Open a project to set its focus and next step. Use **Refresh** to reread projects; opening a project also refreshes its files and Git status.
 
+## Tasks and Codex
+
+Tasks have stable `CC-N` identifiers, search, project/state filters, priorities and saved results. A local stdio MCP server shares the same SQLite database and works without the UI. See the [Russian Codex setup and task guide](docs/codex.md).
+
 ## Checks
 
 Start a check from an idea or the **Checks** page. Record the question, expected external result, conditions to continue or stop, and the next external step.

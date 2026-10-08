@@ -243,6 +243,11 @@ export class Projects {
       this.store.saveSettings(settings);
       this.store.db
         .prepare(
+          'UPDATE task_identity SET revision=revision+1 WHERE record_id IN (SELECT id FROM records WHERE project_id=?)',
+        )
+        .run(id);
+      this.store.db
+        .prepare(
           "UPDATE records SET project_id=NULL,data=json_set(data,'$.projectId',NULL),updated_at=? WHERE project_id=?",
         )
         .run(new Date().toISOString(), id);

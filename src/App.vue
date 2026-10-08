@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, onUnmounted } from 'vue';
 import { act, api, busy, error, notice, reload, workspace } from './shared/api';
 const navigation = [
   ['/', 'Обзор'],
@@ -11,6 +11,23 @@ const navigation = [
   ['/settings', 'Настройки'],
 ];
 onMounted(() => act(reload));
+let interval: ReturnType<typeof setInterval>;
+async function refreshSavedData() {
+  if (busy.value || document.hidden) return;
+  try {
+    await reload();
+  } catch {
+    /* The next refresh retries; explicit actions show errors. */
+  }
+}
+onMounted(() => {
+  interval = setInterval(refreshSavedData, 5000);
+  window.addEventListener('focus', refreshSavedData);
+});
+onUnmounted(() => {
+  clearInterval(interval);
+  window.removeEventListener('focus', refreshSavedData);
+});
 function refresh() {
   return act(async () => {
     await api('/scan', 'POST');

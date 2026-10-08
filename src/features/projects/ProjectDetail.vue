@@ -103,6 +103,11 @@ async function save() {
   }, 'Сводка сохранена в Control Center');
   if (ok) editing.value = false;
 }
+function importPlan() {
+  return act(async () => {
+    await api(`/projects/${project.value!.id}/import-plan`, 'POST');
+  }, 'Следующие шаги добавлены на доску. Прежняя сводка сохранена.');
+}
 function exportYaml() {
   return act(async () => {
     accept(
@@ -208,12 +213,35 @@ function removeRelation(id: string) {
           <h2>Зачем существует</h2>
           <p class="preserve">{{ project.metadata.goal || 'Цель пока не описана.' }}</p>
           <h2>Сейчас</h2>
+          <ul v-if="tasks.some((task) => task.state === 'now')">
+            <li v-for="task in tasks.filter((task) => task.state === 'now')" :key="task.id">
+              <RouterLink :to="`/tasks?project=${project.id}&task=${task.code}`"
+                >{{ task.code }} · {{ task.title }}</RouterLink
+              >
+            </li>
+          </ul>
+          <p v-else class="muted">Задачи на сейчас ещё не выбраны.</p>
+          <h3>Фокус из сводки</h3>
           <p class="preserve">{{ project.metadata.current_focus || 'Фокус пока не задан.' }}</p>
           <h2>Следующий шаг</h2>
-          <ol v-if="project.metadata.next.length">
-            <li v-for="item in project.metadata.next" :key="item">{{ item }}</li>
+          <ol v-if="tasks.some((task) => task.state === 'next')">
+            <li v-for="task in tasks.filter((task) => task.state === 'next')" :key="task.id">
+              <RouterLink :to="`/tasks?project=${project.id}&task=${task.code}`"
+                >{{ task.code }} · {{ task.title }}</RouterLink
+              >
+            </li>
           </ol>
-          <p v-else class="muted">Добавьте один конкретный следующий шаг.</p>
+          <p v-else class="muted">Следующие задачи ещё не выбраны.</p>
+          <details v-if="project.metadata.next.length" class="section-space">
+            <summary>Прежние шаги из сводки</summary>
+            <ol>
+              <li v-for="item in project.metadata.next" :key="item">{{ item }}</li>
+            </ol>
+            <p>
+              Текущая работа ведётся на доске. Перенос сохранит эту сводку и существующие задачи.
+            </p>
+            <button :disabled="busy" @click="importPlan">Добавить шаги на доску</button>
+          </details>
         </section>
         <section v-if="unfinishedChecks.length" class="section-space">
           <h2>Проверки проекта</h2>

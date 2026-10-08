@@ -16,12 +16,14 @@ import { exportMetadata } from './projects/metadata.js';
 import { assertProjectAccess } from './filesystem/access.js';
 import { Records } from './records.js';
 import { Checks } from './checks/checks.js';
+import { Tasks } from './tasks.js';
 
 export function createApp(store: Store, port: number) {
   const app = express();
   const projects = new Projects(store);
   const records = new Records(store);
   const checks = new Checks(store);
+  const tasks = new Tasks(store);
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -208,6 +210,17 @@ export function createApp(store: Store, port: number) {
   app.delete('/api/checks/:id/entries/:entryId', (req, res) => {
     checks.deleteEntry(req.params.id, req.params.entryId);
     res.json({ ok: true });
+  });
+  app.get('/api/tasks/:id', (req, res) => res.json(tasks.read(req.params.id)));
+  app.post('/api/projects/:id/import-plan', (req, res) => {
+    const project = projects.view(projects.require(req.params.id));
+    res.json(tasks.importPlan(project.id, project.metadata.next));
+  });
+  app.post('/api/tasks/:id/complete', (req, res) => {
+    const body = z
+      .object({ revision: z.number().int().positive(), result: z.unknown() })
+      .parse(req.body);
+    res.json(tasks.complete(req.params.id, body.revision, body.result));
   });
   for (const kind of ['tasks', 'ideas', 'decisions'] satisfies RecordKind[]) {
     app.post(`/api/${kind}`, (req, res) => res.status(201).json(records.save(kind, req.body)));

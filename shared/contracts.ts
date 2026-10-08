@@ -50,13 +50,38 @@ export const defaultSettings: Settings = {
   movementDecisionDays: 14,
 };
 const recordBase = { title, projectId: z.string().uuid().nullable().default(null) };
+export const taskResultSchema = z.object({
+  summary: text.min(1),
+  verified: text.default(''),
+  unverified: text.default(''),
+  remaining: text.default(''),
+});
 export const taskSchema = z.object({
   ...recordBase,
   description: text.default(''),
+  expectedResult: text.default(''),
+  acceptance: text.default(''),
+  links: z.array(z.string().trim().min(1).max(2000)).max(50).default([]),
+  result: taskResultSchema.nullable().default(null),
   state: z.enum(['now', 'next', 'later']).default('next'),
   priority: prioritySchema.default('normal'),
   completedAt: z.string().datetime().nullable().default(null),
 });
+// PATCH fields must not apply create defaults: omission means preserve current data.
+export const taskPatchSchema = z
+  .object({
+    title: taskSchema.shape.title.optional(),
+    projectId: taskSchema.shape.projectId.unwrap().optional(),
+    description: taskSchema.shape.description.unwrap().optional(),
+    expectedResult: taskSchema.shape.expectedResult.unwrap().optional(),
+    acceptance: taskSchema.shape.acceptance.unwrap().optional(),
+    links: taskSchema.shape.links.unwrap().optional(),
+    result: taskSchema.shape.result.unwrap().optional(),
+    state: taskSchema.shape.state.unwrap().optional(),
+    priority: taskSchema.shape.priority.unwrap().optional(),
+    completedAt: taskSchema.shape.completedAt.unwrap().optional(),
+  })
+  .strict();
 export const ideaSchema = z.object({
   ...recordBase,
   description: text.default(''),
@@ -78,7 +103,7 @@ export interface RecordStamp {
   createdAt: string;
   updatedAt: string;
 }
-export type Task = TaskInput & RecordStamp;
+export type Task = TaskInput & RecordStamp & { number: number; code: string; revision: number };
 export type Idea = IdeaInput & RecordStamp;
 export type Decision = DecisionInput & RecordStamp;
 export type RecordKind = 'tasks' | 'ideas' | 'decisions';

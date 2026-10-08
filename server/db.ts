@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, existsSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { settingsSchema } from '../shared/contracts.js';
 import { snapshotDatabase } from './storage.js';
 import {
@@ -27,18 +28,25 @@ export interface ProjectRow {
 export class Store {
   readonly db: DatabaseSync;
   constructor(readonly path: string) {
+    const existing = path !== ':memory:' && existsSync(path) && statSync(path).size > 0;
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     this.db.exec(
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (![0, 2, 3].includes(version.user_version)) {
+    if (![0, 2, 3, 4].includes(version.user_version)) {
       this.db.close();
       throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
     }
-    this.transaction(() =>
-      this.db.exec(`
+    try {
+      if (existing && version.user_version < 4) {
+        const directory = join(dirname(path), 'backups');
+        mkdirSync(directory, { recursive: true });
+        snapshotDatabase(this.db, join(directory, `before-tasks-v4-${randomUUID()}.sqlite`));
+      }
+      this.transaction(() => {
+        this.db.exec(`
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS projects (
         id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, snapshot TEXT NOT NULL,
@@ -67,22 +75,35 @@ export class Store {
           );
           CREATE INDEX IF NOT EXISTS checks_project ON checks(project_id);
           CREATE INDEX IF NOT EXISTS entries_check ON check_entries(check_id);
-        `),
-    );
-    this.transaction(() => {
-      const columns = this.db.prepare('PRAGMA table_info(projects)').all() as { name: string }[];
-      for (const [name, definition] of Object.entries({
-        visibility:
-          "TEXT NOT NULL DEFAULT 'unknown' CHECK(visibility IN ('unknown','private','public'))",
-        private_context_path: 'TEXT',
-        private_context_had_records: 'INTEGER NOT NULL DEFAULT 0',
-        publication_allowlist: "TEXT NOT NULL DEFAULT '[]'",
-      })) {
-        if (!columns.some((column) => column.name === name))
-          this.db.exec(`ALTER TABLE projects ADD COLUMN ${name} ${definition}`);
-      }
-      this.db.exec('PRAGMA user_version = 3');
-    });
+        `);
+        const columns = this.db.prepare('PRAGMA table_info(projects)').all() as { name: string }[];
+        for (const [name, definition] of Object.entries({
+          visibility:
+            "TEXT NOT NULL DEFAULT 'unknown' CHECK(visibility IN ('unknown','private','public'))",
+          private_context_path: 'TEXT',
+          private_context_had_records: 'INTEGER NOT NULL DEFAULT 0',
+          publication_allowlist: "TEXT NOT NULL DEFAULT '[]'",
+        })) {
+          if (!columns.some((column) => column.name === name))
+            this.db.exec(`ALTER TABLE projects ADD COLUMN ${name} ${definition}`);
+        }
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS task_identity (
+            number INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_id TEXT NOT NULL UNIQUE REFERENCES records(id) ON DELETE CASCADE,
+            revision INTEGER NOT NULL DEFAULT 1,
+            request_key TEXT UNIQUE, request_hash TEXT
+          );
+          INSERT INTO task_identity(record_id)
+            SELECT id FROM records WHERE kind='tasks' AND id NOT IN (SELECT record_id FROM task_identity)
+            ORDER BY created_at, id;
+          PRAGMA user_version = 4;
+        `);
+      });
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
   }
   settings(): Settings {
     const row = this.db.prepare('SELECT data FROM settings WHERE id=1').get() as

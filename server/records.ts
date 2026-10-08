@@ -9,10 +9,12 @@ import {
 } from '../shared/contracts.js';
 import { Store } from './db.js';
 import { HttpError } from './errors.js';
+import { Tasks } from './tasks.js';
 
 export class Records {
   constructor(private store: Store) {}
   list(kind: RecordKind): RecordItem[] {
+    if (kind === 'tasks') return new Tasks(this.store).list();
     const rows = this.store.db
       .prepare('SELECT * FROM records WHERE kind=? ORDER BY created_at DESC')
       .all(kind) as { id: string; data: string; created_at: string; updated_at: string }[];
@@ -24,6 +26,7 @@ export class Records {
     }));
   }
   save(kind: RecordKind, input: unknown, id: string = randomUUID(), update = false): RecordItem {
+    if (kind === 'tasks') return new Tasks(this.store).save(input, id, update);
     const schema = { tasks: taskSchema, ideas: ideaSchema, decisions: decisionSchema }[kind];
     const data = schema.parse(input);
     if (data.projectId && !this.store.project(data.projectId))
