@@ -1,10 +1,10 @@
 # Control Center
 
-A local dashboard for projects, tasks, ideas, and hypothesis checks. See what needs attention and choose the next step. Works with public or private repositories and projects without a Git remote. The interface is in Russian.
+A local workspace for understanding your projects: their purpose, progress, decisions and possible directions. Keep tasks, observations and weekly or monthly reviews together. The interface is in Russian. Works with repositories and ordinary project folders.
 
 ## Get started
 
-Install **Node.js 22.17+** and **Git**, then run:
+Install **Node.js 22.17+** and **Git**:
 
 ```sh
 git clone https://github.com/Dmitryaf/control-center.git
@@ -13,75 +13,103 @@ npm ci
 npm run dev
 ```
 
-Open [localhost:4310](http://127.0.0.1:4310), add your project folders in **Settings**, and scan. Set project goals and status on the project page; plan current work in **Tasks**. The overview puts current tasks first, followed by attention signals and the latest five work-history records. Checks, active projects and Git details remain available in expandable sections. Use **Refresh** to reread projects; opening a project also refreshes its files and Git status.
+In PowerShell use `npm.cmd`. Open [Control Center](http://127.0.0.1:4310), add project folders in **Настройки**, and scan. On each project, describe what you are creating and why in **Зачем существует**, then set its status and stage. No mandatory questionnaire is needed.
 
-While the local server runs, known projects are reread automatically, with a one-minute pause between passes by default. Settings allow 0–60 minutes; 0 disables this. New projects are discovered on startup or by scanning. Project rows show the snapshot time; failed reads preserve saved data and show a warning. Automatic reads do not write repository files or alter tasks and manual metadata.
+The main sections are **Обзор**, **Проекты**, **Задачи** and **История**. Checks, ideas, decisions and settings are under **Ещё**. Project pages link to tasks, observations, history, reviews and saved analyses. History combines task results, checks, decisions, observations, reviews and AI analyses; dates use your chosen timezone. Earlier task results survive later task edits and deletion. Other texts show their current saved edition, not an archive of every edit.
 
-## Tasks and Codex
+Known projects refresh while the HTTP server runs, with a one-minute pause between passes by default. Settings allow 0–60 minutes; 0 disables refresh. Startup or an explicit scan discovers new projects. Failed reads retain saved data. Scanning never runs project code or changes repository files.
 
-Tasks have stable `CC-N` identifiers, search, project/state filters, priorities and saved results. A local stdio MCP server shares the same SQLite database and works without the UI.
+## Reviews and analysis
 
-Legacy focus and next steps remain readable on the project page; explicitly import next steps to the board when needed. Editing project details preserves that saved plan. YAML export retains legacy and unknown fields without copying current tasks or results into repository files; the existing metadata API remains compatible.
+Open a project's week/month review, or a general review for several projects. Your own text is saved independently of AI results. A period retains its original timezone and calendar boundaries.
 
-Open **Work history** from Tasks or a project to see saved results, completions and reopenings by project, task and inclusive UTC date range. Earlier results remain after editing or deleting a task; history is read-only and stays in the local database and its backups. Reported checks are not independently verified. Upgrading from schema 4 creates a verified backup before schema 5; stop all older app and MCP processes first.
+For **AI-анализ периода**, explicitly select projects and sources. Project summaries explain the goal, type, stage and saved focus. Optional **Предыстория** adds up to three earlier nonempty reviews and five earlier observations per selected project, separately marked as background. Period events, related reviews and selected Codex excerpts are other choices. General records and earlier AI reports require their own selection. Nothing is chosen because a repository happens to be open in Codex.
 
-## Checks
+Prepare a local packet, inspect its complete contents, then separately approve sending it to OpenAI. The central result is a connected account of what changed and what it means for those projects. Supporting sources and uncertainties are expandable; proposals appear only when there is a reason for them. Review and accept each proposal explicitly to create a task or idea. Existing goals or summaries can be outdated: update them or record an observation rather than expecting the model to reconstruct missing history.
 
-Start a check from an idea or the **Checks** page. Record the question, expected external result, conditions to continue or stop, and the next external step.
+Saved period analyses survive restart. **Анализ проектов** also offers a short current-state analysis using summaries, open tasks and five recent task events per project. That older workflow keeps its preview/result in memory for 15 minutes; use a period review for persistent analysis with broader history.
 
-Log **external actions** and **evidence** separately. Dates stay visible. Git commits show development work; they never reset the external-action clock. Evidence has its own date. With no actions, elapsed time starts at the check's launch date.
+### OpenAI setup
 
-Reminders appear inside the app: information after **3 days**, attention after **7**, and a decision prompt after **14** without an external action. Change these intervals in Settings or set a review date for a check. Paused checks have no reminders. Completion requires a result and a decision; the check stays in the archive.
+Set `OPENAI_API_KEY` and `CONTROL_CENTER_OPENAI_MODEL` in the HTTP server environment using a trusted local secret mechanism, then restart it. No default model is assumed. The key does not belong in browser inputs, repository files, SQLite or logs. A configured status does not prove provider access or sufficient balance. Local work and saved reports remain available without OpenAI.
 
-## Your data
+The server sends only the reviewed packet to the Responses API, with structured output and no tools. Input is limited to 80,000 UTF-8 bytes, output to 3,000 tokens, and requests to 60 seconds. These limits are not a monetary budget. A timeout can mean a charged request with an unknown result; it is never automatically retried. New period packets require renewed approval after relevant source, model or policy changes. A secret/path filter supplements human inspection and cannot guarantee that free text is safe to send.
 
-SQLite stores your settings, notes, tasks, ideas, checks, and local decisions. The default database is `control-center.sqlite` in:
+Optional schedules require separate permission to read future periods and send paid requests. They run only in the HTTP process, for completed periods. Missed backlogs are skipped; known failures skip that period. Unknown dispatched outcomes pause sending. Explicit continuation skips uncertain periods rather than repeating them. Changed access, models or policy require renewed approval. Reading or accepting a saved result makes no API call.
+
+### Codex context and manual results
+
+Codex dialog access is off by default. Inside a period analysis, select projects and explicitly permit local reading/saving of bounded excerpts. The installed Codex CLI must support the required read-only protocol; `CONTROL_CENTER_CODEX_PATH` can select its executable. Exact registered project/worktree paths define access. The app does not open arbitrary sessions, execute dialog commands or copy a complete archive.
+
+Automatic preparation examines up to four recent candidates and saves up to two relevant dialogs per project. Each selection contains up to two user excerpts and one final assistant excerpt, at most 500 UTF-8 bytes each. Manual selection/editing remains available. Intentions and assistant claims are not verified results. Sending these excerpts requires separate packet approval; schedules need additional explicit permission to read and send future dialogs. Revoking access blocks new use, while previously saved reports retain their approved evidence.
+
+A ready-made Codex analysis can be saved through the guarded local `POST /api/period-analysis/import-codex` API. It requires `purpose: "project_review"`, either one `projectId` or explicit `projectIds` (up to ten), a matching `reviewId` (general for several projects), UUID `requestKey`, declared `context`, structured `report`, and `confirm: true`. References use `project:<id>` or `codex_context:<requestKey>`. See the exact [import and report schemas](shared/period-analysis.ts). Identical retries reuse the result; conflicting input is rejected. This records a human-selected review, not proof of the external model/session. Existing imports without a declared purpose remain readable with a notice to check their grounds.
+
+Synthetic evaluation belongs only in the offline developer workflow below. Do not import its answers as real project reviews. The import validates purpose, scope, structure and references; it cannot determine whether arbitrary prose is truthful. To remove a mistakenly imported report, inspect its saved grounds, then explicitly use **Удалить локальный анализ**. Source records and your own review remain; accepted tasks/ideas retain their evidence.
+
+## Tasks in Codex
+
+Tasks have stable `CC-N` identifiers, revisions and saved results. A local stdio MCP server uses the same database without requiring the browser. Build the application, register projects in Settings, then configure an MCP client to launch Node with the absolute path to `dist/server/server/mcp/index.js`.
+
+For Codex CLI, replace the example installation path:
+
+```sh
+npm run build
+codex mcp add control-center -- node "C:/tools/control-center/dist/server/server/mcp/index.js"
+codex mcp list
+```
+
+If you use `CONTROL_CENTER_DATA_DIR`, pass the same value to HTTP and MCP processes. Rebuild and restart MCP after source changes. Ask Codex to resolve the session's working directory with `project_context`, check the task's project and record the actual result. The server cannot guarantee that an interrupted agent records its work. A partial result leaves the task open; stale revisions require rereading and reconciling rather than overwriting.
+
+Current tasks own planning. Legacy focus/next fields remain readable, and importing old next steps is explicit. Editing project details or exporting YAML does not replace that plan with task contents.
+
+## Checks and project files
+
+Checks record a question, external actions, evidence and an explicit outcome. Git activity does not reset their external-action clock. Default in-app reminders are 3/7/14 days; settings can change them. Paused checks suppress reminders. No activity alone proves neither failure nor success.
+
+`PROJECT.yaml` is an optional starting summary. Saved local edits take priority; a changed source hash requires explicit reconciliation. Export is explicit and preserves unknown YAML fields.
+
+Control Center still reads decisions from connected projects' `DECISIONS.md` and `decisions/*.md`, including structured and older Markdown records. It never edits them. Bodies remain in their source files; a disposable metadata index is refreshed. Conflicting IDs remain visible separately, and unavailable sources do not serve cached bodies.
+
+Repository visibility, additional decision folders, private-context links and exact-path publication confirmations are local settings. Private-context roots must be outside the repository. These paths never enter YAML. The publication check examines the Git index, including staged files; it does not audit remote visibility, Git history or secrets. It never commits or publishes. Keep private sources backed up separately.
+
+## Storage, backup and restore
+
+SQLite stores settings, project snapshots, manual data, history, reviews, analysis packets/results, permissions and accepted proposals. The default `control-center.sqlite` location is:
 
 - Windows: `%LOCALAPPDATA%/ControlCenter`
 - macOS: `~/Library/Application Support/ControlCenter`
 - Linux: `$XDG_DATA_HOME/control-center` or `~/.local/share/control-center`
 
-Set `CONTROL_CENTER_DATA_DIR` to use another directory.
+`CONTROL_CENTER_DATA_DIR` overrides the directory. **Настройки → Создать резервную копию** captures committed WAL data and verifies the copy. Backups contain private data; store them privately. Repository files, dialog archives and private-context documents are not included.
 
-**Settings → Create backup** saves and verifies a SQLite copy and shows its path.
+Verified backups disable schedule/Codex grants and cancel pending analysis approvals in the copy; running attempts become unknown. Completed reports and accepted evidence remain intact. Ordinary restart retains current permissions and is not restoration.
 
-Moved a project? Scan its new location, open the unavailable project, and use **Rebind** to keep its ID and history. **Удалить из Control Center** removes any project after confirmation and excludes its directory from future scans. Records and checks remain unassigned; relations, local metadata and project notes are removed. Repository and private-context files stay intact. To discover it again, remove its path under **Settings → Проекты, удалённые из Control Center** and save settings. It receives a new ID; removed local data and former record links are not restored.
+To restore:
 
-## Project files and decisions
+1. Note the active database path and stop **all** HTTP and MCP processes.
+2. Move the current database and matching `-wal`/`-shm` files together to a recovery location. Keep them until recovery is confirmed.
+3. Copy the verified backup to the active directory as `control-center.sqlite`. Do not reuse the old WAL/SHM files.
+4. For a raw copy made outside the verified backup flow, first run `npm start -- --restore-recovery` (or `npm run dev -- --restore-recovery`) before starting other processes. Raw replacement is not automatically detectable.
+5. Inspect records/settings, restore external files separately if needed, refresh projects and explicitly renew permissions where desired.
 
-`PROJECT.yaml` is an optional project summary. Local edits take priority. If the file changes, compare versions and choose which to keep. Writing back to YAML is always explicit.
+Supported older databases upgrade with a verified pre-upgrade backup and transactional compatibility checks. Stop older writers before upgrade. Current schema is 11; the unused schema-1 prototype is unsupported. Downgrade requires restoring a compatible pre-upgrade copy, never opening a newer database with an older build. Restore replaces state; it does not merge databases.
 
-Project decisions stay in `DECISIONS.md` and `decisions/*.md`. Control Center reads Agent Kit YAML front matter, flags due reviews and accepted decisions awaiting implementation, and also displays older Markdown records. It does not edit these files.
-
-Open **Источники контекста → Настройки контекста** on a project to explicitly select **Репозиторий публичный**, **Репозиторий приватный**, or **Не указано**. Visibility is a local setting; it is never guessed from a remote URL or changed on GitHub.
-
-Link a separate local folder using **Каталог приватного контекста**. Control Center reads its `DECISIONS.md` and `decisions/*.md`, and reports whether `PROJECT_MAP.md` exists. Other folders, such as `research/`, `hypotheses/`, and `agent/`, are allowed but not indexed yet. Keep the context outside the project repository and arrange its private versioning and backup yourself.
-
-Repository and private-context decisions share one list with visible sources. Conflicting IDs show both entries; neither wins automatically. Text is read from its canonical file when opened. **Отключить приватный контекст** removes the local link after confirmation and leaves every file intact. An unavailable source loses its temporary index; a public project with previously seen private records gets an attention signal. Existing additional decision directories and SQLite decisions remain supported without automatic migration.
-
-The separation is:
-
-- **Repository**: source code and documents intended for its readers.
-- **Agent Kit**: local working infrastructure (`AGENTS.md`, `.ai-rules/`), connected separately after cloning.
-- **Private Project Context**: long-lived internal documents in a separate private source.
-- **Control Center**: combines these sources with local tasks, ideas, and checks.
-
-For public projects, **Проверка публикации** inspects `git ls-files`, including staged changes. Tracked `.ai-rules/`, `AGENTS.md`, and `.local/` are strong internal-infrastructure signals. Decision records and project maps require an audience check; their names do not prove a leak. Choose **Этот путь намеренно публичный** to suppress the signal for that exact path. Review or remove confirmations under **Намеренно публичные пути**. This does not inspect remote publication, history, file contents for secrets, or future edits to an allowed path.
-
-Visibility, private paths, publication confirmations, and the fact that private records were previously found stay only in SQLite and its private backups. They are never added to `PROJECT.yaml`, repository decisions, or Git configuration. Document bodies are not stored in SQLite. Only actionable publication/context problems are added to the overview. Control Center never installs Kit, moves source files, commits, pushes, or publishes automatically.
-
-Storage and scanning stay on your computer; scanning never runs project code. There are no accounts, cloud sync or GitHub API calls. Optional **Анализ проектов**, reached from the overview, sends an explicitly reviewed packet to OpenAI only when you request it. It proposes tasks; you choose, edit and create each one.
+For a moved project, scan the new location and use **Перепривязать** to preserve its ID/history. Removing a project excludes its path from discovery and detaches records; it removes local metadata, project notes and relations, but never repository/private-source files. Clearing the exclusion creates a new project identity. Recover removed local state from an earlier backup.
 
 ## Development
 
-React 19, TypeScript, Vite, a local Node.js API, and SQLite.
+React 19, TypeScript, Vite, Express, SQLite, React Router, TanStack Query and React Hook Form. One loopback HTTP server; no accounts, cloud sync or autonomous code execution.
 
 ```sh
-npm run check            # Lint, typecheck, tests, and build
-npm run test:e2e         # Browser tests; requires Microsoft Edge
-npm run test:production  # Built app, persistence, and backup
-npm run test:codex       # Optional: installed Codex, empty isolated home, no real chats
-npm run eval:period -- prepare .local/period-evaluation  # Offline synthetic inputs; no API calls
-npm run eval:period -- review .local/period-evaluation   # Saved answers and separate human review
+npm run check            # Lint, boundaries, typecheck, Node/React tests, build
+npm run test:react       # React tests separately
+npm run test:e2e         # Isolated browser tests; requires Microsoft Edge
+npm run test:production  # Built app, persistence, backup and restart
+npm run test:codex       # Optional CLI check in an empty home, no personal chats
+npm run eval:period -- prepare .local/period-evaluation
+npm run eval:period -- review .local/period-evaluation
 npm start               # Run the built app
 ```
+
+The evaluator creates eight frozen fictional cases, separate rubrics and explicit `analysis_evaluation` artifacts. It makes no provider call and does not read the user's database. Structural validity and human judgment of language/usefulness are separate. Do not substitute synthetic cases for a review of selected real projects. Tests and generated artifacts use isolated data; personal data, private documentation and credentials must never enter commits.
