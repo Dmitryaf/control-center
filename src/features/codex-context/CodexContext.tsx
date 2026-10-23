@@ -36,7 +36,11 @@ function Capture({
     reset,
     formState: { isDirty },
   } = useForm<{ summary: string; excerptIds: string[]; confirm: boolean }>({
-    defaultValues: { summary: old?.summary ?? '', excerptIds: [], confirm: false },
+    defaultValues: {
+      summary: old?.summary ?? preview.suggested?.summary ?? '',
+      excerptIds: preview.suggested?.excerptIds ?? [],
+      confirm: false,
+    },
   });
   useEffect(() => {
     onDirty(isDirty);
@@ -74,7 +78,7 @@ function Capture({
           )}
         >
           <label>
-            Мой краткий итог
+            Краткий итог — можно исправить
             <textarea {...register('summary', { required: true })} rows={5} maxLength={6000} />
           </label>
           <p>Выберите до восьми выдержек. Они сохранятся рядом с вашим пересказом.</p>
@@ -324,6 +328,19 @@ function SavedDigest({
   refresh: () => Promise<unknown>;
 }) {
   const { act, busy } = useActions();
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { isDirty },
+  } = useForm({ defaultValues: { summary: item.summary } });
+  const editRevision = useRef(item.revision);
+  useEffect(() => {
+    if (!isDirty) {
+      editRevision.current = item.revision;
+      reset({ summary: item.summary });
+    }
+  }, [item.revision, item.summary, isDirty, reset]);
   const check = useMutation({
     retry: false,
     mutationFn: () =>
@@ -335,11 +352,43 @@ function SavedDigest({
   });
   return (
     <section className="panel section-space" aria-label="Сохранённый итог диалога">
+      <UnsavedChanges dirty={isDirty} />
       <h2>{item.thread.name}</h2>
       <p>
         {item.projectName} · {item.period.from} — {item.period.to}
       </p>
       <p className="preserve">{item.summary}</p>
+      <p>
+        <a href={`codex://threads/${encodeURIComponent(item.thread.id)}`}>
+          Исходный диалог Codex →
+        </a>
+      </p>
+      <details>
+        <summary>Исправить краткий итог</summary>
+        <form
+          className="form"
+          onSubmit={handleSubmit(
+            (values) =>
+              void act(async () => {
+                await api(`/codex-context/digests/${item.id}`, 'PATCH', {
+                  ...values,
+                  revision: editRevision.current,
+                  confirm: true,
+                });
+                reset(values);
+                await refresh();
+              }, 'Итог исправлен'),
+          )}
+        >
+          <label>
+            Краткий итог диалога
+            <textarea rows={5} maxLength={6000} {...register('summary', { required: true })} />
+          </label>
+          <div>
+            <button disabled={busy || !isDirty}>Сохранить исправление</button>
+          </div>
+        </form>
+      </details>
       <p>
         {item.stale
           ? 'Диалог изменён или не удалось проверить источник. Просмотрите заново.'
@@ -430,8 +479,9 @@ export default function CodexContext() {
     <>
       <h1>Диалоги Codex для контекста</h1>
       <p>
-        Обычно достаточно одного-двух содержательных диалогов. Сохраните свой краткий итог и только
-        нужные выдержки. Сообщения ассистента не доказывают выполнения действий.
+        До двух содержательных диалогов на каждый проект. В анализе можно подготовить ограниченную
+        выборку автоматически. Здесь доступны отдельный диалог, выдержки и редактирование итога.
+        Сообщения ассистента не доказывают выполнения действий.
       </p>
       <p>
         <Link to="/reviews">Выбрать обзор периода →</Link>

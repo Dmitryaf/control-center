@@ -26,7 +26,7 @@ const selection: PeriodSelection = {
   includeUserText: false,
   includeRelatedReviews: false,
   includeRelatedAnalyses: false,
-    codexDigestIds:[],
+  codexDigestIds: [],
 };
 const report = { narrative: 'Сохранённый итог.', findings: [], uncertainties: [], proposals: [] };
 const response = () =>
@@ -37,7 +37,7 @@ const response = () =>
   });
 async function setup(
   t: { after: (fn: () => void | Promise<void>) => void },
-  mode: 'success' | 'unknown' | 'hold' = 'success',
+  mode: 'success' | 'unknown' | 'hold' | 'failed' = 'success',
 ) {
   const f = await fixture();
   const store = new Store(path.join(f.root, 'schedule.sqlite'));
@@ -55,6 +55,8 @@ async function setup(
   const transport: typeof fetch = async () => {
     calls++;
     if (mode === 'unknown') throw new Error('network');
+    if (mode === 'failed')
+      return Response.json({ error: { message: 'temporarily unavailable' } }, { status: 503 });
     if (mode === 'hold')
       await new Promise<void>((resolve) => {
         finish = resolve;
@@ -167,7 +169,7 @@ test('two processes claim one schedule/run; restart does not duplicate a request
   await other.tick();
   assert.equal(x.calls(), 1);
 });
-test('unknown result pauses without retry; backlog pauses and re-enable skips past periods', async (t) => {
+test('unknown result requires explicit continuation; backlog skips without disabling future periods', async (t) => {
   const x = await setup(t, 'unknown');
   const policy = x.enable();
   x.setNow('2024-03-11T00:00:01Z');
@@ -177,16 +179,48 @@ test('unknown result pauses without retry; backlog pauses and re-enable skips pa
   await x.schedules.tick();
   assert.equal(x.calls(), 1);
   const current = x.schedules.list().items[0];
-  x.enable(current.revision);
+  assert.throws(() => x.schedules.resume(current.id, { revision: current.revision }), /true/);
+  x.schedules.resume(current.id, { revision: current.revision, confirm: true });
   x.setNow('2024-04-01T00:00:01Z');
   await x.schedules.tick();
   const paused = x.schedules.list().items[0];
-  assert.equal(paused.enabled, false);
+  assert.equal(paused.enabled, true);
   assert.match(paused.note!, /несколько/);
   assert.equal(x.calls(), 1);
-  const renewed = x.enable(paused.revision);
-  assert.equal(renewed.id, policy.id);
-  assert.equal(renewed.nextPeriodStart, '2024-04-01');
+  assert.equal(paused.id, policy.id);
+  assert.equal(paused.nextPeriodStart, '2024-04-01');
+  await x.schedules.tick();
+  assert.equal(x.calls(), 1);
+});
+test('an explicit HTTP failure is retained once; a later period still runs after restart', async (t) => {
+  const x = await setup(t, 'failed');
+  x.enable();
+  x.setNow('2024-03-11T00:00:01Z');
+  await x.schedules.tick();
+  assert.equal(x.analysis.list(x.review.id).items[0].status, 'failed');
+  assert.equal(x.schedules.list().items[0].enabled, true);
+  assert.equal(x.schedules.list().items[0].nextPeriodStart, '2024-03-11');
+  await x.schedules.tick();
+  assert.equal(x.calls(), 1);
+  new Observations(x.store).create({
+    projectId: null,
+    body: 'Следующий период',
+    occurredOn: '2024-03-12',
+  });
+  const reopened = new Store(x.store.path);
+  x.others.push(reopened);
+  const owner = new PeriodAnalysis(
+    reopened,
+    new History(reopened, new Projects(reopened).decisions),
+    { key: 'fixture', model: 'fixture-model' },
+    x.transport,
+    x.clock,
+  );
+  const schedules = new AnalysisSchedules(reopened, owner, x.clock);
+  x.setNow('2024-03-18T00:00:01Z');
+  await schedules.tick();
+  assert.equal(x.calls(), 2);
+  assert.equal(schedules.list().items[0].enabled, true);
 });
 test('manual variants and empty periods incur no automatic call; disabled grant blocks a prepared scheduled run', async (t) => {
   const x = await setup(t);
@@ -220,6 +254,38 @@ test('manual variants and empty periods incur no automatic call; disabled grant 
     consent: true,
   });
   assert.equal(result.status, 'cancelled');
+  assert.equal(x.calls(), 0);
+});
+test('a crash followed by a long outage cannot bypass an uncertain dispatch when skipping backlog', async (t) => {
+  const x = await setup(t);
+  const grant = x.enable();
+  const run = x.analysis.prepareScheduled(
+    { reviewId: x.review.id, requestKey: randomUUID(), selection, readConsent: true },
+    { id: grant.id, revision: grant.revision, key: `schedule:${grant.id}:week:2024-03-04` },
+  );
+  // Durable state left by a process crash after sending, before recording a receipt.
+  x.store.db
+    .prepare(
+      "UPDATE analysis_runs SET status='running',lease_until='2024-03-11T00:02:00Z' WHERE id=?",
+    )
+    .run(run.id);
+  x.setNow('2024-04-01T00:00:01Z');
+  const reopened = new Store(x.store.path);
+  x.others.push(reopened);
+  const owner = new PeriodAnalysis(
+    reopened,
+    new History(reopened, new Projects(reopened).decisions),
+    {},
+    x.transport,
+    x.clock,
+  );
+  const schedules = new AnalysisSchedules(reopened, owner, x.clock);
+  await schedules.tick();
+  assert.equal(schedules.list().items[0].enabled, false);
+  assert.equal(schedules.list().items[0].lastRunId, run.id);
+  assert.equal(owner.read(run.id).status, 'unknown');
+  assert.equal(x.calls(), 0);
+  await schedules.tick();
   assert.equal(x.calls(), 0);
 });
 test('deleted runs leave a durable no-repeat marker, and restored copies disable standing approvals', async (t) => {

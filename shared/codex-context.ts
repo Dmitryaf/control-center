@@ -35,6 +35,19 @@ export const codexSaveSchema = z
     confirm: z.literal(true),
   })
   .strict();
+export const codexPrepareSchema = z
+  .object({
+    reviewId: z.string().uuid(),
+    projects: z
+      .array(
+        z.object({ projectId: z.string().uuid(), revision: z.number().int().positive() }).strict(),
+      )
+      .min(1)
+      .max(10),
+    readConsent: z.literal(true),
+    saveConsent: z.literal(true),
+  })
+  .strict();
 export interface CodexGrant {
   projectId: string;
   approved: boolean;
@@ -66,6 +79,7 @@ export interface CodexPreview {
   sourceHash: string;
   excerpts: CodexExcerpt[];
   limitations: string[];
+  suggested?: { summary: string; excerptIds: string[] };
 }
 export interface CodexDigest {
   id: string;

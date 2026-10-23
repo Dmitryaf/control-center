@@ -106,7 +106,7 @@ test('project opt-in → selected dialog → protected summary/excerpts → real
     await expect(page.getByRole('heading', { name: 'Содержательный диалог' })).toBeVisible();
     await page.getByRole('button', { name: 'Просмотреть текст за период' }).click();
     await page
-      .getByLabel('Мой краткий итог', { exact: true })
+      .getByLabel('Краткий итог — можно исправить', { exact: true })
       .fill('Сформулировано намерение; результат требует отдельной проверки.');
     await page
       .getByRole('navigation', { name: 'Основная навигация' })
@@ -114,11 +114,12 @@ test('project opt-in → selected dialog → protected summary/excerpts → real
       .click();
     await expect(page.getByRole('alertdialog')).toBeVisible();
     await page.getByRole('button', { name: 'Продолжить редактирование' }).click();
-    await expect(page.getByLabel('Мой краткий итог')).toHaveValue(
+    await expect(page.getByLabel('Краткий итог — можно исправить')).toHaveValue(
       'Сформулировано намерение; результат требует отдельной проверки.',
     );
     await expect(page.getByRole('button', { name: 'Сохранить итог диалога' })).toBeDisabled();
     await page.getByRole('checkbox', { name: /Пользователь ·/ }).check();
+    await page.getByRole('checkbox', { name: /Ассистент ·/ }).uncheck();
     await page
       .getByLabel('Я просмотрел текст и разрешаю сохранить мой итог', { exact: false })
       .check();
@@ -136,7 +137,7 @@ test('project opt-in → selected dialog → protected summary/excerpts → real
     await expect(page.locator('b')).toHaveCount(0);
     await page.getByRole('button', { name: 'Сохранить итог диалога' }).click();
     await expect(page.getByText('Fixture lost digest response')).toBeVisible();
-    await expect(page.getByLabel('Мой краткий итог')).toHaveValue(
+    await expect(page.getByLabel('Краткий итог — можно исправить')).toHaveValue(
       'Сформулировано намерение; результат требует отдельной проверки.',
     );
     const calls = fake.calls.length;
@@ -176,6 +177,51 @@ test('project opt-in → selected dialog → protected summary/excerpts → real
       await request.get(`/api/period-analysis/${runId}`)
     ).json()) as PeriodRun;
     expect(retained.payload.sources[0].text).toContain(saved.summary);
+
+    // The ordinary path no longer requires a hand-written summary.
+    fake.state.text =
+      'Цель: проверить одну гипотезу, потому что результата пока нет. Это намерение пользователя.';
+    fake.state.updatedAt = Date.parse('2024-03-07T00:00:00Z') / 1000;
+    await page.route('**/api/codex-context/prepare', (route) =>
+      fulfill(route, () => reader.prepare(route.request().postDataJSON())),
+    );
+    await page.goto(`/period-analysis?review=${review.id}`);
+    await page.getByLabel('Разрешаю читать диалоги выбранных проектов', { exact: false }).check();
+    await page
+      .getByRole('button', { name: 'Подготовить контекст выбранных проектов', exact: true })
+      .click();
+    const choice = page.getByRole('checkbox', {
+      name: /dialog-context-project · Содержательный диалог/,
+    });
+    await expect(choice).toBeChecked();
+    const automatic = reader.list({ reviewId: review.id }).items[0];
+    expect(automatic.summary).toContain('Автоматическая выборка');
+    expect(automatic.excerpts.length).toBeGreaterThan(0);
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(
+        page.getByRole('button', { name: 'Подготовить контекст выбранных проектов', exact: true }),
+      ).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await page.screenshot({
+        path: `.local/codex-context-review/automatic-${width}.png`,
+        fullPage: true,
+      });
+    }
+    await choice.uncheck();
+    await expect(choice).not.toBeChecked();
+    await page.goto(`/codex-context?review=${review.id}&project=${project.id}`);
+    const digest = page.getByRole('region', { name: 'Сохранённый итог диалога' });
+    await digest.getByText('Исправить краткий итог', { exact: true }).click();
+    await digest
+      .getByLabel('Краткий итог диалога', { exact: true })
+      .fill('Поправка владельца: итог обсуждения ещё не проверен.');
+    await digest.getByRole('button', { name: 'Сохранить исправление' }).click();
+    await expect(digest.locator('p.preserve').first()).toHaveText(
+      'Поправка владельца: итог обсуждения ещё не проверен.',
+    );
   } finally {
     await context?.stop();
     store?.close();

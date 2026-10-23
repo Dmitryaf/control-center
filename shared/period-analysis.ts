@@ -12,7 +12,7 @@ export const periodSelectionSchema = z
     includeUserText: z.boolean(),
     includeRelatedReviews: z.boolean(),
     includeRelatedAnalyses: z.boolean().default(false),
-    codexDigestIds: z.array(z.string().uuid()).max(2).default([]),
+    codexDigestIds: z.array(z.string().uuid()).max(20).default([]),
   })
   .strict()
   .refine(

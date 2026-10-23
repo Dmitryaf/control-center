@@ -208,6 +208,28 @@ try {
   const periodPreview = (await periodPreviewResponse.json()) as PeriodRun;
   assert.equal(periodPreview.status, 'pending');
   assert.equal(periodPreview.approvedAt, null);
+  const codexGrantResponse = await request(`/api/projects/${id}/codex-context`, 'PUT', {
+    revision: null,
+    enabled: true,
+    readConsent: true,
+  });
+  assert.equal(codexGrantResponse.status, 200);
+  const codexGrant = await codexGrantResponse.json();
+  const importedResponse = await request('/api/period-analysis/import-codex', 'POST', {
+    projectId: id,
+    reviewId: review.id,
+    requestKey: randomUUID(),
+    context: 'Synthetic operator context, not a real dialog.',
+    confirm: true,
+    report: {
+      narrative: 'Production imported analysis',
+      findings: [],
+      uncertainties: [],
+      proposals: [],
+    },
+  });
+  assert.equal(importedResponse.status, 201);
+  const imported = (await importedResponse.json()) as PeriodRun;
   const backupResponse = await request('/api/backup', 'POST', {});
   assert.equal(backupResponse.status, 200);
   const backup = (await backupResponse.json()) as { path: string };
@@ -217,6 +239,14 @@ try {
     1,
   );
   assert.equal(backupDb.prepare('PRAGMA quick_check').get()?.quick_check, 'ok');
+  assert.equal(
+    backupDb.prepare('SELECT enabled FROM codex_grants WHERE project_id=?').get(id)?.enabled,
+    0,
+  );
+  assert.equal(
+    backupDb.prepare('SELECT status FROM analysis_runs WHERE id=?').get(imported.id)?.status,
+    'succeeded',
+  );
   assert.equal(backupDb.prepare('SELECT COUNT(*) AS n FROM task_history').get()?.n, 1);
   assert.equal(
     backupDb.prepare('SELECT status FROM analysis_runs WHERE id=?').get(periodPreview.id)?.status,
@@ -240,6 +270,8 @@ try {
   await stop();
   await start();
   const restarted = (await (await request('/api/workspace')).json()) as Workspace;
+  assert.deepEqual(await (await request(`/api/projects/${id}/codex-context`)).json(), codexGrant);
+  assert.deepEqual(await (await request(`/api/period-analysis/${imported.id}`)).json(), imported);
   assert.deepEqual(
     await (await request(`/api/period-analysis/${periodPreview.id}`)).json(),
     periodPreview,
@@ -249,6 +281,41 @@ try {
     /Control Center/,
   );
   assert.deepEqual(await (await request(`/api/reviews/${review.id}`)).json(), review);
+  const monthResponse = await request('/api/reviews', 'POST', {
+    projectId: id,
+    kind: 'month',
+    anchorDate: '2020-01-02',
+  });
+  assert.equal(monthResponse.status, 201);
+  const month = (await monthResponse.json()) as Review;
+  const monthPacketResponse = await request('/api/period-analysis/prepare', 'POST', {
+    reviewId: month.id,
+    requestKey: randomUUID(),
+    readConsent: true,
+    selection: {
+      projectIds: [id],
+      includeGeneral: false,
+      sourceKinds: ['observation'],
+      includeMetadata: false,
+      includeOpenTasks: false,
+      includeUserText: false,
+      includeRelatedReviews: true,
+      includeRelatedAnalyses: true,
+    },
+  });
+  assert.equal(monthPacketResponse.status, 201);
+  const monthPacket = (await monthPacketResponse.json()) as PeriodRun;
+  assert.ok(
+    monthPacket.payload.sources.some((source) => source.text.includes('Production observation')),
+  );
+  assert.ok(
+    monthPacket.payload.sources.some((source) => source.text.includes('Production review')),
+  );
+  assert.ok(
+    monthPacket.payload.sources.some((source) =>
+      source.text.includes('Production imported analysis'),
+    ),
+  );
   const reviewSources = await (await request(`/api/reviews/${review.id}/history`)).json();
   assert.ok(
     reviewSources.items.some((entry: { sourceId: string }) => entry.sourceId === observation.id),

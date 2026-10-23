@@ -10,6 +10,9 @@ export const scheduleEnableSchema = z
     expectedModel: z.string().min(1).max(100),
     readConsent: z.literal(true),
     sendConsent: z.literal(true),
+    codexProjectIds: z.array(z.string().uuid()).max(10).default([]),
+    codexReadConsent: z.literal(true).optional(),
+    codexSendConsent: z.literal(true).optional(),
   })
   .strict();
 export const scheduleRevisionSchema = z.object({ revision: z.number().int().positive() }).strict();
@@ -21,6 +24,7 @@ export interface AnalysisSchedule {
   timezone: string;
   model: string;
   selection: PeriodSelection;
+  codexProjectIds?: string[];
   revision: number;
   enabled: boolean;
   nextPeriodStart: string;

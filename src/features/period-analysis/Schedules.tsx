@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AnalysisSchedule } from '../../../shared/analysis-schedules';
 import type { AnalysisStatus } from '../../../shared/analysis';
 import type { Review } from '../../../shared/reviews';
+import type { CodexGrant } from '../../../shared/codex-context';
 import { useActions, useWorkspace } from '../../shared/workspace';
 import { api } from '../../shared/http';
 import { SourceSelection, emptySelection } from './SourceSelection';
@@ -27,6 +28,13 @@ function ScheduleCard({ value }: { value: AnalysisSchedule }) {
       <details>
         <summary>Разрешённые источники</summary>
         <pre className="analysis-packet">{JSON.stringify(value.selection, null, 2)}</pre>
+        <p>
+          Новые диалоги Codex:{' '}
+          {value.codexProjectIds?.length
+            ? `${value.codexProjectIds.length} выбранных проектов, до двух диалогов каждого за период`
+            : 'не разрешены'}
+          .
+        </p>
       </details>
       {value.lastRunId && value.lastRunReviewKey && (
         <p>
@@ -36,6 +44,28 @@ function ScheduleCard({ value }: { value: AnalysisSchedule }) {
         </p>
       )}
       <div className="row">
+        {!value.enabled && (
+          <button
+            disabled={busy}
+            onClick={() => {
+              if (
+                !confirm(
+                  'Продолжить с текущего периода, сохранив выбранные источники, разрешённые категории Codex, модель и лимиты оплаты? Пропуски и запросы с неизвестным исходом повторяться не будут.',
+                )
+              )
+                return;
+              void act(async () => {
+                await api(`/analysis-schedules/${value.id}/resume`, 'POST', {
+                  revision: value.revision,
+                  confirm: true,
+                });
+                await refresh();
+              }, 'Расписание продолжено с текущего периода');
+            }}
+          >
+            Продолжить без повторов
+          </button>
+        )}
         <button
           disabled={busy || !value.enabled}
           onClick={() =>
@@ -85,6 +115,21 @@ export function ScheduleForm({
   );
   const [read, setRead] = useState(false),
     [send, setSend] = useState(false);
+  const [codexProjects, setCodexProjects] = useState<string[]>([]);
+  const [codexRead, setCodexRead] = useState(false),
+    [codexSend, setCodexSend] = useState(false);
+  const grants = useQuery({
+    queryKey: ['codex-grants', [...selection.projectIds].sort().join(',')],
+    queryFn: ({ signal }) =>
+      Promise.all(
+        selection.projectIds.map((id) =>
+          api<CodexGrant>(`/projects/${id}/codex-context`, 'GET', undefined, signal),
+        ),
+      ),
+    enabled: selection.projectIds.length > 0,
+    retry: false,
+    refetchInterval: 5000,
+  });
   const current = useQuery({
     queryKey: ['analysis-schedules', review.id],
     queryFn: ({ signal }) =>
@@ -102,9 +147,9 @@ export function ScheduleForm({
       <p>
         Выбранные сведения будут отправляться в OpenAI без просмотра каждого пакета, с возможной
         оплатой: модель {status?.model ?? 'не настроена'}, до {status?.maxInputBytes ?? 80000} байт
-        входа и {status?.maxOutputTokens ?? 3000} выходных tokens. Пропуск нескольких периодов,
-        изменение доступа или неудача останавливают расписание. Сервер должен работать; пропуски до
-        включения не догоняются.
+        входа и {status?.maxOutputTokens ?? 3000} выходных tokens. Пропуски не догоняются,
+        техническая ошибка не отменяет будущие выпуски. Неизвестный исход запроса или изменение
+        доступа останавливают отправки до подтверждения. Сервер должен работать.
       </p>
       {current.error && <p role="alert">{current.error.message}</p>}
       {current.data && <ScheduleCard value={current.data} />}
@@ -112,7 +157,13 @@ export function ScheduleForm({
         className="panel form"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!read || !send || !status?.model) return;
+          if (
+            !read ||
+            !send ||
+            !status?.model ||
+            (codexProjects.length && (!codexRead || !codexSend))
+          )
+            return;
           void act(async () => {
             await api('/analysis-schedules', 'POST', {
               reviewId: review.id,
@@ -121,9 +172,13 @@ export function ScheduleForm({
               expectedModel: status.model,
               readConsent: true,
               sendConsent: true,
+              codexProjectIds: codexProjects,
+              ...(codexProjects.length ? { codexReadConsent: true, codexSendConsent: true } : {}),
             });
             setRead(false);
             setSend(false);
+            setCodexRead(false);
+            setCodexSend(false);
             await client.invalidateQueries({ queryKey: ['analysis-schedules'] });
           }, 'Расписание включено с текущего периода');
         }}
@@ -134,10 +189,78 @@ export function ScheduleForm({
             setSelection(value);
             setRead(false);
             setSend(false);
+            setCodexProjects(codexProjects.filter((id) => value.projectIds.includes(id)));
+            setCodexRead(false);
+            setCodexSend(false);
           }}
           projects={w!.projects}
           projectId={review.scopeKey === 'general' ? null : review.scopeKey.slice(8)}
         />
+        <fieldset>
+          <legend>Новые диалоги Codex в регулярных обзорах</legend>
+          <p>
+            По умолчанию выключено. До двух содержательных диалогов каждого отмеченного проекта:
+            короткие сообщения пользователя и заявления ассистента за период, без инструментов.
+            Недоступный Codex будет указан как ограничение. Отзыв разрешения остановит следующие
+            отправки.
+          </p>
+          {w!.projects
+            .filter((project) => selection.projectIds.includes(project.id))
+            .map((project) => {
+              const enabled = grants.data?.find((grant) => grant.projectId === project.id)?.enabled;
+              return (
+                <div key={project.id}>
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      disabled={!enabled}
+                      checked={codexProjects.includes(project.id)}
+                      onChange={(event) => {
+                        setCodexProjects(
+                          event.target.checked
+                            ? [...codexProjects, project.id]
+                            : codexProjects.filter((id) => id !== project.id),
+                        );
+                        setCodexRead(false);
+                        setCodexSend(false);
+                        setRead(false);
+                        setSend(false);
+                      }}
+                    />
+                    {project.metadata.name}
+                  </label>
+                  {!enabled && (
+                    <Link to={`/codex-context?review=${review.id}&project=${project.id}`}>
+                      Разрешить чтение этого проекта →
+                    </Link>
+                  )}
+                </div>
+              );
+            })}
+          {grants.error && <p role="alert">Не удалось проверить разрешения Codex.</p>}
+          {codexProjects.length > 0 && (
+            <>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={codexRead}
+                  onChange={(event) => setCodexRead(event.target.checked)}
+                />
+                Разрешаю автоматически читать и сохранять ограниченные выдержки новых диалогов
+                отмеченных проектов для будущих периодов
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={codexSend}
+                  onChange={(event) => setCodexSend(event.target.checked)}
+                />
+                Разрешаю отправлять эти новые выдержки пользователя и ассистента в OpenAI без
+                просмотра каждого пакета, в указанных лимитах оплаты
+              </label>
+            </>
+          )}
+        </fieldset>
         <label className="check">
           <input type="checkbox" checked={read} onChange={(e) => setRead(e.target.checked)} />
           Разрешаю читать и сохранять выбранные источники для каждого нового периода
@@ -151,7 +274,13 @@ export function ScheduleForm({
           <button
             className="primary"
             disabled={
-              busy || current.isPending || !!current.error || !read || !send || !status?.ready
+              busy ||
+              current.isPending ||
+              !!current.error ||
+              !read ||
+              !send ||
+              !status?.ready ||
+              (codexProjects.length > 0 && (!codexRead || !codexSend || !!grants.error))
             }
           >
             Включить с текущего периода

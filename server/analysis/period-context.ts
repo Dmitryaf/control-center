@@ -17,7 +17,7 @@ export { digest, projectStamp } from './privacy.js';
 import { CodexContext } from '../codex/context.js';
 import { maxInputBytes } from './openai.js';
 
-export const periodPolicyVersion = 'period-review-v3';
+export const periodPolicyVersion = 'period-review-v4';
 export interface ContextGuard {
   kind:
     | 'project'
@@ -287,8 +287,12 @@ export function buildPeriodContext(
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
   }
+  const codexCounts = new Map<string, number>();
   for (const id of selection.codexDigestIds) {
     const saved = new CodexContext(store).read(id);
+    const count = (codexCounts.get(saved.scopeProjectId) ?? 0) + 1;
+    if (count > 2) throw new HttpError(400, 'Выберите не более двух диалогов каждого проекта.');
+    codexCounts.set(saved.scopeProjectId, count);
     if (
       !saved.eligible ||
       saved.reviewKey !== review.id ||
@@ -312,12 +316,12 @@ export function buildPeriodContext(
         capturedAt: saved.capturedAt,
         checkedAt: saved.checkedAt,
         limitations:
-          'Выборка user/assistant; пользовательский пересказ и заявления ассистента не доказывают выполнения работы. Нет автоматического наблюдения за изменениями после checkedAt.',
+          'Ограниченная выборка user/assistant из последних 50 обращений: не более 8 обращений с текстом, 40 сообщений и 1000 байт на исходную выдержку. Сохранены только выбранные выдержки, возможны дополнительные сокращения. Пересказ, намерения и заявления ассистента не доказывают выполнения работы. Нет автоматического наблюдения за изменениями после checkedAt.',
       }),
       day: saved.period.from,
       recordedAt: saved.capturedAt,
-      dateQuality: 'user_summary_of_dialog',
-      partial: saved.excerpts.some((item) => item.partial),
+      dateQuality: 'dialog_extract',
+      partial: true,
     });
     guards.push({
       kind: 'codex_digest',
@@ -360,7 +364,10 @@ export function buildPeriodContext(
       'Сохранённые результаты — сообщения авторов, не независимая проверка.',
       'Текущие цели, открытые задачи и тексты не восстанавливают состояние на конец периода.',
       'События передаются выдержками до 600 символов с отметкой partial; файловые решения — только датированные метаданные последнего прочитанного индекса, без нового чтения файлов.',
-      'Git, пути, заметки проекта, тела файлов, приватные каталоги и переписки не включены.',
+      'Git, пути, заметки проекта, тела файлов и приватные каталоги не включены. Полные переписки не передаются.',
+      selection.codexDigestIds.length
+        ? 'Включены только выбранные сохранённые выдержки Codex и их краткие итоги. Намерения пользователя и заявления ассистента не доказывают выполнения работы; автоматическая выборка не является независимым фактом.'
+        : 'Выдержки диалогов Codex не выбраны и не включены.',
     ],
   };
   if (selection.sourceKinds.includes('file_decision'))

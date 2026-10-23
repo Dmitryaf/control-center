@@ -45,9 +45,9 @@ export function createApp(
   const observations = new Observations(store);
   const periodAnalysis = suppliedPeriodAnalysis ?? new PeriodAnalysis(store, history);
   const reviews = new Reviews(store);
-  const schedules = new AnalysisSchedules(store, periodAnalysis);
   const acceptances = new ProposalAcceptances(store, periodAnalysis);
   const codex = suppliedCodex ?? new CodexContext(store);
+  const schedules = new AnalysisSchedules(store, periodAnalysis, Date.now, codex);
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -70,7 +70,13 @@ export function createApp(
   });
   app.use(express.json({ limit: '256kb' }));
   app.get('/api/codex-context/digests', (req, res) => res.json(codex.list(req.query)));
+  app.post('/api/codex-context/prepare', async (req, res) =>
+    res.json(await codex.prepare(req.body)),
+  );
   app.get('/api/codex-context/digests/:id', (req, res) => res.json(codex.read(req.params.id)));
+  app.patch('/api/codex-context/digests/:id', (req, res) =>
+    res.json(codex.edit(req.params.id, req.body)),
+  );
   app.post('/api/codex-context/digests/:id/check', async (req, res) =>
     res.json(await codex.check(req.params.id, req.body)),
   );
@@ -112,6 +118,9 @@ export function createApp(
   app.post('/api/analysis-schedules', (req, res) => res.json(schedules.enable(req.body)));
   app.post('/api/analysis-schedules/:id/disable', (req, res) =>
     res.json(schedules.disable(req.params.id, req.body)),
+  );
+  app.post('/api/analysis-schedules/:id/resume', (req, res) =>
+    res.json(schedules.resume(req.params.id, req.body)),
   );
   app.delete('/api/analysis-schedules/:id', (req, res) => {
     schedules.delete(req.params.id, req.body);
