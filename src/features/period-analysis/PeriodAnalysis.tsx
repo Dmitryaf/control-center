@@ -67,17 +67,21 @@ function RunDetail({
         {run.payload.period.timezone}
       </p>
       <p className="help">
-        Пакет сохранён: {new Date(run.createdAt).toLocaleString('ru')}. Источников:{' '}
-        {run.payload.sources.length}.{' '}
-        {manual ? (
-          'Модель и использование tokens внешнего сеанса не зафиксированы.'
-        ) : (
-          <>
-            Лимит: {status?.maxInputBytes ?? 80000} байт / {status?.maxOutputTokens ?? 3000}{' '}
-            выходных tokens.
-          </>
-        )}
+        Проекты:{' '}
+        {run.payload.sources
+          .filter((source) => source.kind === 'project')
+          .map((source) => source.title)
+          .join(', ') ||
+          run.payload.scope.name ||
+          'Состав указан в сохранённых основаниях'}
+        .
       </p>
+      {manual && !run.payload.origin?.purpose && (
+        <p className="message warning">
+          Старый ручной импорт: назначение не было указано. Проверьте основания — запись могла
+          содержать техническую проверку, а не обзор проектов.
+        </p>
+      )}
       {run.payload.period.incomplete && (
         <p className="message warning">Период на момент подготовки был неполным.</p>
       )}
@@ -89,10 +93,88 @@ function RunDetail({
           оплаты.
         </p>
       )}
+      {run.report && (
+        <div className="section-space prose">
+          <h3>{manual ? 'Анализ Codex' : 'AI-обзор'}</h3>
+          <p className="preserve">{run.report.narrative}</p>
+          {(run.report.findings.length > 0 || run.report.uncertainties.length > 0) && (
+            <details>
+              <summary>Основания и существенные ограничения</summary>
+              {run.report.findings.length > 0 && (
+                <>
+                  <h3>Выводы и основания</h3>
+                  {run.report.findings.map((finding, index) => (
+                    <article key={index}>
+                      <p>{finding.statement}</p>
+                      <ul>
+                        {finding.sources.map((id) => (
+                          <li key={id}>
+                            {run.payload.sources.find((source) => source.id === id)?.title}{' '}
+                            <small>({id})</small>
+                          </li>
+                        ))}
+                      </ul>
+                    </article>
+                  ))}
+                </>
+              )}
+              {run.report.uncertainties.length > 0 && (
+                <>
+                  <h3>Что остаётся неизвестным</h3>
+                  <ul>
+                    {run.report.uncertainties.map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </details>
+          )}
+          {run.report.proposals.length > 0 && (
+            <>
+              <h3>Идеи и возможные направления</h3>
+              {run.report.proposals.map((proposal, index) => (
+                <article key={index}>
+                  <h4>{proposal.title}</h4>
+                  <p>{proposal.description}</p>
+                  <p>{proposal.reason}</p>
+                  <p>
+                    Основания:{' '}
+                    {proposal.sources
+                      .map((id) => run.payload.sources.find((s) => s.id === id)?.title ?? id)
+                      .join('; ')}
+                  </p>
+                  <Link to={`/period-proposal?run=${run.id}&index=${index}`}>
+                    Проверить и принять предложение →
+                  </Link>
+                  <p className="help">
+                    Что ещё выяснить: {proposal.uncertainty || 'Не указано'}. Как проверить:{' '}
+                    {proposal.cheapCheck}
+                  </p>
+                </article>
+              ))}
+            </>
+          )}
+          <p className="help">
+            {manual
+              ? 'Это готовый анализ, внесённый из Codex вместе с основаниями; приложение не проверяло исходный сеанс.'
+              : 'Это вывод модели по сохранённому пакету.'}{' '}
+            Он не доказывает правильность текста и не заменяет ваш итог. Задачи и идеи автоматически
+            не создаются.
+          </p>
+        </div>
+      )}
       <details open={run.status === 'pending'}>
         <summary>
           {manual ? 'Сохранённые основания и ограничения' : 'Точный пакет и ограничения'}
         </summary>
+        <p className="help">
+          Пакет сохранён: {new Date(run.createdAt).toLocaleString('ru')}. Источников:{' '}
+          {run.payload.sources.length}.
+          {manual
+            ? ' Модель и токены внешнего сеанса не зафиксированы.'
+            : ` Лимит: ${status?.maxInputBytes ?? 80000} байт / ${status?.maxOutputTokens ?? 3000} выходных токенов.`}
+        </p>
         <p className="help">
           Проверьте личные сведения и секреты: автоматический фильтр не гарантирует их отсутствия.
           Пакет и ответ сохраняются в локальной базе и резервных копиях.
@@ -153,75 +235,9 @@ function RunDetail({
           Отменить этот запуск
         </button>
       )}
-      {run.report && (
-        <div className="section-space prose">
-          <h3>{manual ? 'Анализ Codex' : 'AI-обзор'}</h3>
-          <p className="preserve">{run.report.narrative}</p>
-          {run.report.findings.length > 0 && (
-            <>
-              <h3>Выводы и основания</h3>
-              {run.report.findings.map((finding, index) => (
-                <article key={index}>
-                  <p>{finding.statement}</p>
-                  <ul>
-                    {finding.sources.map((id) => (
-                      <li key={id}>
-                        {run.payload.sources.find((source) => source.id === id)?.title}{' '}
-                        <small>({id})</small>
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-              ))}
-            </>
-          )}
-          {run.report.uncertainties.length > 0 && (
-            <>
-              <h3>Что остаётся неизвестным</h3>
-              <ul>
-                {run.report.uncertainties.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))}
-              </ul>
-            </>
-          )}
-          {run.report.proposals.length > 0 && (
-            <>
-              <h3>Возможные следующие шаги</h3>
-              {run.report.proposals.map((proposal, index) => (
-                <article key={index}>
-                  <h4>{proposal.title}</h4>
-                  <p>{proposal.description}</p>
-                  <p>{proposal.reason}</p>
-                  <p>
-                    Основания:{' '}
-                    {proposal.sources
-                      .map((id) => run.payload.sources.find((s) => s.id === id)?.title ?? id)
-                      .join('; ')}
-                  </p>
-                  <Link to={`/period-proposal?run=${run.id}&index=${index}`}>
-                    Проверить и принять предложение →
-                  </Link>
-                  <p className="help">
-                    Неизвестное: {proposal.uncertainty || 'Не указано'}. Дешёвая проверка:{' '}
-                    {proposal.cheapCheck}
-                  </p>
-                </article>
-              ))}
-            </>
-          )}
-          <p className="help">
-            {manual
-              ? 'Это готовый анализ, внесённый из Codex вместе с основаниями; приложение не проверяло исходный сеанс.'
-              : 'Это вывод модели по сохранённому пакету.'}{' '}
-            Он не доказывает правильность текста и не заменяет ваш итог. Задачи и идеи автоматически
-            не создаются.
-          </p>
-        </div>
-      )}
       {run.usage && (
         <p className="help section-space">
-          Фактические tokens: вход {run.usage.inputTokens}, выход {run.usage.outputTokens}. Денежная
+          Фактические токены: вход {run.usage.inputTokens}, выход {run.usage.outputTokens}. Денежная
           стоимость не рассчитывается.
         </p>
       )}

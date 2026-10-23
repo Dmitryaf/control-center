@@ -12,6 +12,7 @@ export const periodSelectionSchema = z
     includeUserText: z.boolean(),
     includeRelatedReviews: z.boolean(),
     includeRelatedAnalyses: z.boolean().default(false),
+    includeProjectHistory: z.boolean().optional(),
     codexDigestIds: z.array(z.string().uuid()).max(20).default([]),
   })
   .strict()
@@ -23,6 +24,7 @@ export const periodSelectionSchema = z
       s.includeUserText ||
       s.includeRelatedReviews ||
       s.includeRelatedAnalyses ||
+      s.includeProjectHistory ||
       s.codexDigestIds.length > 0,
     'Выберите хотя бы один источник.',
   );
@@ -74,14 +76,17 @@ export const periodReportSchema = z
 export type PeriodReport = z.infer<typeof periodReportSchema>;
 export const codexAnalysisImportSchema = z
   .object({
-    projectId: z.string().uuid(),
+    purpose: z.literal('project_review'),
+    projectId: z.string().uuid().optional(),
+    projectIds: z.array(z.string().uuid()).min(1).max(10).optional(),
     reviewId: z.string().uuid(),
     requestKey: z.string().uuid(),
     context: z.string().trim().min(1).max(20000),
     report: periodReportSchema,
     confirm: z.literal(true),
   })
-  .strict();
+  .strict()
+  .refine((v) => !!v.projectId !== !!v.projectIds, 'Укажите projectId или projectIds.');
 export const recentAnalysisQuerySchema = z
   .object({
     projectIds: z.string().max(400).optional(),
@@ -99,7 +104,7 @@ export interface PeriodSource {
   partial: boolean;
 }
 export interface PeriodPayload {
-  origin?: { kind: 'codex_manual' };
+  origin?: { kind: 'codex_manual'; purpose?: 'project_review' };
   policyVersion: string;
   preparedAt: string;
   period: {

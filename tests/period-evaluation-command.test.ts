@@ -28,6 +28,7 @@ test('offline evaluation entrypoint freezes eight packets, distinguishes missing
   await command('prepare');
   const manifest = JSON.parse(await readFile(path.join(directory, 'manifest.json'), 'utf8'));
   assert.equal(manifest.cases.length, 8);
+  assert.equal(manifest.purpose, 'analysis_evaluation');
   await command('review');
   const results = async () =>
     JSON.parse(await readFile(path.join(directory, 'evaluation.json'), 'utf8')).results as {
@@ -43,6 +44,7 @@ test('offline evaluation entrypoint freezes eight packets, distinguishes missing
   const id = manifest.cases[0].id;
   const file = path.join(directory, 'packets', `${id}.json`);
   const input = JSON.parse(await readFile(file, 'utf8'));
+  assert.equal(input.purpose, 'analysis_evaluation');
   assert.ok(input.instructions.includes('Тихий период'));
   assert.ok(!input.instructions.includes('recognize'));
   const answerFile = path.join(directory, 'responses', `${id}.json`);

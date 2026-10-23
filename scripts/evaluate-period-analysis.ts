@@ -70,6 +70,7 @@ async function prepare(directory: string) {
     const packet = await evaluationPacket(example);
     try {
       const input = {
+        purpose: 'analysis_evaluation',
         instructions: periodAnalysisPrompt,
         payload: packet.run.payload,
         responseSchema: z.toJSONSchema(periodReportSchema),
@@ -83,6 +84,7 @@ async function prepare(directory: string) {
     }
   }
   await save(path.join(directory, 'manifest.json'), {
+    purpose: 'analysis_evaluation',
     version: 1,
     policyVersion: periodPolicyVersion,
     createdAt: new Date().toISOString(),
@@ -108,7 +110,7 @@ async function prepare(directory: string) {
   );
   await writeFile(
     path.join(directory, 'INSTRUCTIONS.txt'),
-    'Offline synthetic evaluation; no paid calls were made.\n' +
+    'Offline synthetic evaluation; no paid calls were made. These fictional cases are not user project reviews and must not be imported into the application.\n' +
       'Use the same frozen packets for comparisons. Evaluator rubric must not be sent to the model.\n' +
       'Paid requests require separate owner permission, exact model and bounded budget.\n' +
       'Save each actual answer in responses/<case-id>.json as {report,provenance:{kind:"live_api"|"codex_manual"|"fixture",model,recordedAt,responseId?}}. Keep original receipts separately; provenance here is declared, not independently verified.\n' +
@@ -167,6 +169,7 @@ async function review(directory: string) {
     });
   }
   await save(path.join(directory, 'evaluation.json'), {
+    purpose: 'analysis_evaluation',
     policyVersion: manifest.policyVersion,
     reviewedAt: new Date().toISOString(),
     provenanceIsDeclared: true,

@@ -37,6 +37,7 @@ test('real HTTP Codex import is visible from project analysis, persists on reloa
     const response = await request.post('/api/period-analysis/import-codex', {
       headers,
       data: {
+        purpose: 'project_review',
         projectId: project.id,
         reviewId: review.id,
         requestKey,
@@ -88,6 +89,27 @@ test('real HTTP Codex import is visible from project analysis, persists on reloa
     const result = page.getByRole('region', { name: 'Сохранённый анализ' });
     await expect(result).toContainText(run.report!.narrative);
     await expect(result).toContainText('API-запрос не выполнялся');
+    const grounds = result
+      .locator('details')
+      .filter({
+        has: page.locator('summary', { hasText: 'Основания и существенные ограничения' }),
+      });
+    await expect(grounds).not.toHaveAttribute('open');
+    await expect(
+      result.getByText('Остаётся неизвестная совместимость.', { exact: true }),
+    ).not.toBeVisible();
+    await grounds.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    await expect(
+      result.getByText('Остаётся неизвестная совместимость.', { exact: true }),
+    ).toBeVisible();
+    await expect(grounds).toContainText(`codex_context:${requestKey}`);
+    await grounds.locator('summary').click();
+    const narrativeBox = await result.locator('p.preserve').boundingBox();
+    const packetBox = await result
+      .getByText('Сохранённые основания и ограничения', { exact: true })
+      .boundingBox();
+    expect(narrativeBox!.y).toBeLessThan(packetBox!.y);
     await expect(result.locator('p.preserve')).toHaveCSS('white-space', 'pre-wrap');
     await expect(result.locator('b')).toHaveCount(0);
     await expect(
@@ -101,6 +123,14 @@ test('real HTTP Codex import is visible from project analysis, persists on reloa
       true,
     );
     await page.screenshot({ path: '.local/codex-import-review/report-390.png', fullPage: true });
+    await page.route(`**/api/period-analysis/${run.id}`, (route) =>
+      route.fulfill({
+        json: { ...run, payload: { ...run.payload, origin: { kind: 'codex_manual' } } },
+      }),
+    );
+    await page.reload();
+    await expect(result).toContainText('Старый ручной импорт');
+    await expect(result.locator('p.preserve')).toHaveText(run.report!.narrative);
     expect((await (await request.get(`/api/reviews/${review.id}`)).json()).userText).toBe('');
     expect(errors).toEqual([]);
   } finally {

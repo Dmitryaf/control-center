@@ -17,7 +17,7 @@ export { digest, projectStamp } from './privacy.js';
 import { CodexContext } from '../codex/context.js';
 import { maxInputBytes } from './openai.js';
 
-export const periodPolicyVersion = 'period-review-v4';
+export const periodPolicyVersion = 'period-review-v5';
 export interface ContextGuard {
   kind:
     | 'project'
@@ -41,7 +41,9 @@ function projectFields(row: NonNullable<ReturnType<Store['project']>>) {
     : (snapshot.yaml.metadata ?? metadataSchema.parse({ name: snapshot.directoryName }));
   return {
     name: metadata.name,
+    type: metadata.type,
     goal: metadata.goal,
+    currentFocus: metadata.current_focus,
     status: metadata.status,
     stage: metadata.stage,
     blockedBy: metadata.blocked_by,
@@ -236,6 +238,44 @@ export function buildPeriodContext(
     guards.push({ kind: 'review', id: row.id, stamp: String(row.revision) });
   };
   if (selection.includeUserText) addReview(review);
+  if (selection.includeProjectHistory) {
+    // Explicit opt-in to bounded background, distinct from events of this period.
+    // General reviews are excluded: they can contain unselected projects.
+    for (const projectId of selection.projectIds) {
+      const previous = store.db
+        .prepare(
+          "SELECT id FROM reviews WHERE scope_key=? AND period_end<? AND next_start_at<=? AND trim(user_text)<>'' ORDER BY period_end DESC,id DESC LIMIT 3",
+        )
+        .all(`project:${projectId}`, review.periodStart, review.startAt) as { id: string }[];
+      for (const row of previous) {
+        const saved = reviews.read(row.id);
+        addReview(saved);
+        const source = sources.find((s) => s.id === `review:${saved.id}`)!;
+        source.title = `Предыстория: ${saved.periodStart} — ${saved.periodEnd}`;
+        source.dateQuality = 'background';
+      }
+      const notes = store.db
+        .prepare(
+          'SELECT id FROM observations WHERE scope_project_id=? AND occurred_on<? ORDER BY occurred_on DESC,id DESC LIMIT 5',
+        )
+        .all(projectId, review.periodStart) as { id: string }[];
+      for (const row of notes) {
+        const saved = new Observations(store).read(row.id);
+        add({
+          id: `observation:${saved.id}`,
+          kind: 'observation',
+          projectId,
+          title: `Предыстория: наблюдение ${saved.occurredOn}`,
+          text: saved.body.slice(0, 2000),
+          day: saved.occurredOn,
+          recordedAt: saved.updatedAt,
+          dateQuality: 'background',
+          partial: saved.body.length > 2000,
+        });
+        guards.push({ kind: 'observation', id: saved.id, stamp: String(saved.revision) });
+      }
+    }
+  }
   if (selection.includeRelatedReviews || selection.includeRelatedAnalyses) {
     let cursor: string | undefined;
     let count = 0;
@@ -359,6 +399,11 @@ export function buildPeriodContext(
     },
     sources,
     limitations: [
+      ...(selection.includeProjectHistory
+        ? [
+            'Предыстория: до трёх непустых обзоров и пяти наблюдений до начала периода для каждого выбранного проекта. Это контекст, не события текущего периода и не полная история.',
+          ]
+        : []),
       'Прежние AI-итоги — производные предположения, не независимые факты; вложенные старые ссылки не входят в этот пакет.',
       'Источники выбраны пользователем; отсутствие записи не доказывает отсутствие работы.',
       'Сохранённые результаты — сообщения авторов, не независимая проверка.',

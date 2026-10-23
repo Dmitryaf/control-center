@@ -96,7 +96,11 @@ function MetadataEditor({ project, onClose }: { project: Project; onClose: () =>
       </div>
       <label>
         Зачем существует
-        <textarea rows={2} {...register('goal')} />
+        <textarea
+          rows={3}
+          placeholder="Что создаёте, какую задачу решаете и для кого; в чём основная идея. Достаточно нескольких предложений."
+          {...register('goal')}
+        />
       </label>
       <label>
         Блокировки, по одной на строку

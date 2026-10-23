@@ -30,6 +30,7 @@ async function setup(t: { after: (fn: () => Promise<void>) => void }) {
   const key = randomUUID();
   const source = `codex_context:${key}`;
   const body = {
+    purpose: 'project_review',
     projectId: project.id,
     reviewId: review.id,
     requestKey: key,
@@ -144,6 +145,8 @@ test('manual import validates scope, references, confirmation and sensitive text
   const f = await setup(t);
   const service = f.service();
   for (const input of [
+    { ...f.body, purpose: undefined },
+    { ...f.body, purpose: 'analysis_evaluation' },
     { ...f.body, confirm: false },
     { ...f.body, projectId: randomUUID() },
     { ...f.body, context: 'Look in .local/private' },
@@ -163,6 +166,38 @@ test('manual import validates scope, references, confirmation and sensitive text
     assert.throws(() => service.importCodex(input));
   assert.equal(f.store().db.prepare('SELECT COUNT(*) AS n FROM analysis_runs').get()?.n, 0);
   assert.equal(new Reviews(f.store()).read(f.review.id).userText, f.review.userText);
+  assert.equal(f.calls(), 0);
+});
+
+test('manual portfolio import binds the explicit project set and keeps older imports readable', async (t) => {
+  const f = await setup(t);
+  const service = f.service();
+  const general = new Reviews(f.store()).create({ kind: 'week', anchorDate: '2024-03-06' });
+  const input = {
+    ...f.body,
+    projectId: undefined,
+    projectIds: [f.project.id],
+    reviewId: general.id,
+  };
+  const saved = service.importCodex(input);
+  assert.equal(saved.scopeKey, 'general');
+  assert.deepEqual(saved.payload.scope.projectIds, [f.project.id]);
+  assert.equal(saved.payload.origin?.purpose, 'project_review');
+  assert.equal(service.recent({ projectIds: f.project.id }).items[0].id, saved.id);
+  assert.equal(service.recent({ projectIds: randomUUID() }).items.length, 0);
+  assert.throws(() =>
+    service.importCodex({
+      ...input,
+      requestKey: randomUUID(),
+      projectIds: [f.project.id, randomUUID()],
+    }),
+  );
+  const legacyPayload = { ...saved.payload, origin: { kind: 'codex_manual' } };
+  f.store()
+    .db.prepare('UPDATE analysis_runs SET payload_json=? WHERE id=?')
+    .run(JSON.stringify(legacyPayload), saved.id);
+  assert.deepEqual(service.read(saved.id).report, saved.report);
+  assert.deepEqual(service.read(saved.id).payload, legacyPayload);
   assert.equal(f.calls(), 0);
 });
 

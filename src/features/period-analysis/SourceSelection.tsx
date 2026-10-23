@@ -37,13 +37,14 @@ export function SourceSelection({
       | 'includeOpenTasks'
       | 'includeUserText'
       | 'includeRelatedReviews'
+      | 'includeProjectHistory'
       | 'includeRelatedAnalyses',
     label: string,
   ) => (
     <label className="check" key={key}>
       <input
         type="checkbox"
-        checked={value[key]}
+        checked={!!value[key]}
         onChange={(e) => onChange({ ...value, [key]: e.target.checked })}
       />
       {label}
@@ -85,6 +86,14 @@ export function SourceSelection({
         </div>
       )}
       {flag('includeMetadata', 'Текущая цель и состояние выбранных проектов')}
+      <p className="help">
+        Сводка включает название, тип, цель, этап, текущий фокус и блокировки. Опишите идею и пользу
+        проекта в поле «Зачем существует», если этих сведений пока нет.
+      </p>
+      {flag(
+        'includeProjectHistory',
+        'Предыстория выбранных проектов: до 3 прежних обзоров и 5 наблюдений каждого',
+      )}
       {flag('includeOpenTasks', 'Текущие открытые задачи')}
       {Object.entries(kinds).map(([key, label]) => (
         <label className="check" key={key}>

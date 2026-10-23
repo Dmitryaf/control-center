@@ -41,6 +41,9 @@ export interface AnalysisPayload {
     source: string;
     id: string;
     name: string;
+    type?: string;
+    stage?: string;
+    currentFocus?: string;
     status: string;
     priority: string;
     goal: string;

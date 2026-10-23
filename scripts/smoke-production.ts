@@ -216,6 +216,7 @@ try {
   assert.equal(codexGrantResponse.status, 200);
   const codexGrant = await codexGrantResponse.json();
   const importedResponse = await request('/api/period-analysis/import-codex', 'POST', {
+    purpose: 'project_review',
     projectId: id,
     reviewId: review.id,
     requestKey: randomUUID(),
