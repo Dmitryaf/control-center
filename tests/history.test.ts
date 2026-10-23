@@ -88,7 +88,7 @@ test('unified history projects existing sources once, keeps dates honest, bounds
   assert.ok(!JSON.stringify(page).includes('DO_NOT_COPY_FILE_BODY'));
   assert.ok(!JSON.stringify(page).includes(repo));
   assert.deepEqual(store.db.prepare('SELECT total_changes() AS count').get(), before);
-  assert.equal(store.db.prepare('PRAGMA user_version').get()?.user_version, 10);
+  assert.equal(store.db.prepare('PRAGMA user_version').get()?.user_version, 11);
   assert.equal(history.list({ from: '2020-01-02', to: '2020-01-02' }).items.length, 4);
   assert.equal(history.list({ projectId: null }).items.length, 0);
   store.db

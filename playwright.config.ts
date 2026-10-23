@@ -20,7 +20,13 @@ export default defineConfig({
     command: 'npm run build && node dist/server/server/index.js',
     url: 'http://127.0.0.1:4319',
     reuseExistingServer: false,
-    env: { PORT: '4319', CONTROL_CENTER_DATA_DIR: data },
+    env: {
+      PORT: '4319',
+      CONTROL_CENTER_DATA_DIR: data,
+      CONTROL_CENTER_CODEX_PATH: path.join(data, 'codex-disabled-in-browser-tests.exe'),
+      OPENAI_API_KEY: '',
+      CONTROL_CENTER_OPENAI_MODEL: '',
+    },
     timeout: 30000,
   },
 });

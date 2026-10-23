@@ -88,7 +88,8 @@ export default function History() {
           <p className="section-label">Проекты во времени</p>
           <p>
             <Link to="/analysis-schedules">Расписания AI-анализа →</Link> ·{' '}
-            <Link to="/proposal-acceptances">Принятые предложения →</Link>
+            <Link to="/proposal-acceptances">Принятые предложения →</Link> ·{' '}
+            <Link to="/codex-context">Итоги диалогов Codex →</Link>
           </p>
           <h1>История</h1>
           <p className="subtitle">Результаты, внешние шаги и основания решений рядом.</p>

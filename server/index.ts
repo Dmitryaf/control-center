@@ -9,7 +9,7 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535)
   throw new Error('PORT должен быть от 1024 до 65535.');
 const store = new Store(path.join(dataDirectory(), 'control-center.sqlite'));
 if (process.argv.includes('--restore-recovery')) revokeRestoredApprovals(store.db);
-const { app, projects, refresh, analysis, schedules } = createApp(store, port);
+const { app, projects, refresh, analysis, schedules, codex } = createApp(store, port);
 if (process.argv.includes('--dev')) {
   const { createServer } = await import('vite');
   const vite = await createServer({ server: { middlewareMode: true, hmr: false }, appType: 'spa' });
@@ -33,6 +33,7 @@ function close(exitCode: number) {
     await Promise.all([
       refresh.stop(),
       schedules.stop(),
+      codex.stop(),
       new Promise<void>((resolve) => server.close(() => resolve())),
     ]);
     store.close();

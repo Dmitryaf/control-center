@@ -16,6 +16,7 @@ export const emptySelection = (projectId: string | null): PeriodSelection => ({
   includeUserText: false,
   includeRelatedReviews: false,
   includeRelatedAnalyses: false,
+  codexDigestIds: [],
 });
 export function SourceSelection({
   value,
@@ -106,9 +107,9 @@ export function SourceSelection({
       {flag('includeUserText', 'Мой сохранённый текст этого обзора')}
       {flag('includeRelatedReviews', 'Тексты связанных обзоров выбранных проектов и общих записей')}
       <p className="help">
-        Пути, Git, заметки проектов, тела файлов и переписки не включаются. События передаются
-        выдержками с отметкой сокращения. Выбор источника разрешает подготовку пакета; отправка
-        подтверждается отдельно.
+        Пути, Git, заметки проектов, тела файлов и переписки целиком не включаются. Итоги выбранных
+        диалогов подключаются отдельно. События передаются выдержками с отметкой сокращения. Выбор
+        источника разрешает подготовку пакета; отправка подтверждается отдельно.
       </p>
     </fieldset>
   );

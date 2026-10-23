@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   periodSelectionSchema,
   type PeriodSelection,
@@ -13,14 +12,12 @@ import { Reviews } from '../reviews.js';
 import { Tasks } from '../tasks.js';
 import { Observations } from '../observations.js';
 import { HttpError } from '../errors.js';
-import { sensitiveText } from './privacy.js';
+import { sensitiveText, digest, projectStamp } from './privacy.js';
+export { digest, projectStamp } from './privacy.js';
+import { CodexContext } from '../codex/context.js';
 import { maxInputBytes } from './openai.js';
 
-export const periodPolicyVersion = 'period-review-v2';
-export const digest = (value: unknown) =>
-  createHash('sha256')
-    .update(typeof value === 'string' ? value : JSON.stringify(value))
-    .digest('hex');
+export const periodPolicyVersion = 'period-review-v3';
 export interface ContextGuard {
   kind:
     | 'project'
@@ -32,17 +29,11 @@ export interface ContextGuard {
     | 'check_entry'
     | 'decision'
     | 'file_decision'
-    | 'analysis';
+    | 'analysis'
+    | 'codex_digest';
   id: string;
   stamp: string;
 }
-export const projectStamp = (row: NonNullable<ReturnType<Store['project']>>) =>
-  digest({
-    visibility: row.visibility,
-    privateContext: row.private_context_path,
-    decisionSources: row.decision_sources,
-    allowlist: row.publication_allowlist,
-  });
 function projectFields(row: NonNullable<ReturnType<Store['project']>>) {
   const snapshot = JSON.parse(row.snapshot);
   const metadata = row.metadata
@@ -76,6 +67,7 @@ export function normalizeSelection(input: PeriodSelection): PeriodSelection {
   return {
     ...value,
     projectIds: [...new Set(value.projectIds)].sort(),
+    codexDigestIds: [...new Set(value.codexDigestIds)].sort(),
     sourceKinds: [...new Set(value.sourceKinds)].sort(),
   };
 }
@@ -295,6 +287,48 @@ export function buildPeriodContext(
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
   }
+  for (const id of selection.codexDigestIds) {
+    const saved = new CodexContext(store).read(id);
+    if (
+      !saved.eligible ||
+      saved.reviewKey !== review.id ||
+      !selection.projectIds.includes(saved.scopeProjectId)
+    )
+      throw new HttpError(
+        410,
+        'Итог Codex недоступен для этого периода/проекта или требует повторного просмотра.',
+      );
+    add({
+      id: `codex_digest:${id}`,
+      kind: 'codex_digest',
+      projectId: saved.scopeProjectId,
+      title: `Итог диалога: ${saved.thread.name}`,
+      text: JSON.stringify({
+        thread: saved.thread,
+        sourceHash: saved.sourceHash,
+        readerPolicy: saved.policyVersion,
+        summary: saved.summary,
+        excerpts: saved.excerpts,
+        capturedAt: saved.capturedAt,
+        checkedAt: saved.checkedAt,
+        limitations:
+          'Выборка user/assistant; пользовательский пересказ и заявления ассистента не доказывают выполнения работы. Нет автоматического наблюдения за изменениями после checkedAt.',
+      }),
+      day: saved.period.from,
+      recordedAt: saved.capturedAt,
+      dateQuality: 'user_summary_of_dialog',
+      partial: saved.excerpts.some((item) => item.partial),
+    });
+    guards.push({
+      kind: 'codex_digest',
+      id,
+      stamp: digest({
+        revision: saved.revision,
+        eligible: saved.eligible,
+        sourceHash: saved.sourceHash,
+      }),
+    });
+  }
   if (!sources.length && !allowEmpty)
     throw new HttpError(
       400,
@@ -353,7 +387,18 @@ export function buildPeriodContext(
 export function verifyContextGuards(store: Store, guards: ContextGuard[], history: History) {
   for (const guard of guards) {
     let actual: string | null = null;
-    if (guard.kind === 'project') {
+    if (guard.kind === 'codex_digest') {
+      try {
+        const saved = new CodexContext(store).read(guard.id);
+        actual = digest({
+          revision: saved.revision,
+          eligible: saved.eligible,
+          sourceHash: saved.sourceHash,
+        });
+      } catch {
+        actual = null;
+      }
+    } else if (guard.kind === 'project') {
       const row = store.project(guard.id);
       actual = row ? projectStamp(row) : null;
     } else if (guard.kind === 'project_metadata') {

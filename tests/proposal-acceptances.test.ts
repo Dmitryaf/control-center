@@ -189,7 +189,7 @@ test('schema 9 migration preserves runs, copies approval state safely and rolls 
   x.store.db.exec('DROP TABLE analysis_acceptances; PRAGMA user_version=9;');
   const upgraded = new Store(x.file);
   x.others.push(upgraded);
-  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 10);
+  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 11);
   assert.ok(new Tasks(upgraded).read(accepted.resultId));
   assert.ok(upgraded.db.prepare('SELECT id FROM analysis_runs WHERE id=?').get(x.run.id));
   const name = (await readdir(path.join(x.f.root, 'backups'))).find((n) =>

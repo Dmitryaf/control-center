@@ -156,6 +156,7 @@ test('rebind rejects a target with user data', async (t) => {
       includeUserText: false,
       includeRelatedReviews: false,
       includeRelatedAnalyses: false,
+    codexDigestIds:[],
     },
   });
   await assert.rejects(projects.rebind(one.id, two.id), /свои данные/);

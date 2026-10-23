@@ -95,6 +95,11 @@ export class AnalysisSchedules {
     const result = this.store.transaction(() => {
       const review = new Reviews(this.store).read(data.reviewId);
       const selection = normalizeSelection(data.selection);
+      if (selection.codexDigestIds.length)
+        throw new HttpError(
+          400,
+          'Итоги Codex разрешены только для ручного анализа с просмотром пакета.',
+        );
       if (
         review.scopeKey !== 'general' &&
         (selection.includeGeneral ||

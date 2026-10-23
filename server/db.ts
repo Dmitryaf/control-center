@@ -35,12 +35,12 @@ export class Store {
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(version.user_version)) {
+    if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(version.user_version)) {
       this.db.close();
       throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
     }
     try {
-      if (existing && version.user_version < 10) {
+      if (existing && version.user_version < 11) {
         const directory = join(dirname(path), 'backups');
         mkdirSync(directory, { recursive: true });
         const prefix =
@@ -56,7 +56,9 @@ export class Store {
                     ? 'before-analysis-v8'
                     : version.user_version < 9
                       ? 'before-schedules-v9'
-                      : 'before-proposals-v10';
+                      : version.user_version < 10
+                        ? 'before-proposals-v10'
+                        : 'before-codex-v11';
         snapshotDatabase(this.db, join(directory, `${prefix}-${randomUUID()}.sqlite`));
       }
       this.transaction(() => {
@@ -65,7 +67,7 @@ export class Store {
         const lockedVersion = this.db.prepare('PRAGMA user_version').get() as {
           user_version: number;
         };
-        if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(lockedVersion.user_version))
+        if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(lockedVersion.user_version))
           throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
@@ -204,7 +206,14 @@ export class Store {
             run_key TEXT NOT NULL,proposal_index INTEGER NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('task','idea')),
             result_id TEXT NOT NULL,approved_json TEXT NOT NULL,original_json TEXT NOT NULL,created_at TEXT NOT NULL,
             UNIQUE(run_key,proposal_index));
-          PRAGMA user_version = 10;`);
+          CREATE TABLE IF NOT EXISTS codex_grants(project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,revision INTEGER NOT NULL,enabled INTEGER NOT NULL DEFAULT 0,access_stamp TEXT NOT NULL,roots_json TEXT NOT NULL,updated_at TEXT NOT NULL,policy_version TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS codex_digests(
+            id TEXT PRIMARY KEY,project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,scope_project_id TEXT NOT NULL,project_name TEXT NOT NULL,
+            review_key TEXT NOT NULL,period_json TEXT NOT NULL,thread_id TEXT NOT NULL,thread_name TEXT NOT NULL,thread_updated_at INTEGER NOT NULL,
+            summary TEXT NOT NULL,excerpts_json TEXT NOT NULL,source_hash TEXT NOT NULL,access_stamp TEXT NOT NULL,grant_revision INTEGER NOT NULL,
+            captured_at TEXT NOT NULL,checked_at TEXT NOT NULL,stale INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL,
+            preview_id TEXT NOT NULL UNIQUE,request_hash TEXT NOT NULL,policy_version TEXT NOT NULL,UNIQUE(review_key,thread_id));
+          PRAGMA user_version = 11;`);
       });
     } catch (error) {
       this.db.close();

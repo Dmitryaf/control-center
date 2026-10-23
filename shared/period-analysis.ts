@@ -12,6 +12,7 @@ export const periodSelectionSchema = z
     includeUserText: z.boolean(),
     includeRelatedReviews: z.boolean(),
     includeRelatedAnalyses: z.boolean().default(false),
+    codexDigestIds: z.array(z.string().uuid()).max(2).default([]),
   })
   .strict()
   .refine(
@@ -21,7 +22,8 @@ export const periodSelectionSchema = z
       s.includeOpenTasks ||
       s.includeUserText ||
       s.includeRelatedReviews ||
-      s.includeRelatedAnalyses,
+      s.includeRelatedAnalyses ||
+      s.codexDigestIds.length > 0,
     'Выберите хотя бы один источник.',
   );
 export type PeriodSelection = z.infer<typeof periodSelectionSchema>;

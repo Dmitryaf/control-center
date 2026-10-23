@@ -43,6 +43,7 @@ const selection = (id: string): PeriodSelection => ({
   includeUserText: false,
   includeRelatedReviews: false,
   includeRelatedAnalyses: false,
+    codexDigestIds:[],
 });
 async function setup(t: { after: (fn: () => void | Promise<void>) => void }, file = false) {
   const f = await fixture();

@@ -54,6 +54,7 @@ export default function App() {
             '/analysis-schedules',
             '/period-proposal',
             '/proposal-acceptances',
+            '/codex-context',
           ].includes(location.pathname)) ||
         (path === '/projects' && location.pathname === '/analysis');
   return (

@@ -40,6 +40,8 @@ export function snapshotDatabase(db: DatabaseSync, destination: string) {
 
 // Also used explicitly before starting a server on a raw, externally restored database.
 export function revokeRestoredApprovals(db: DatabaseSync) {
+  if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='codex_grants'").get())
+    db.exec('UPDATE codex_grants SET enabled=0,revision=revision+1;');
   if (
     db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='analysis_schedules'")

@@ -14,6 +14,7 @@ import Analysis from './features/analysis/Analysis';
 import History from './features/history/History';
 import Observations from './features/observations/Observations';
 import Reviews from './features/reviews/Reviews';
+import CodexContext from './features/codex-context/CodexContext';
 import Acceptances, { Proposal } from './features/period-analysis/Proposals';
 import Schedules from './features/period-analysis/Schedules';
 import PeriodAnalysis from './features/period-analysis/PeriodAnalysis';
@@ -34,6 +35,7 @@ const router = createBrowserRouter([
       { path: '/period-analysis', element: <PeriodAnalysis /> },
       { path: '/analysis-schedules', element: <Schedules /> },
       { path: '/period-proposal', element: <Proposal /> },
+      { path: '/codex-context', element: <CodexContext /> },
       { path: '/proposal-acceptances', element: <Acceptances /> },
       { path: '/checks', element: <Checks /> },
       { path: '/checks/:id', element: <CheckDetail /> },

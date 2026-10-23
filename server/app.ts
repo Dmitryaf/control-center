@@ -23,6 +23,7 @@ import { History } from './history.js';
 import { Observations } from './observations.js';
 import { Reviews } from './reviews.js';
 import { ProjectAnalysis } from './analysis/analysis.js';
+import { CodexContext } from './codex/context.js';
 import { ProposalAcceptances } from './analysis/acceptances.js';
 import { AnalysisSchedules } from './analysis/schedules.js';
 import { PeriodAnalysis } from './analysis/period-analysis.js';
@@ -32,6 +33,7 @@ export function createApp(
   port: number,
   analysis = new ProjectAnalysis(store),
   suppliedPeriodAnalysis?: PeriodAnalysis,
+  suppliedCodex?: CodexContext,
 ) {
   const app = express();
   const projects = new Projects(store);
@@ -45,6 +47,7 @@ export function createApp(
   const reviews = new Reviews(store);
   const schedules = new AnalysisSchedules(store, periodAnalysis);
   const acceptances = new ProposalAcceptances(store, periodAnalysis);
+  const codex = suppliedCodex ?? new CodexContext(store);
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -66,6 +69,36 @@ export function createApp(
     next();
   });
   app.use(express.json({ limit: '256kb' }));
+  app.get('/api/codex-context/digests', (req, res) => res.json(codex.list(req.query)));
+  app.get('/api/codex-context/digests/:id', (req, res) => res.json(codex.read(req.params.id)));
+  app.post('/api/codex-context/digests/:id/check', async (req, res) =>
+    res.json(await codex.check(req.params.id, req.body)),
+  );
+  app.delete('/api/codex-context/digests/:id', (req, res) => {
+    codex.delete(req.params.id, req.body);
+    res.json({ ok: true });
+  });
+  app.get('/api/projects/:id/codex-context', (req, res) => res.json(codex.grant(req.params.id)));
+  app.put('/api/projects/:id/codex-context', async (req, res) =>
+    res.json(await codex.configure(req.params.id, req.body)),
+  );
+  app.post('/api/projects/:id/codex-context/probe', async (req, res) =>
+    res.json(
+      await codex.probe(
+        req.params.id,
+        z.object({ revision: z.number().int().positive() }).strict().parse(req.body).revision,
+      ),
+    ),
+  );
+  app.post('/api/projects/:id/codex-context/threads', async (req, res) =>
+    res.json(await codex.threads(req.params.id, req.body)),
+  );
+  app.post('/api/projects/:id/codex-context/preview', async (req, res) =>
+    res.json(await codex.preview(req.params.id, req.body)),
+  );
+  app.post('/api/projects/:id/codex-context/digests', async (req, res) =>
+    res.status(201).json(await codex.save(req.params.id, req.body)),
+  );
   app.get('/api/proposal-acceptances', (req, res) => res.json(acceptances.list(req.query)));
   app.get('/api/proposal-acceptances/:id', (req, res) => res.json(acceptances.read(req.params.id)));
   app.get('/api/period-analysis/:id/acceptances', (req, res) =>
@@ -382,5 +415,5 @@ export function createApp(
         .json({ error: 'Операция не выполнена. Проверьте доступ к файлам и повторите.' });
   };
   app.use(onError);
-  return { app, projects, refresh, analysis, periodAnalysis, schedules };
+  return { app, projects, refresh, analysis, periodAnalysis, schedules, codex };
 }

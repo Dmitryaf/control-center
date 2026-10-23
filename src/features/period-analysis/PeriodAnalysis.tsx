@@ -12,6 +12,7 @@ import type {
 import { useWorkspace, useActions } from '../../shared/workspace';
 import { api } from '../../shared/http';
 import { date } from '../../shared/labels';
+import { CodexChoices } from '../codex-context/CodexChoices';
 import { ScheduleForm } from './Schedules';
 import { SourceSelection, emptySelection } from './SourceSelection';
 
@@ -368,6 +369,7 @@ function AnalysisPage({ reviewId }: { reviewId: string }) {
             projectId={projectId}
             disabled={busy}
           />
+          <CodexChoices reviewId={reviewId} value={chosen} onChange={setSelection} />
           <label className="check">
             <input
               type="checkbox"
