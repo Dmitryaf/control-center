@@ -12,6 +12,7 @@
     "mcp": "node dist/server/server/mcp/index.js",
     "build": "vite build && tsc -p tsconfig.server.json",
     "test:codex": "tsx --test tests/external/codex.test.ts",
+    "eval:period": "tsx scripts/evaluate-period-analysis.ts",
     "test:react": "vitest run --config vitest.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json",
     "lint": "eslint . && tsx scripts/check-boundaries.ts",

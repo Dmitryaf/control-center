@@ -81,5 +81,7 @@ npm run check            # Lint, typecheck, tests, and build
 npm run test:e2e         # Browser tests; requires Microsoft Edge
 npm run test:production  # Built app, persistence, and backup
 npm run test:codex       # Optional: installed Codex, empty isolated home, no real chats
+npm run eval:period -- prepare .local/period-evaluation  # Offline synthetic inputs; no API calls
+npm run eval:period -- review .local/period-evaluation   # Saved answers and separate human review
 npm start               # Run the built app
 ```
