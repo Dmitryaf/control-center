@@ -138,7 +138,7 @@ export function DecisionFiles({ projectId }: { projectId?: string }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const records = w!.fileDecisions.filter((d) => !projectId || d.projectId === projectId);
   return (
-    <section className="section-space">
+    <section id="file-decisions" className="section-space">
       <h2>
         Проектные решения из файлов <span className="count">{records.length}</span>
       </h2>
@@ -730,6 +730,7 @@ export default function ProjectDetail() {
               </h2>
               <Link to={`/tasks?project=${p.id}`}>Добавить задачу →</Link>
               <Link to={`/history?project=${p.id}`}>История работы →</Link>
+              <Link to={`/timeline?project=${p.id}`}>История проекта →</Link>
             </div>
             <div className="panel compact-list">
               {tasks.map((t) => (

@@ -73,6 +73,9 @@ export class DecisionIndex {
   private records = new Map<string, FileDecision[]>();
   private contexts = new Map<string, Pick<ProjectContext, 'privateStatus' | 'hasPrivateMap'>>();
   constructor(private store: Store) {}
+  hasSnapshot(projectId: string) {
+    return this.records.has(projectId);
+  }
   list() {
     return [...this.records.values()]
       .flat()

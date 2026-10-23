@@ -49,8 +49,8 @@ test('horizontal navigation stays reachable and identifies the current section a
     await page.goto('/checks');
     const nav = page.getByRole('navigation', { name: 'Основная навигация' });
     const links = nav.getByRole('link');
-    await expect(links).toHaveCount(7);
-    for (let index = 0; index < 7; index++) {
+    await expect(links).toHaveCount(8);
+    for (let index = 0; index < 8; index++) {
       const link = links.nth(index);
       await expect(link).toBeVisible();
       const href = await link.getAttribute('href');
@@ -108,7 +108,7 @@ test('horizontal navigation stays reachable and identifies the current section a
     expect(geometry.overlap).toBe(false);
     expect(geometry.clipped).toBe(false);
     expect(geometry.overflow).toBe(false);
-    expect(geometry.textLines).toEqual(Array(7).fill(1));
+    expect(geometry.textLines).toEqual(Array(8).fill(1));
     metrics.push(geometry);
     await page
       .locator('.workspace-bar')

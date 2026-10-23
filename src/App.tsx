@@ -10,6 +10,26 @@ export default function App() {
   const { busy, error, notice, act } = useActions();
   const workspace = query.data;
   const location = useLocation();
+  const ready = !!workspace;
+  useEffect(() => {
+    if (!ready || !location.hash) return;
+    let target: HTMLElement | null = null;
+    let addedTabIndex = false;
+    const frame = requestAnimationFrame(() => {
+      target = document.getElementById(location.hash.slice(1));
+      if (!target) return;
+      target.scrollIntoView();
+      target.setAttribute('data-history-target', 'true');
+      addedTabIndex = !target.hasAttribute('tabindex');
+      if (addedTabIndex) target.tabIndex = -1;
+      target.focus({ preventScroll: true });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      target?.removeAttribute('data-history-target');
+      if (addedTabIndex) target?.removeAttribute('tabindex');
+    };
+  }, [ready, location.pathname, location.hash]);
   const client = useQueryClient();
   useEffect(() => {
     const refresh = () => {
@@ -45,6 +65,7 @@ export default function App() {
           {[
             ['/', 'Обзор'],
             ['/projects', 'Проекты'],
+            ['/timeline', 'История'],
             ['/checks', 'Проверки'],
             ['/tasks', 'Задачи'],
             ['/ideas', 'Идеи'],

@@ -387,7 +387,7 @@ function Timeline({ check: c }: { check: CheckView }) {
       <div className="history-columns">
         <div className="timeline section-space">
           {entries.map((e) => (
-            <article key={e.id} className={`history-entry ${e.kind}`}>
+            <article id={`entry-${e.id}`} key={e.id} className={`history-entry ${e.kind}`}>
               <div className="row between">
                 <strong>{e.kind === 'action' ? 'Внешнее действие' : 'Свидетельство'}</strong>
                 <time>{date(e.occurredAt)}</time>

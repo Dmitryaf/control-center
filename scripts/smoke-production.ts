@@ -197,6 +197,15 @@ try {
     history,
   );
   assert.match(await (await request(`/history?task=${task.code}`)).text(), /Control Center/);
+  assert.match(await (await request('/timeline')).text(), /Control Center/);
+  const unified = await (await request(`/api/history?projectId=${id}`)).json();
+  assert.ok(
+    unified.items.some(
+      (entry: { event: string; excerpt: string }) =>
+        entry.event === 'task_completed' && entry.excerpt === 'Production result',
+    ),
+  );
+  assert.ok(unified.items.some((entry: { event: string }) => entry.event === 'check_started'));
   assert.equal(restarted.projects[0].id, id);
   assert.equal(restarted.projects[0].available, true);
   assert.ok(restarted.scan.scannedAt);

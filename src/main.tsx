@@ -11,6 +11,7 @@ import Tasks, { TaskHistory } from './features/tasks/Tasks';
 import Checks, { CheckDetail } from './features/checks/Checks';
 import { Ideas, Decisions } from './features/records/Records';
 import Analysis from './features/analysis/Analysis';
+import History from './features/history/History';
 import './style.css';
 import './styles/components.css';
 const router = createBrowserRouter([
@@ -22,6 +23,7 @@ const router = createBrowserRouter([
       { path: '/projects/:id', element: <ProjectDetail /> },
       { path: '/tasks', element: <Tasks /> },
       { path: '/history', element: <TaskHistory /> },
+      { path: '/timeline', element: <History /> },
       { path: '/checks', element: <Checks /> },
       { path: '/checks/:id', element: <CheckDetail /> },
       { path: '/ideas', element: <Ideas /> },

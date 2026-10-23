@@ -316,7 +316,7 @@ export function Decisions() {
       </div>
       <div className="record-list">
         {w!.decisions.map((d: Decision) => (
-          <article className="panel prose" key={d.id}>
+          <article id={`decision-${d.id}`} className="panel prose" key={d.id}>
             <div className="row between">
               {d.projectId ? (
                 <Link to={`/projects/${d.projectId}`}>

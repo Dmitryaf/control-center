@@ -93,6 +93,79 @@ time {
   }
 }
 
+.history-filters {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.4fr) minmax(170px, 1fr) minmax(180px, 1fr) repeat(
+      2,
+      minmax(135px, 0.8fr)
+    ) auto;
+  gap: 16px;
+  align-items: end;
+}
+.history-filters > label {
+  min-width: 0;
+}
+.history-filters input,
+.history-filters select {
+  width: 100%;
+  min-width: 0;
+}
+.history-filters > button {
+  justify-self: start;
+}
+@media (max-width: 1200px) {
+  .history-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .history-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .history-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.unified-history {
+  list-style: none;
+  padding: 0;
+}
+.history-record {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 24px;
+  border-top: 1px solid var(--line);
+  padding: 22px 0;
+}
+.history-record h2 {
+  font-size: 17px;
+  margin: 5px 0;
+}
+.history-record article {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.history-record article > p {
+  margin-bottom: 10px;
+}
+.history-date {
+  font-size: 13px;
+}
+.history-coverage p {
+  margin-top: 12px;
+}
+[data-history-target] {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+@media (max-width: 600px) {
+  .history-record {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+}
 .project-goal {
   margin-top: 12px;
   font-size: 14px;
