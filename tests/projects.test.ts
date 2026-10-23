@@ -9,6 +9,8 @@ import { defaultSettings, metadataSchema } from '../shared/contracts.js';
 import { Store } from '../server/db.js';
 import { Projects } from '../server/projects/projects.js';
 import { attention } from '../server/projects/attention.js';
+import { Tasks } from '../server/tasks.js';
+import { Records } from '../server/records.js';
 import { assertProjectAccess } from '../server/filesystem/access.js';
 
 test('discovery finds multiple repositories, non-Git projects, overlapping roots, exclusions and missing roots', async (t) => {
@@ -127,13 +129,18 @@ test('attention has threshold boundaries, unknown activity and paused projects',
     last_reviewed: '2026-09-01',
     blocked_by: ['Need input'],
   });
-  const codes = attention(
+  const signals = attention(
     metadata,
     snapshot,
     defaultSettings,
     Date.parse('2026-10-04T00:00:00Z'),
-  ).map((s) => s.code);
-  assert.deepEqual(codes, ['dirty', 'blocked', 'inactive', 'focus', 'next', 'review']);
+  );
+  // Git inactivity is context, while legacy planning fields no longer own current work.
+  assert.deepEqual(
+    signals.map((s) => s.code),
+    ['dirty', 'blocked', 'inactive', 'review'],
+  );
+  assert.equal(signals.find((s) => s.code === 'inactive')?.level, 'info');
   snapshot.git.commits = [];
   assert.equal(
     attention(metadata, snapshot, defaultSettings).some((s) => s.code === 'inactive'),
@@ -143,6 +150,49 @@ test('attention has threshold boundaries, unknown activity and paused projects',
     attention({ ...metadata, status: 'paused' }, snapshot, defaultSettings).map((s) => s.code),
     ['dirty', 'blocked'],
   );
+});
+
+test('project attention keeps Tasks authoritative and gives pending local decisions decision priority', async (t) => {
+  const f = await fixture();
+  t.after(f.cleanup);
+  const store = new Store(':memory:');
+  t.after(() => store.close());
+  const repo = await f.repo('work-status');
+  store.saveSettings({ ...defaultSettings, roots: [repo] });
+  const projects = new Projects(store);
+  await projects.scan();
+  const id = store.projects()[0].id;
+  const metadata = metadataSchema.parse({ name: 'Work status', status: 'active' });
+  store.saveMetadata(id, metadata, '');
+  const tasks = new Tasks(store);
+  const current = tasks.save({ title: 'Current work', projectId: id, state: 'now' });
+  tasks.save({ title: 'Next work', projectId: id, state: 'next' });
+  const signals = () => projects.view(projects.require(id)).signals;
+  const planSignals = () => signals().filter((s) => ['focus', 'next'].includes(s.code));
+  assert.deepEqual(planSignals(), []);
+  tasks.complete(current.code, current.revision, { summary: 'Reported result' });
+  assert.deepEqual(planSignals(), []);
+  const beforeLegacyEdit = signals();
+  store.saveMetadata(id, { ...metadata, current_focus: 'Old focus', next: ['Old step'] }, '');
+  assert.deepEqual(signals(), beforeLegacyEdit);
+  const records = new Records(store);
+  const decision = records.save('decisions', {
+    title: 'Choose direction',
+    projectId: id,
+    decision: 'Choose',
+    date: '2026-10-23',
+    status: 'pending',
+  });
+  assert.equal(signals().find((s) => s.code === 'decision')?.level, 'decision');
+  records.save('decisions', { ...decision, status: 'active' }, decision.id, true);
+  assert.equal(
+    signals().some((s) => s.code === 'decision'),
+    false,
+  );
+  for (const status of ['paused', 'completed'] as const) {
+    store.saveMetadata(id, { ...metadata, status }, '');
+    assert.deepEqual(signals(), []);
+  }
 });
 
 test('filesystem access rejects removed roots and symlink escapes', async (t) => {

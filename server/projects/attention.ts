@@ -17,10 +17,14 @@ export function attention(
     const last = snapshot.git.commits[0]?.date;
     if (last) {
       const days = Math.floor((now - Date.parse(last)) / 86400000);
-      if (days >= settings.inactivityDays) add('inactive', `Нет новых commits ${days} дн.`);
+      if (days >= settings.inactivityDays)
+        signals.push({
+          code: 'inactive',
+          message: `Нет новых commits ${days} дн.`,
+          level: 'info',
+        });
     }
-    if (!metadata.current_focus) add('focus', 'Не определён текущий фокус');
-    if (!metadata.next.length) add('next', 'Не определён следующий шаг');
+    // Tasks own current work. An empty board or legacy plan is not itself a problem.
     if (!metadata.last_reviewed) add('review', 'Метаданные ещё не пересматривались');
     else if ((now - Date.parse(metadata.last_reviewed)) / 86400000 >= settings.reviewDays)
       add('review', 'Пора пересмотреть метаданные');

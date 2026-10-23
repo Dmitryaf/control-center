@@ -112,7 +112,11 @@ export class Projects {
       )
       .get(row.id) as { total: number };
     if (pending.total)
-      signals.push({ code: 'decision', message: `Ожидают решения: ${pending.total}` });
+      signals.push({
+        code: 'decision',
+        level: 'decision',
+        message: `Ожидают решения: ${pending.total}`,
+      });
     return {
       id: row.id,
       path: row.path,

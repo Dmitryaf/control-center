@@ -5,6 +5,65 @@ import { designFixture } from './design-fixture';
 import { fixture } from '../fixtures';
 import type { Task, TaskHistoryPage, Workspace } from '../../shared/contracts';
 
+test('real project signals keep current tasks free of legacy warnings and prioritize pending decisions', async ({
+  page,
+  request,
+}) => {
+  const f = await fixture();
+  const initial = (await (await request.get('/api/workspace')).json()) as Workspace;
+  const headers = { 'X-Control-Center': '1' };
+  try {
+    const repo = await f.repo('attention-regression');
+    await writeFile(path.join(repo, 'PROJECT.yaml'), 'name: Signal project\nstatus: active\n');
+    expect(
+      (
+        await request.put('/api/settings', {
+          headers,
+          data: { ...initial.settings, roots: [repo], autoRefreshMinutes: 0 },
+        })
+      ).ok(),
+    ).toBe(true);
+    const workspace = (await (await request.get('/api/workspace')).json()) as Workspace;
+    const project = workspace.projects.find((item) => item.path === repo)!;
+    for (const state of ['now', 'next']) {
+      expect(
+        (
+          await request.post('/api/tasks', {
+            headers,
+            data: { title: `Signal task ${state}`, projectId: project.id, state },
+          })
+        ).ok(),
+      ).toBe(true);
+    }
+    expect(
+      (
+        await request.post('/api/decisions', {
+          headers,
+          data: {
+            title: 'Direction choice',
+            projectId: project.id,
+            decision: 'Choose direction',
+            date: '2026-10-23',
+            status: 'pending',
+          },
+        })
+      ).ok(),
+    ).toBe(true);
+    await page.goto('/');
+    const attention = page
+      .locator('.attention-line')
+      .filter({ has: page.locator(`a[href="/projects/${project.id}"]`) });
+    await expect(attention).toHaveClass(/decision/);
+    await expect(attention).toContainText('Ожидают решения: 1');
+    await expect(page.getByText('Не определён текущий фокус', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Не определён следующий шаг', { exact: true })).toHaveCount(0);
+    await expect(page.locator('.current-work')).toContainText('Signal task now');
+  } finally {
+    await request.put('/api/settings', { headers, data: initial.settings });
+    await f.cleanup();
+  }
+});
+
 test('overview prioritizes exact current tasks, keeps attention visible and makes secondary details available on wide/narrow screens', async ({
   page,
 }) => {
