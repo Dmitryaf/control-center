@@ -80,6 +80,7 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await expect(
       page.getByRole('heading', { name: 'Проверить выпуск', exact: true }),
     ).toBeVisible();
+    await page.getByText('Ещё', { exact: true }).click();
     await page.getByRole('navigation').getByRole('link', { name: /Идеи/ }).click();
     await page.getByLabel('Название идеи').fill('Общий инструмент');
     await page.getByLabel('Описание', { exact: true }).fill('Сначала проверить потребность.');

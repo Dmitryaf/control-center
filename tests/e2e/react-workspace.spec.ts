@@ -64,6 +64,7 @@ test('React settings → real scan → tasks → immutable history → backup; d
     await expect(page.locator('.history-entry')).toContainText(
       'Владелец отметил задачу выполненной.',
     );
+    await page.getByText('Ещё', { exact: true }).click();
     await page
       .getByRole('navigation')
       .getByRole('link', { name: 'Настройки', exact: true })

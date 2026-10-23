@@ -1,16 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
-import type { Project, TaskHistoryPage } from '../../../shared/contracts';
-import {
-  statusLabels,
-  typeLabels,
-  date,
-  priorityLabels,
-  workKindLabels,
-} from '../../shared/labels';
+import type { Project } from '../../../shared/contracts';
+import { statusLabels, typeLabels, date, priorityLabels } from '../../shared/labels';
 import { useWorkspace } from '../../shared/workspace';
-import { api } from '../../shared/http';
+import { RecentHistory } from '../history/RecentHistory';
 export function ProjectCard({
   project,
   overview = false,
@@ -26,20 +19,6 @@ export function ProjectCard({
         ({ high: 0, normal: 1, low: 2 })[a.priority] - { high: 0, normal: 1, low: 2 }[b.priority] ||
         b.number - a.number,
     );
-  const history = useQuery({
-    queryKey: ['project-recent-work', project.id],
-    enabled: overview,
-    queryFn: ({ signal }) =>
-      api<TaskHistoryPage>(
-        `/task-history?projectId=${project.id}&limit=1`,
-        'GET',
-        undefined,
-        signal,
-      ),
-    refetchInterval: overview ? 5000 : false,
-    retry: false,
-  });
-  const latest = history.data?.items[0];
   const checks = w!.checks.filter((c) => c.projectId === project.id && c.status === 'active');
   const current = tasks.filter((t) => t.state === 'now');
   const next = tasks.find((t) => t.state === 'next');
@@ -97,38 +76,7 @@ export function ProjectCard({
         {overview && (
           <div className="project-latest">
             <p className="section-label">Последняя запись работы</p>
-            {history.isPending && <p role="status">Загружаем запись…</p>}
-            {history.error && (
-              <div role="alert">
-                <p>Не удалось обновить запись.</p>
-                <button onClick={() => history.refetch()} disabled={history.isFetching}>
-                  Повторить
-                </button>
-              </div>
-            )}
-            {latest && (
-              <>
-                <p>
-                  <Link to={`/history?task=${latest.task.code}`}>
-                    {workKindLabels[latest.kind]} · {latest.task.code}
-                  </Link>
-                </p>
-                <time dateTime={latest.recordedAt}>
-                  {new Date(latest.recordedAt).toLocaleString('ru')}
-                </time>
-                <p className="preserve">
-                  {latest.kind === 'reopened'
-                    ? latest.task.title
-                    : latest.task.result?.summary || latest.task.title}
-                </p>
-                {latest.kind === 'baseline' && (
-                  <p className="help">
-                    Сохранённое состояние при переходе, более ранняя история недоступна.
-                  </p>
-                )}
-              </>
-            )}
-            {history.data && !latest && <p className="help">Записей работы пока нет.</p>}
+            <RecentHistory projectId={project.id} compact />
           </div>
         )}
         <details open={overview ? undefined : true} className="project-snapshot">

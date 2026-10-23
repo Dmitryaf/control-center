@@ -18,6 +18,7 @@ import {
 import { useWorkspace, useActions, workspaceKey } from '../../shared/workspace';
 import { UnsavedChanges } from '../../shared/UnsavedChanges';
 import { CheckCard } from '../checks/Checks';
+import { RecentHistory } from '../history/RecentHistory';
 
 function MetadataEditor({ project, onClose }: { project: Project; onClose: () => void }) {
   const { act, busy } = useActions();
@@ -651,6 +652,14 @@ export default function ProjectDetail() {
           Каталог недоступен или вне настроек. Показан сохранённый снимок.
         </div>
       )}
+      <div className="row overview-shortcuts" aria-label="Работа с проектом">
+        <Link to={`/tasks?project=${p.id}`}>Задачи проекта →</Link>
+        <Link to={`/timeline?project=${p.id}`}>История проекта →</Link>
+        <Link to={`/observations?project=${p.id}`}>Записать наблюдение →</Link>
+        <Link to={`/reviews?project=${p.id}&kind=week`}>Обзор недели →</Link>
+        <Link to={`/reviews?project=${p.id}&kind=month`}>Обзор месяца →</Link>
+        <Link to={`/analysis?project=${p.id}`}>Анализы проекта →</Link>
+      </div>
       {editing && (
         <MetadataEditor key={`metadata:${p.id}`} project={p} onClose={() => setEditing(false)} />
       )}
@@ -729,11 +738,6 @@ export default function ProjectDetail() {
                 Задачи <span className="count">{tasks.length}</span>
               </h2>
               <Link to={`/tasks?project=${p.id}`}>Добавить задачу →</Link>
-              <Link to={`/history?project=${p.id}`}>История работы →</Link>
-              <Link to={`/timeline?project=${p.id}`}>История проекта →</Link>
-              <Link to={`/observations?project=${p.id}`}>Записать наблюдение →</Link>
-              <Link to={`/reviews?project=${p.id}`}>Открыть обзор периода →</Link>
-              <Link to={`/analysis?project=${p.id}`}>Анализы проекта →</Link>
             </div>
             <div className="panel compact-list">
               {tasks.map((t) => (
@@ -744,6 +748,14 @@ export default function ProjectDetail() {
               ))}
               {!tasks.length && <p className="muted">Открытых задач нет.</p>}
             </div>
+          </section>
+          <section className="section-space" aria-label="Последние записи проекта">
+            <h2>Что происходило</h2>
+            <RecentHistory projectId={p.id} />
+            <details>
+              <summary>История результатов задач</summary>
+              <Link to={`/history?project=${p.id}`}>Открыть прежнюю историю задач →</Link>
+            </details>
           </section>
           <section className="section-space">
             <h2>Последние изменения</h2>

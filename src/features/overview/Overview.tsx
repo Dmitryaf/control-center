@@ -1,25 +1,17 @@
 import { Link } from 'react-router';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useWorkspace } from '../../shared/workspace';
-import { api } from '../../shared/http';
-import { date, priorityLabels, workKindLabels } from '../../shared/labels';
-import type { TaskHistoryPage } from '../../../shared/contracts';
+import { date, priorityLabels } from '../../shared/labels';
+import { RecentHistory } from '../history/RecentHistory';
+import { dateInZone } from '../../../shared/periods';
 import { ProjectCard } from '../projects/Projects';
 export default function Overview() {
   const { data: w } = useWorkspace();
   const [period, setPeriod] = useState('all');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dateInZone(new Date(), w!.settings.timezone);
   const start = new Date(`${today}T00:00:00Z`);
   start.setUTCDate(start.getUTCDate() - (period === 'all' ? 0 : Number(period) - 1));
   const range = period === 'all' ? '' : `&from=${start.toISOString().slice(0, 10)}&to=${today}`;
-  const history = useQuery({
-    queryKey: ['recent-work', range],
-    refetchInterval: 5000,
-    queryFn: ({ signal }) =>
-      api<TaskHistoryPage>(`/task-history?limit=5${range}`, 'GET', undefined, signal),
-    retry: false,
-  });
   const checks = w!.checks
     .filter((c) => c.status === 'active')
     .sort(
@@ -113,6 +105,8 @@ export default function Overview() {
       </div>
       <div className="row overview-shortcuts">
         <Link to="/observations">Записать наблюдение</Link>
+        <Link to="/reviews?kind=week">Обзор недели →</Link>
+        <Link to="/reviews?kind=month">Обзор месяца →</Link>
         <a href="#attention">Решения и внимание · {attention.length} ↓</a>
         <a href="#recent-work">Записи за период ↓</a>
       </div>
@@ -201,7 +195,9 @@ export default function Overview() {
       >
         <div className="section-heading">
           <h2 id="recent-work-heading">Последние результаты</h2>
-          <Link to={`/timeline${range ? `?${range.slice(1)}&timezone=UTC` : ''}`}>
+          <Link
+            to={`/timeline${range ? `?${range.slice(1)}&timezone=${encodeURIComponent(w!.settings.timezone)}` : ''}`}
+          >
             Вся история →
           </Link>
         </div>
@@ -214,61 +210,15 @@ export default function Overview() {
           </select>
         </label>
         <p className="help">
-          {history.data
-            ? `Показано ${history.data.items.length} из ${history.data.total} записей.`
-            : 'До пяти последних записей работы.'}{' '}
-          Даты периода — UTC
-          {range
-            ? `: ${start.toISOString().slice(0, 10)} — ${today}, текущий день ещё не завершён`
-            : ''}
-          . Здесь пока только история задач. Сведения о проверках сохранены со слов пользователя или
-          агента.
+          До пяти последних записей: результаты, наблюдения, решения, проверки и обзоры. Часовой
+          пояс: {w!.settings.timezone}. Сохранённые сведения не являются независимой проверкой.
+          {period !== 'all' &&
+            ` Диапазон: ${start.toISOString().slice(0, 10)} — ${today}; текущий день ещё не завершён.`}
         </p>
-        {history.isPending && <p role="status">Загружаем результаты…</p>}
-        {history.error && (
-          <div className="message warning" role="alert" aria-label="Последние результаты">
-            {history.error.message}
-            <button disabled={history.isFetching} onClick={() => history.refetch()}>
-              Повторить
-            </button>
-          </div>
-        )}
-        <ol className="recent-work-list">
-          {history.data?.items.map((e) => (
-            <li key={e.id} className="activity">
-              <time dateTime={e.recordedAt}>{new Date(e.recordedAt).toLocaleString('ru')}</time>
-              <div>
-                <Link to={`/history?task=${e.task.code}`}>
-                  {e.task.code} · {e.task.title}
-                </Link>
-                <p className="help">
-                  {e.projectName ?? 'Общая задача'} · {workKindLabels[e.kind]}
-                </p>
-                <p className="preserve">
-                  {e.kind === 'reopened'
-                    ? e.task.title
-                    : (e.task.result?.summary ?? 'Результат не указан.')}
-                </p>
-                {e.task.result?.remaining && (
-                  <p className="help">Осталось: {e.task.result.remaining}</p>
-                )}
-                {e.kind === 'baseline' && (
-                  <p className="help">
-                    Известная запись при переходе; время последнего сохранения, более ранняя история
-                    недоступна.
-                  </p>
-                )}
-              </div>
-            </li>
-          ))}
-        </ol>
-        {history.data && !history.data.items.length && (
-          <p className="empty">
-            {range
-              ? 'За выбранный период записей работы нет.'
-              : 'Сохранённых записей работы пока нет. Они появятся после записи результата или завершения задачи.'}
-          </p>
-        )}
+        <RecentHistory
+          from={period === 'all' ? undefined : start.toISOString().slice(0, 10)}
+          to={period === 'all' ? undefined : today}
+        />
       </section>
       <div className="row overview-links section-space">
         <Link to="/analysis">Анализ проектов →</Link>

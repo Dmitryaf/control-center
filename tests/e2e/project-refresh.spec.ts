@@ -151,6 +151,7 @@ test('production timer → saved snapshot → open draft, YAML conflict, freshne
     // Preservation was checked above; explicitly discard before leaving the editor.
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Закрыть редактор', exact: true }).click();
+    await page.getByText('Ещё', { exact: true }).click();
     await page.getByRole('navigation').getByRole('link', { name: 'Настройки' }).click();
     const interval = page.getByLabel('Интервал обновления, минут');
     await interval.fill('0');

@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { DraftProvider } from './shared/UnsavedChanges';
 import { useWorkspace, useActions } from './shared/workspace';
@@ -10,6 +10,14 @@ export default function App() {
   const { busy, error, notice, act } = useActions();
   const workspace = query.data;
   const location = useLocation();
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => {
+    setMoreOpen(
+      ['/checks', '/ideas', '/decisions', '/settings'].some((path) =>
+        location.pathname.startsWith(path),
+      ),
+    );
+  }, [location.pathname]);
   const ready = !!workspace;
   useEffect(() => {
     if (!ready || !location.hash) return;
@@ -75,12 +83,8 @@ export default function App() {
           {[
             ['/', 'Обзор'],
             ['/projects', 'Проекты'],
-            ['/timeline', 'История'],
-            ['/checks', 'Проверки'],
             ['/tasks', 'Задачи'],
-            ['/ideas', 'Идеи'],
-            ['/decisions', 'Решения'],
-            ['/settings', 'Настройки'],
+            ['/timeline', 'История'],
           ].map(([path, label]) => (
             <Link
               key={path}
@@ -91,6 +95,30 @@ export default function App() {
               {label}
             </Link>
           ))}
+          <details
+            className="more-navigation"
+            open={moreOpen}
+            onToggle={(event) => setMoreOpen(event.currentTarget.open)}
+          >
+            <summary>Ещё</summary>
+            <div className="more-navigation-links">
+              {[
+                ['/checks', 'Проверки'],
+                ['/ideas', 'Идеи'],
+                ['/decisions', 'Решения'],
+                ['/settings', 'Настройки'],
+              ].map(([path, label]) => (
+                <Link
+                  key={path}
+                  to={path}
+                  aria-current={selected(path) ? 'page' : undefined}
+                  className={selected(path) ? 'selected' : ''}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </details>
         </nav>
         <button
           disabled={busy || (!workspace && query.isPending)}

@@ -54,6 +54,24 @@
   color: white;
   border-bottom-color: #ddbf7e;
 }
+.more-navigation {
+  position: relative;
+}
+.more-navigation > summary {
+  padding: 9px 10px;
+  cursor: pointer;
+}
+.more-navigation-links {
+  display: grid;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 170px;
+  background: var(--ink);
+  z-index: 5;
+  padding: 6px;
+  border: 1px solid #738087;
+}
 .workspace-bar > button {
   background: transparent;
   color: #f6f4ee;
@@ -410,6 +428,9 @@ main {
   }
 }
 @media (max-width: 550px) {
+  .more-navigation-links {
+    min-width: 145px;
+  }
   main {
     padding: 24px 18px 48px;
   }

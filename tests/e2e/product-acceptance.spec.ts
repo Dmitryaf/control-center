@@ -8,7 +8,7 @@ import type { Workspace } from '../../shared/contracts';
 import type { Review } from '../../shared/reviews';
 import type { PeriodRun } from '../../shared/period-analysis';
 
-test('owner journey across active, paused and waiting projects: browser → production MCP → week → retained review → portfolio month → offline work', async ({
+test('owner journey across active, paused, waiting and completed projects: browser → production MCP → week → retained review → portfolio month → offline work', async ({
   page,
   request,
 }) => {
@@ -37,6 +37,12 @@ test('owner journey across active, paused and waiting projects: browser → prod
         name: 'Тестовый справочник',
         status: 'active',
         stage: 'Ожидание ответа',
+      },
+      {
+        folder: 'completed',
+        name: 'Тестовый завершённый проект',
+        status: 'completed',
+        stage: 'Цель достигнута',
       },
     ];
     const roots: string[] = [];
@@ -114,6 +120,14 @@ test('owner journey across active, paused and waiting projects: browser → prod
       await page.getByLabel('Текст наблюдения').fill(note);
       await page.getByRole('button', { name: 'Сохранить наблюдение', exact: true }).click();
       await expect(page.getByLabel('Текст наблюдения')).toHaveValue('');
+      await page.goto(`/projects/${project.id}`);
+      await expect(page.getByRole('region', { name: 'Последние записи проекта' })).toContainText(
+        note,
+      );
+      await expect(page.getByRole('region', { name: 'Последние записи проекта' })).toContainText(
+        'Сохранён тестовый экспорт',
+      );
+      await expect(page.getByRole('link', { name: 'Обзор месяца →', exact: true })).toBeVisible();
       await page.goto(
         `/timeline?project=${project.id}&from=${bounds.periodStart}&to=${bounds.periodEnd}&timezone=UTC`,
       );
@@ -196,6 +210,14 @@ test('owner journey across active, paused and waiting projects: browser → prod
       await page.getByLabel('Текст наблюдения').fill('Работа продолжается без AI.');
       await page.getByRole('button', { name: 'Сохранить наблюдение', exact: true }).click();
       await expect(page.getByLabel('Текст наблюдения')).toHaveValue('');
+      await page.goto(`/projects/${project.id}`);
+      await expect(page.getByRole('region', { name: 'Последние записи проекта' })).toContainText(
+        note,
+      );
+      await expect(page.getByRole('region', { name: 'Последние записи проекта' })).toContainText(
+        'Сохранён тестовый экспорт',
+      );
+      await expect(page.getByRole('link', { name: 'Обзор месяца →', exact: true })).toBeVisible();
       await page.goto(`/reviews?id=${weekId}`);
       await expect(page.getByLabel('Текст обзора')).toHaveValue(weekText);
       expect((await (await request.get(`/api/reviews/${weekId}`)).json()).revision).toBe(

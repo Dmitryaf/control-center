@@ -48,19 +48,39 @@ test('horizontal navigation stays reachable and identifies the current section a
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/checks');
     const nav = page.getByRole('navigation', { name: 'Основная навигация' });
-    const links = nav.getByRole('link');
-    await expect(links).toHaveCount(8);
-    for (let index = 0; index < 8; index++) {
-      const link = links.nth(index);
-      await expect(link).toBeVisible();
-      const href = await link.getAttribute('href');
+    await page.goto('/');
+    await expect(nav.getByRole('link')).toHaveCount(4);
+    await nav.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    await expect(nav.getByRole('link')).toHaveCount(8);
+    const destinations = [
+      '/',
+      '/projects',
+      '/tasks',
+      '/timeline',
+      '/checks',
+      '/ideas',
+      '/decisions',
+      '/settings',
+    ];
+    for (const href of destinations) {
+      if (href !== '/' && !['/projects', '/tasks', '/timeline'].includes(href)) {
+        if (
+          !(await nav
+            .locator('details')
+            .getAttribute('open')
+            .then((v) => v !== null))
+        )
+          await nav.locator('summary').click();
+      }
+      const link = nav.locator(`a[href="${href}"]`);
       await link.focus();
       await expect(link).toBeFocused();
       await page.keyboard.press('Enter');
       await expect(page).toHaveURL(new RegExp(`${href === '/' ? '/' : href}$`));
       await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
       await expect(link).toHaveAttribute('aria-current', 'page');
-      await expect(link).toHaveClass(/selected/);
+      await expect(link).toBeFocused();
       await expect(page.locator('h1')).toBeVisible();
     }
     await page.goto('/checks');

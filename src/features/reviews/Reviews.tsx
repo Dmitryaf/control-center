@@ -19,7 +19,7 @@ function OpenReview({ project, day }: { project: string | null; day: string | nu
   const { act, busy } = useActions();
   const client = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const [kind, setKind] = useState<PeriodKind>('week');
+  const [kind, setKind] = useState<PeriodKind>(params.get('kind') === 'month' ? 'month' : 'week');
   const [anchorDate, setAnchor] = useState(day ?? dateInZone(new Date(), w!.settings.timezone));
   const [projectId, setProject] = useState(project ?? '');
   const [validation, setValidation] = useState('');

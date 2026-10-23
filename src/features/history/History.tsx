@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { HistoryPage, HistoryEvent } from '../../../shared/history';
+import type { HistoryPage } from '../../../shared/history';
 import { api } from '../../shared/http';
 import { useWorkspace } from '../../shared/workspace';
 import { date } from '../../shared/labels';
+import { historyEventLabels as events } from './labels';
 import { zonedRange } from './period';
 import { dateInZone, timezoneSchema } from '../../../shared/periods';
 
@@ -17,21 +18,6 @@ const kinds = {
   observation: 'Наблюдения',
   review: 'Обзоры периодов',
   ai_analysis: 'AI-анализы',
-};
-const events: Record<HistoryEvent, string> = {
-  task_baseline: 'Запись при переходе',
-  task_result: 'Результат сохранён',
-  task_completed: 'Задача завершена',
-  task_reopened: 'Возвращена в работу',
-  check_started: 'Проверка начата',
-  check_completed: 'Проверка завершена',
-  check_action: 'Внешнее действие',
-  check_evidence: 'Свидетельство',
-  decision: 'Локальное решение',
-  file_decision: 'Решение из файла',
-  observation: 'Наблюдение',
-  review: 'Обзор периода',
-  ai_analysis: 'Сохранённый AI-анализ',
 };
 export default function History() {
   const [params, setParams] = useSearchParams();

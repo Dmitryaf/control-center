@@ -1,9 +1,41 @@
 import { test, expect } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { dateInZone } from '../../shared/periods';
 import { designFixture } from './design-fixture';
 import { fixture } from '../fixtures';
 import type { Task, TaskHistoryPage, Workspace } from '../../shared/contracts';
+// Convert existing receipt fixtures to the canonical projection consumed by the UI.
+const projected = (
+  items: {
+    id: number;
+    kind: string;
+    recordedAt: string;
+    projectId: string | null;
+    projectName: string | null;
+    task: Task;
+  }[],
+  timezone = 'UTC',
+) => ({
+  items: items.map((item) => ({
+    key: `task:${item.id}`,
+    kind: 'task',
+    event: `task_${item.kind}`,
+    sourceId: String(item.id),
+    day: dateInZone(new Date(item.recordedAt), timezone),
+    recordedAt: item.recordedAt,
+    dateQuality: item.kind === 'baseline' ? 'baseline' : 'recorded',
+    projectId: item.projectId,
+    scopeProjectId: item.projectId,
+    projectName: item.projectName,
+    title: `${item.task.code} · ${item.task.title}`,
+    excerpt: item.task.result?.summary ?? '',
+    truncated: false,
+    href: `/history?task=${item.task.code}`,
+  })),
+  nextCursor: null,
+  files: { undated: 0, unavailable: 0, notLoadedProjects: 0 },
+});
 
 test('real project signals keep current tasks free of legacy warnings and prioritize pending decisions', async ({
   page,
@@ -122,12 +154,39 @@ test('overview shows project context and exact current tasks once, keeps attenti
     ],
   };
   await page.route('**/api/workspace', (route) => route.fulfill({ json: data }));
-  await page.route('**/api/task-history?**', (route) => {
+  await page.route('**/api/history?**', (route) => {
     const project = new URL(route.request().url()).searchParams.get('projectId');
     const items = project
       ? recent.items.filter((entry) => entry.projectId === project)
       : recent.items;
-    return route.fulfill({ json: { total: items.length, items } });
+    return route.fulfill({
+      json: {
+        ...projected(items),
+        items: [
+          ...projected(items).items,
+          ...(project
+            ? []
+            : [
+                {
+                  key: 'observation:fixture',
+                  kind: 'observation',
+                  event: 'observation',
+                  sourceId: 'fixture',
+                  day: '2026-10-19',
+                  recordedAt: null,
+                  dateQuality: 'declared',
+                  projectId: null,
+                  scopeProjectId: null,
+                  projectName: null,
+                  title: 'Причина смены направления',
+                  excerpt: 'Наблюдение: гипотезу решили отложить до ответа владельца.',
+                  truncated: false,
+                  href: '/observations?id=fixture',
+                },
+              ]),
+        ],
+      },
+    });
   });
   await mkdir('.local/overview-review', { recursive: true });
   for (const width of [1440, 390]) {
@@ -156,7 +215,9 @@ test('overview shows project context and exact current tasks once, keeps attenti
       page.getByRole('article', { name: data.projects[0].metadata.name, exact: true }),
     ).toContainText('Сохранённый результат');
     await expect(
-      page.locator('.current-work').getByRole('link', { name: `${base.code} · ${base.title}` }),
+      page
+        .locator('.current-work')
+        .getByRole('link', { name: `${base.code} · ${base.title}`, exact: true }),
     ).toHaveAttribute('href', `/tasks?task=${base.code}`);
     await expect(page.locator('.overview-details')).not.toHaveAttribute('open', '');
     await expect(page.locator('.checks-overview')).toBeHidden();
@@ -171,6 +232,9 @@ test('overview shows project context and exact current tasks once, keeps attenti
     expect(tasks.y).toBeLessThan(attention.y);
     expect(attention.y).toBeLessThan(history.y);
     await expect(page.locator('.recent-work')).toContainText('Сохранённый результат');
+    await expect(page.locator('.recent-work')).toContainText(
+      'Наблюдение: гипотезу решили отложить',
+    );
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
@@ -191,7 +255,7 @@ test('overview shows project context and exact current tasks once, keeps attenti
   }
   await page
     .locator('.current-work')
-    .getByRole('link', { name: `${base.code} · ${base.title}` })
+    .getByRole('link', { name: `${base.code} · ${base.title}`, exact: true })
     .click();
   await expect(page.getByLabel('Название задачи')).toHaveValue(base.title);
 });
@@ -215,12 +279,12 @@ test('project card reads persisted history and keeps it visible after a failed r
     taskExists: false,
   };
   await page.route('**/api/workspace', (route) => route.fulfill({ json: data }));
-  await page.route('**/api/task-history?**', (route) => {
+  await page.route('**/api/history?**', (route) => {
     const project = new URL(route.request().url()).searchParams.get('projectId');
     if (project === data.projects[0].id && fail)
       return route.fulfill({ status: 503, json: { error: 'History unavailable' } });
     const items = project === data.projects[0].id ? [entry] : [];
-    return route.fulfill({ json: { total: items.length, items } });
+    return route.fulfill({ json: projected(items) });
   });
   await page.goto('/');
   const card = page.getByRole('article', { name: data.projects[0].metadata.name, exact: true });
@@ -236,15 +300,20 @@ test('project card reads persisted history and keeps it visible after a failed r
   fail = false;
   await card.getByRole('button', { name: 'Повторить' }).click();
   await expect(card.getByRole('alert')).toHaveCount(0);
-  await card.getByRole('link', { name: `Задача завершена · ${entry.task.code}` }).click();
+  await card
+    .getByRole('link', { name: `Задача завершена · ${entry.task.code} · ${entry.task.title}` })
+    .click();
   await expect(page.getByLabel('Номер задачи')).toHaveValue(entry.task.code);
 });
 
-test('overview period uses inclusive UTC dates and carries them into history', async ({ page }) => {
-  await page.clock.install({ time: new Date('2026-10-23T03:00:00Z') });
+test('overview period uses inclusive configured-zone dates and carries them into history', async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date('2026-10-22T21:30:00Z') });
   const data = designFixture();
   data.projects = data.projects.slice(0, 1);
-  const entries = ['2026-10-17T00:00:00Z', '2026-10-16T23:59:59Z'].map((recordedAt, index) => ({
+  data.settings.timezone = 'Asia/Yekaterinburg';
+  const entries = ['2026-10-16T19:00:00Z', '2026-10-16T18:59:59Z'].map((recordedAt, index) => ({
     id: index + 1,
     kind: 'result',
     recordedAt,
@@ -262,14 +331,16 @@ test('overview period uses inclusive UTC dates and carries them into history', a
     taskExists: true,
   }));
   await page.route('**/api/workspace', (route) => route.fulfill({ json: data }));
-  await page.route('**/api/task-history?**', (route) => {
+  await page.route('**/api/history?**', (route) => {
     const params = new URL(route.request().url()).searchParams;
     const items = params.has('projectId')
       ? []
       : entries.filter(
-          (entry) => !params.get('from') || entry.recordedAt.slice(0, 10) >= params.get('from')!,
+          (entry) =>
+            !params.get('from') ||
+            dateInZone(new Date(entry.recordedAt), data.settings.timezone) >= params.get('from')!,
         );
-    return route.fulfill({ json: { total: items.length, items } });
+    return route.fulfill({ json: projected(items, data.settings.timezone) });
   });
   await page.goto('/');
   await expect(page.locator('.recent-work')).toContainText('До периода');
@@ -277,15 +348,19 @@ test('overview period uses inclusive UTC dates and carries them into history', a
   await expect(page.locator('.recent-work')).toContainText('2026-10-17 — 2026-10-23');
   await expect(page.locator('.recent-work')).toContainText('На границе периода');
   await expect(page.locator('.recent-work')).not.toContainText('До периода');
-  await expect(page.locator('.recent-work')).toContainText('Показано 1 из 1');
+  await expect(page.locator('.recent-work-list > li')).toHaveCount(1);
   const historyRead = page.waitForRequest(
     (request) => new URL(request.url()).pathname === '/api/history',
   );
   await page.locator('.recent-work').getByRole('link', { name: 'Вся история →' }).click();
   await expect(page.getByLabel('С даты', { exact: true })).toHaveValue('2026-10-17');
   await expect(page.getByLabel('По дату', { exact: true })).toHaveValue('2026-10-23');
-  expect(new URL((await historyRead).url()).searchParams.get('timezone')).toBe('UTC');
-  await expect(page.getByText('Часовой пояс: UTC.', { exact: false })).toBeVisible();
+  expect(new URL((await historyRead).url()).searchParams.get('timezone')).toBe(
+    data.settings.timezone,
+  );
+  await expect(
+    page.getByText(`Часовой пояс: ${data.settings.timezone}.`, { exact: false }),
+  ).toBeVisible();
 });
 
 test('recent work preserves newer reads, exposes a current failure and retries without clearing known results', async ({
@@ -311,9 +386,9 @@ test('recent work preserves newer reads, exposes a current failure and retries w
   });
   let calls = 0;
   let fail = false;
-  await page.route('**/api/task-history?**', async (route) => {
+  await page.route('**/api/history?**', async (route) => {
     if (new URL(route.request().url()).searchParams.has('projectId')) {
-      await route.fulfill({ json: { total: 0, items: [] } });
+      await route.fulfill({ json: projected([]) });
       return;
     }
     calls++;
@@ -322,7 +397,7 @@ test('recent work preserves newer reads, exposes a current failure and retries w
       await route.fulfill({ status: 503, json: { error: 'Старая ошибка' } });
     } else if (fail)
       await route.fulfill({ status: 503, json: { error: 'Сведения временно недоступны' } });
-    else await route.fulfill({ json: { total: 1, items: [entry] } });
+    else await route.fulfill({ json: projected([entry]) });
   });
   await page.goto('/');
   await expect(page.getByText('Загружаем результаты…')).toBeVisible();
@@ -428,7 +503,9 @@ test('legacy plans remain readable and importable, editing/export preserve origi
       },
     });
     await page.goto('/');
-    await expect(page.locator('.current-work')).not.toContainText('Новая текущая задача');
+    await expect(
+      page.locator('.current-task-list li').filter({ hasText: 'Новая текущая задача' }),
+    ).toHaveCount(0);
     await expect(page.locator('.recent-work')).toContainText('Завершено через реальный HTTP');
     await page
       .locator('.recent-work')
