@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
-export const historyKindSchema = z.enum(['task', 'check', 'decision', 'file_decision']);
+export const historyKindSchema = z.enum([
+  'task',
+  'check',
+  'decision',
+  'file_decision',
+  'observation',
+]);
 export type HistoryKind = z.infer<typeof historyKindSchema>;
 export const historyQuerySchema = z
   .object({
@@ -33,7 +39,8 @@ export type HistoryEvent =
   | 'check_action'
   | 'check_evidence'
   | 'decision'
-  | 'file_decision';
+  | 'file_decision'
+  | 'observation';
 export interface HistoryEntry {
   key: string;
   kind: HistoryKind;
@@ -43,6 +50,7 @@ export interface HistoryEntry {
   recordedAt: string | null;
   dateQuality: 'recorded' | 'baseline' | 'declared';
   projectId: string | null;
+  scopeProjectId: string | null;
   projectName: string | null;
   title: string;
   excerpt: string;

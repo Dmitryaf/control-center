@@ -731,6 +731,7 @@ export default function ProjectDetail() {
               <Link to={`/tasks?project=${p.id}`}>Добавить задачу →</Link>
               <Link to={`/history?project=${p.id}`}>История работы →</Link>
               <Link to={`/timeline?project=${p.id}`}>История проекта →</Link>
+              <Link to={`/observations?project=${p.id}`}>Записать наблюдение →</Link>
             </div>
             <div className="panel compact-list">
               {tasks.map((t) => (

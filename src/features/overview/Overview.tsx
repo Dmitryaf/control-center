@@ -112,6 +112,7 @@ export default function Overview() {
         </p>
       </div>
       <div className="row overview-shortcuts">
+        <Link to="/observations">Записать наблюдение</Link>
         <a href="#attention">Решения и внимание · {attention.length} ↓</a>
         <a href="#recent-work">Записи за период ↓</a>
       </div>

@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { fixture } from '../tests/fixtures.js';
 import type { Workspace, Task, TaskHistoryPage } from '../shared/contracts.js';
+import type { Observation } from '../shared/observations.js';
 
 const fixtureData = await fixture();
 const repo = await fixtureData.repo('production-project');
@@ -166,6 +167,13 @@ try {
     ).status,
     201,
   );
+  const observationResponse = await request('/api/observations', 'POST', {
+    body: 'Production observation',
+    occurredOn: '2020-01-02',
+    projectId: id,
+  });
+  assert.equal(observationResponse.status, 201);
+  const observation = (await observationResponse.json()) as Observation;
   const backupResponse = await request('/api/backup', 'POST', {});
   assert.equal(backupResponse.status, 200);
   const backup = (await backupResponse.json()) as { path: string };
@@ -176,6 +184,10 @@ try {
   );
   assert.equal(backupDb.prepare('PRAGMA quick_check').get()?.quick_check, 'ok');
   assert.equal(backupDb.prepare('SELECT COUNT(*) AS n FROM task_history').get()?.n, 1);
+  assert.equal(
+    backupDb.prepare('SELECT body FROM observations WHERE id=?').get(observation.id)?.body,
+    'Production observation',
+  );
   assert.equal(
     backupDb.prepare('SELECT private_context_path FROM projects WHERE id=?').get(id)
       ?.private_context_path,
@@ -198,6 +210,14 @@ try {
   );
   assert.match(await (await request(`/history?task=${task.code}`)).text(), /Control Center/);
   assert.match(await (await request('/timeline')).text(), /Control Center/);
+  assert.match(
+    await (await request(`/observations?id=${observation.id}`)).text(),
+    /Control Center/,
+  );
+  assert.deepEqual(
+    await (await request(`/api/observations/${observation.id}`)).json(),
+    observation,
+  );
   const unified = await (await request(`/api/history?projectId=${id}`)).json();
   assert.ok(
     unified.items.some(
@@ -206,6 +226,12 @@ try {
     ),
   );
   assert.ok(unified.items.some((entry: { event: string }) => entry.event === 'check_started'));
+  assert.ok(
+    unified.items.some(
+      (entry: { event: string; excerpt: string }) =>
+        entry.event === 'observation' && entry.excerpt === 'Production observation',
+    ),
+  );
   assert.equal(restarted.projects[0].id, id);
   assert.equal(restarted.projects[0].available, true);
   assert.ok(restarted.scan.scannedAt);

@@ -13,6 +13,7 @@ const kinds = {
   check: 'Проверки',
   decision: 'Локальные решения',
   file_decision: 'Решения из файлов',
+  observation: 'Наблюдения',
 };
 const events: Record<HistoryEvent, string> = {
   task_baseline: 'Запись при переходе',
@@ -25,6 +26,7 @@ const events: Record<HistoryEvent, string> = {
   check_evidence: 'Свидетельство',
   decision: 'Локальное решение',
   file_decision: 'Решение из файла',
+  observation: 'Наблюдение',
 };
 export default function History() {
   const [params, setParams] = useSearchParams();
@@ -79,7 +81,15 @@ export default function History() {
           <h1>История</h1>
           <p className="subtitle">Результаты, внешние шаги и основания решений рядом.</p>
         </div>
-        <Link to="/history">История задач →</Link>
+        <div className="row">
+          <Link
+            className="button"
+            to={`/observations${params.get('project') && params.get('project') !== '__unlinked__' ? `?project=${params.get('project')}` : ''}`}
+          >
+            Записать наблюдение
+          </Link>
+          <Link to="/history">История задач →</Link>
+        </div>
       </div>
       <form
         className="toolbar history-filters"
@@ -99,6 +109,11 @@ export default function History() {
           >
             <option value="">Все проекты и записи без связи</option>
             <option value="__unlinked__">Общие и отвязанные записи</option>
+            {draft.project &&
+              draft.project !== '__unlinked__' &&
+              !workspace!.projects.some((project) => project.id === draft.project) && (
+                <option value={draft.project}>Прежний или недоступный проект</option>
+              )}
             {workspace!.projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.metadata.name}
@@ -173,8 +188,8 @@ export default function History() {
           История задач хранит отдельные снимки результатов. Проверки и решения показаны в текущей
           сохранённой редакции с указанной датой; прошлые изменения не восстановлены. Удаление таких
           источников убирает их из ленты. Решения из файлов читаются из последнего индекса, их
-          тексты не копируются. История целей и статусов, наблюдения и обзоры периодов пока сюда не
-          входят.
+          тексты не копируются. История целей и статусов и обзоры периодов пока сюда не входят.
+          Наблюдения показаны в текущей редакции, без архива правок.
         </p>
         <p>
           Общие и отвязанные записи видны вместе. Прежняя связь локального решения с удалённым
@@ -253,7 +268,10 @@ export default function History() {
                 <Link to={entry.href}>{entry.title}</Link>
               </h2>
               <p className="help">
-                {entry.projectName ?? 'Без связи с проектом'}
+                {entry.projectName ??
+                  (entry.scopeProjectId
+                    ? 'Прежний проект (название не сохранено)'
+                    : 'Без связи с проектом')}
                 {!entry.projectId && entry.projectName ? ' · связь с проектом снята' : ''}
               </p>
               {entry.excerpt && <p className="preserve">{entry.excerpt}</p>}

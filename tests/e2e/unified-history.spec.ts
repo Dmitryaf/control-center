@@ -157,6 +157,7 @@ test('history read errors keep known entries, retry without losing filters, and 
         recordedAt: '2020-01-01T10:00:00.000Z',
         dateQuality: 'baseline',
         projectId: null,
+        scopeProjectId: null,
         projectName: null,
         title: 'Saved reported work',
         excerpt: 'Known result',

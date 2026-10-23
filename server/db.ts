@@ -35,18 +35,30 @@ export class Store {
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (![0, 2, 3, 4, 5].includes(version.user_version)) {
+    if (![0, 2, 3, 4, 5, 6].includes(version.user_version)) {
       this.db.close();
       throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
     }
     try {
-      if (existing && version.user_version < 5) {
+      if (existing && version.user_version < 6) {
         const directory = join(dirname(path), 'backups');
         mkdirSync(directory, { recursive: true });
-        const prefix = version.user_version < 4 ? 'before-tasks-v4' : 'before-history-v5';
+        const prefix =
+          version.user_version < 4
+            ? 'before-tasks-v4'
+            : version.user_version < 5
+              ? 'before-history-v5'
+              : 'before-observations-v6';
         snapshotDatabase(this.db, join(directory, `${prefix}-${randomUUID()}.sqlite`));
       }
       this.transaction(() => {
+        // Another process may migrate while this connection makes its backup.
+        // Check compatibility under the lock before running any DDL or changing the version.
+        const lockedVersion = this.db.prepare('PRAGMA user_version').get() as {
+          user_version: number;
+        };
+        if (![0, 2, 3, 4, 5, 6].includes(lockedVersion.user_version))
+          throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS projects (
@@ -111,10 +123,6 @@ export class Store {
           );
           CREATE INDEX IF NOT EXISTS task_history_project_time ON task_history(project_id,recorded_at);
         `);
-        // Another process may have upgraded while this connection made its backup.
-        const lockedVersion = this.db.prepare('PRAGMA user_version').get() as {
-          user_version: number;
-        };
         if (lockedVersion.user_version < 5)
           this.db.exec(`
           INSERT INTO task_history(task_id,revision,kind,recorded_at,project_id,project_name,snapshot)
@@ -126,7 +134,17 @@ export class Store {
           WHERE r.kind='tasks' AND (json_extract(r.data,'$.result') IS NOT NULL OR json_extract(r.data,'$.completedAt') IS NOT NULL)
           ORDER BY r.updated_at,r.id;
         `);
-        this.db.exec('PRAGMA user_version = 5;');
+        this.db.exec(`CREATE TABLE IF NOT EXISTS observations (
+          id TEXT PRIMARY KEY,
+          project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+          scope_project_id TEXT, project_name TEXT,
+          occurred_on TEXT NOT NULL, body TEXT NOT NULL,
+          revision INTEGER NOT NULL CHECK(revision>0),
+          created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+          request_key TEXT UNIQUE, request_hash TEXT
+        );
+        CREATE INDEX IF NOT EXISTS observations_scope_date ON observations(scope_project_id,occurred_on);`);
+        this.db.exec('PRAGMA user_version = 6;');
       });
     } catch (error) {
       this.db.close();

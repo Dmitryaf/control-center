@@ -20,6 +20,7 @@ import { Checks } from './checks/checks.js';
 import { Tasks } from './tasks.js';
 import { TaskHistory } from './task-history.js';
 import { History } from './history.js';
+import { Observations } from './observations.js';
 import { ProjectAnalysis } from './analysis/analysis.js';
 
 export function createApp(store: Store, port: number, analysis = new ProjectAnalysis(store)) {
@@ -30,6 +31,7 @@ export function createApp(store: Store, port: number, analysis = new ProjectAnal
   const checks = new Checks(store);
   const tasks = new Tasks(store);
   const history = new History(store, projects.decisions);
+  const observations = new Observations(store);
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -51,6 +53,15 @@ export function createApp(store: Store, port: number, analysis = new ProjectAnal
     next();
   });
   app.use(express.json({ limit: '256kb' }));
+  app.get('/api/observations/:id', (req, res) => res.json(observations.read(req.params.id)));
+  app.post('/api/observations', (req, res) => res.status(201).json(observations.create(req.body)));
+  app.patch('/api/observations/:id', (req, res) =>
+    res.json(observations.patch(req.params.id, req.body)),
+  );
+  app.delete('/api/observations/:id', (req, res) => {
+    observations.delete(req.params.id, req.body);
+    res.json({ ok: true });
+  });
   app.get('/api/history', (req, res) => {
     const { projectId, ...query } = req.query;
     res.json(

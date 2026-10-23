@@ -7,6 +7,7 @@ import { Store } from '../server/db.js';
 import { Records } from '../server/records.js';
 import { Checks } from '../server/checks/checks.js';
 import { Projects } from '../server/projects/projects.js';
+import { Observations } from '../server/observations.js';
 import { defaultSettings, metadataSchema } from '../shared/contracts.js';
 import { dataDirectory } from '../server/storage.js';
 
@@ -44,6 +45,11 @@ test('rebind preserves old ID, every record, checks, relations, notes and local 
     'Keep notes',
   );
   const task = records.save('tasks', { title: 'Task', projectId: old.id });
+  const observation = new Observations(store).create({
+    body: 'Keep observation',
+    occurredOn: '2020-01-01',
+    projectId: old.id,
+  });
   const idea = records.save('ideas', { title: 'Idea', projectId: old.id });
   const decision = records.save('decisions', {
     title: 'Decision',
@@ -67,6 +73,7 @@ test('rebind preserves old ID, every record, checks, relations, notes and local 
   assert.equal(rebound.id, old.id);
   assert.equal(rebound.metadata.name, 'Kept title');
   assert.equal(rebound.notes, 'Keep notes');
+  assert.equal(new Observations(store).read(observation.id).projectId, old.id);
   assert.equal(store.project(candidate.id), undefined);
   assert.equal(projects.list().length, 2);
   assert.equal(records.list('tasks')[0].id, task.id);
@@ -103,6 +110,36 @@ test('rebind rejects a target with user data', async (t) => {
   await projects.scan();
   await assert.rejects(projects.rebind(one.id, two.id), /свои данные/);
   assert.equal(store.project(two.id)?.notes, 'Valuable');
+  const observation = new Observations(store).create({
+    body: 'Only observation data',
+    occurredOn: '2020-01-01',
+    projectId: two.id,
+  });
+  store.saveMetadata(two.id, null, '');
+  await assert.rejects(projects.rebind(one.id, two.id), /свои данные/);
+  assert.equal(new Observations(store).read(observation.id).projectId, two.id);
+  new Observations(store).delete(observation.id, { revision: observation.revision });
+  const transaction = store.transaction.bind(store);
+  let inserted = false;
+  let concurrentId = '';
+  store.transaction = function <T>(action: () => T): T {
+    if (!inserted) {
+      inserted = true;
+      concurrentId = new Observations(store).create({
+        body: 'Arrived before rebind lock',
+        occurredOn: '2020-01-01',
+        projectId: two.id,
+      }).id;
+    }
+    return transaction(action);
+  };
+  try {
+    await assert.rejects(projects.rebind(one.id, two.id), /свои данные/);
+  } finally {
+    store.transaction = transaction;
+  }
+  assert.ok(inserted);
+  assert.equal(new Observations(store).read(concurrentId).projectId, two.id);
 });
 
 test('remove an available project preserves files and records, excludes only its path across restart, and allows rediscovery', async (t) => {

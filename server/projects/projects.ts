@@ -264,30 +264,32 @@ export class Projects {
         409,
         'Новый репозиторий пересекается с приватным контекстом. Сначала измените связь.',
       );
-    const used = this.store.db
-      .prepare(
-        `SELECT (
+    this.store.transaction(() => {
+      const target = this.require(targetId);
+      const used = this.store.db
+        .prepare(
+          `SELECT (
       (SELECT count(*) FROM records WHERE project_id=?) +
       (SELECT count(*) FROM checks WHERE project_id=?) +
       (SELECT count(*) FROM relations WHERE sourceId=? OR targetId=?) +
-      (SELECT count(*) FROM task_history WHERE project_id=?)
+      (SELECT count(*) FROM task_history WHERE project_id=?) +
+      (SELECT count(*) FROM observations WHERE project_id=?)
     ) AS total`,
+        )
+        .get(targetId, targetId, targetId, targetId, targetId, targetId) as { total: number };
+      if (
+        target.metadata ||
+        target.notes ||
+        JSON.parse(target.decision_sources).length ||
+        target.visibility !== 'unknown' ||
+        target.private_context_path ||
+        JSON.parse(target.publication_allowlist).length ||
+        used.total
       )
-      .get(targetId, targetId, targetId, targetId, targetId) as { total: number };
-    if (
-      target.metadata ||
-      target.notes ||
-      JSON.parse(target.decision_sources).length ||
-      target.visibility !== 'unknown' ||
-      target.private_context_path ||
-      JSON.parse(target.publication_allowlist).length ||
-      used.total
-    )
-      throw new HttpError(
-        409,
-        'У выбранного проекта уже есть свои данные. Автоматическое слияние запрещено. Выберите новый, ещё не настроенный каталог.',
-      );
-    this.store.transaction(() => {
+        throw new HttpError(
+          409,
+          'У выбранного проекта уже есть свои данные. Автоматическое слияние запрещено. Выберите новый, ещё не настроенный каталог.',
+        );
       this.store.db.prepare('DELETE FROM projects WHERE id=?').run(targetId);
       this.store.db
         .prepare('UPDATE projects SET path=?,snapshot=?,available=1 WHERE id=?')
@@ -317,6 +319,9 @@ export class Projects {
         )
         .run(new Date().toISOString(), id);
       this.store.db.prepare('UPDATE checks SET project_id=NULL WHERE project_id=?').run(id);
+      this.store.db
+        .prepare('UPDATE observations SET revision=revision+1,updated_at=? WHERE project_id=?')
+        .run(new Date().toISOString(), id);
       this.store.db.prepare('DELETE FROM relations WHERE sourceId=? OR targetId=?').run(id, id);
       this.store.db.prepare('DELETE FROM projects WHERE id=?').run(id);
     });
