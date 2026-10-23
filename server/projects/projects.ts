@@ -274,9 +274,12 @@ export class Projects {
       (SELECT count(*) FROM relations WHERE sourceId=? OR targetId=?) +
       (SELECT count(*) FROM task_history WHERE project_id=?) +
       (SELECT count(*) FROM observations WHERE project_id=?)
+      + (SELECT count(*) FROM reviews WHERE project_id=?)
     ) AS total`,
         )
-        .get(targetId, targetId, targetId, targetId, targetId, targetId) as { total: number };
+        .get(targetId, targetId, targetId, targetId, targetId, targetId, targetId) as {
+        total: number;
+      };
       if (
         target.metadata ||
         target.notes ||
@@ -321,6 +324,9 @@ export class Projects {
       this.store.db.prepare('UPDATE checks SET project_id=NULL WHERE project_id=?').run(id);
       this.store.db
         .prepare('UPDATE observations SET revision=revision+1,updated_at=? WHERE project_id=?')
+        .run(new Date().toISOString(), id);
+      this.store.db
+        .prepare('UPDATE reviews SET revision=revision+1,updated_at=? WHERE project_id=?')
         .run(new Date().toISOString(), id);
       this.store.db.prepare('DELETE FROM relations WHERE sourceId=? OR targetId=?').run(id, id);
       this.store.db.prepare('DELETE FROM projects WHERE id=?').run(id);

@@ -8,6 +8,7 @@ import { Records } from '../server/records.js';
 import { Checks } from '../server/checks/checks.js';
 import { Projects } from '../server/projects/projects.js';
 import { Observations } from '../server/observations.js';
+import { Reviews } from '../server/reviews.js';
 import { defaultSettings, metadataSchema } from '../shared/contracts.js';
 import { dataDirectory } from '../server/storage.js';
 
@@ -50,6 +51,11 @@ test('rebind preserves old ID, every record, checks, relations, notes and local 
     occurredOn: '2020-01-01',
     projectId: old.id,
   });
+  const review = new Reviews(store).create({
+    projectId: old.id,
+    kind: 'week',
+    anchorDate: '2024-10-01',
+  });
   const idea = records.save('ideas', { title: 'Idea', projectId: old.id });
   const decision = records.save('decisions', {
     title: 'Decision',
@@ -74,6 +80,7 @@ test('rebind preserves old ID, every record, checks, relations, notes and local 
   assert.equal(rebound.metadata.name, 'Kept title');
   assert.equal(rebound.notes, 'Keep notes');
   assert.equal(new Observations(store).read(observation.id).projectId, old.id);
+  assert.equal(new Reviews(store).read(review.id).projectId, old.id);
   assert.equal(store.project(candidate.id), undefined);
   assert.equal(projects.list().length, 2);
   assert.equal(records.list('tasks')[0].id, task.id);
@@ -86,6 +93,8 @@ test('rebind preserves old ID, every record, checks, relations, notes and local 
   for (const kind of ['tasks', 'ideas', 'decisions'] as const)
     assert.equal(records.list(kind)[0].projectId, null);
   assert.equal(checks.require(check.id).projectId, null);
+  assert.equal(new Reviews(store).read(review.id).projectId, null);
+  assert.equal(new Reviews(store).read(review.id).scopeKey, `project:${old.id}`);
   assert.equal(checks.entries()[0].id, entry.id);
   assert.equal(records.relations().length, 0);
   assert.deepEqual(store.db.prepare('PRAGMA foreign_key_check').all(), []);
@@ -119,6 +128,14 @@ test('rebind rejects a target with user data', async (t) => {
   await assert.rejects(projects.rebind(one.id, two.id), /свои данные/);
   assert.equal(new Observations(store).read(observation.id).projectId, two.id);
   new Observations(store).delete(observation.id, { revision: observation.revision });
+  const review = new Reviews(store).create({
+    projectId: two.id,
+    kind: 'week',
+    anchorDate: '2024-10-01',
+  });
+  await assert.rejects(projects.rebind(one.id, two.id), /свои данные/);
+  assert.equal(new Reviews(store).read(review.id).projectId, two.id);
+  new Reviews(store).delete(review.id, { revision: review.revision });
   const transaction = store.transaction.bind(store);
   let inserted = false;
   let concurrentId = '';

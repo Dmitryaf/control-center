@@ -35,12 +35,12 @@ export class Store {
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (![0, 2, 3, 4, 5, 6].includes(version.user_version)) {
+    if (![0, 2, 3, 4, 5, 6, 7].includes(version.user_version)) {
       this.db.close();
       throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
     }
     try {
-      if (existing && version.user_version < 6) {
+      if (existing && version.user_version < 7) {
         const directory = join(dirname(path), 'backups');
         mkdirSync(directory, { recursive: true });
         const prefix =
@@ -48,7 +48,9 @@ export class Store {
             ? 'before-tasks-v4'
             : version.user_version < 5
               ? 'before-history-v5'
-              : 'before-observations-v6';
+              : version.user_version < 6
+                ? 'before-observations-v6'
+                : 'before-reviews-v7';
         snapshotDatabase(this.db, join(directory, `${prefix}-${randomUUID()}.sqlite`));
       }
       this.transaction(() => {
@@ -57,7 +59,7 @@ export class Store {
         const lockedVersion = this.db.prepare('PRAGMA user_version').get() as {
           user_version: number;
         };
-        if (![0, 2, 3, 4, 5, 6].includes(lockedVersion.user_version))
+        if (![0, 2, 3, 4, 5, 6, 7].includes(lockedVersion.user_version))
           throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
@@ -144,7 +146,23 @@ export class Store {
           request_key TEXT UNIQUE, request_hash TEXT
         );
         CREATE INDEX IF NOT EXISTS observations_scope_date ON observations(scope_project_id,occurred_on);`);
-        this.db.exec('PRAGMA user_version = 6;');
+        this.db.exec(`CREATE TABLE IF NOT EXISTS reviews (
+          id TEXT PRIMARY KEY,
+          project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+          scope_key TEXT NOT NULL, project_name TEXT,
+          period_kind TEXT NOT NULL CHECK(period_kind IN ('week','month')),
+          period_start TEXT NOT NULL, period_end TEXT NOT NULL, timezone TEXT NOT NULL,
+          start_at TEXT NOT NULL, next_start_at TEXT NOT NULL, user_text TEXT NOT NULL,
+          revision INTEGER NOT NULL CHECK(revision>0), created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+          UNIQUE(scope_key,period_kind,period_start)
+        );
+        CREATE INDEX IF NOT EXISTS reviews_period ON reviews(period_start,period_end);
+        `);
+        if (lockedVersion.user_version < 7)
+          this.db.exec(
+            `UPDATE settings SET data=json_set(data,'$.timezone','Asia/Yekaterinburg') WHERE json_type(data,'$.timezone') IS NULL;`,
+          );
+        this.db.exec('PRAGMA user_version = 7;');
       });
     } catch (error) {
       this.db.close();

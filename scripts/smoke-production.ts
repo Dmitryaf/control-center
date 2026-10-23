@@ -7,6 +7,7 @@ import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { fixture } from '../tests/fixtures.js';
 import type { Workspace, Task, TaskHistoryPage } from '../shared/contracts.js';
 import type { Observation } from '../shared/observations.js';
+import type { Review } from '../shared/reviews.js';
 
 const fixtureData = await fixture();
 const repo = await fixtureData.repo('production-project');
@@ -174,6 +175,19 @@ try {
   });
   assert.equal(observationResponse.status, 201);
   const observation = (await observationResponse.json()) as Observation;
+  const reviewResponse = await request('/api/reviews', 'POST', {
+    projectId: id,
+    kind: 'week',
+    anchorDate: '2020-01-02',
+  });
+  assert.equal(reviewResponse.status, 201);
+  const createdReview = (await reviewResponse.json()) as Review;
+  const editedReview = await request(`/api/reviews/${createdReview.id}`, 'PATCH', {
+    revision: createdReview.revision,
+    userText: 'Production review',
+  });
+  assert.equal(editedReview.status, 200);
+  const review = (await editedReview.json()) as Review;
   const backupResponse = await request('/api/backup', 'POST', {});
   assert.equal(backupResponse.status, 200);
   const backup = (await backupResponse.json()) as { path: string };
@@ -184,6 +198,10 @@ try {
   );
   assert.equal(backupDb.prepare('PRAGMA quick_check').get()?.quick_check, 'ok');
   assert.equal(backupDb.prepare('SELECT COUNT(*) AS n FROM task_history').get()?.n, 1);
+  assert.equal(
+    backupDb.prepare('SELECT user_text FROM reviews WHERE id=?').get(review.id)?.user_text,
+    'Production review',
+  );
   assert.equal(
     backupDb.prepare('SELECT body FROM observations WHERE id=?').get(observation.id)?.body,
     'Production observation',
@@ -198,6 +216,13 @@ try {
   await stop();
   await start();
   const restarted = (await (await request('/api/workspace')).json()) as Workspace;
+  assert.deepEqual(await (await request(`/api/reviews/${review.id}`)).json(), review);
+  const reviewSources = await (await request(`/api/reviews/${review.id}/history`)).json();
+  assert.ok(
+    reviewSources.items.some((entry: { sourceId: string }) => entry.sourceId === observation.id),
+  );
+  assert.ok(reviewSources.items.every((entry: { kind: string }) => entry.kind !== 'review'));
+  assert.match(await (await request(`/reviews?id=${review.id}`)).text(), /Control Center/);
   assert.equal(
     (await request('/api/analysis/run', 'POST', { previewId: analysisPreview.id, consent: true }))
       .status,

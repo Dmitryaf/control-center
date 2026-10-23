@@ -93,16 +93,19 @@ time {
   }
 }
 
-.observation-editor {
+.observation-editor,
+.review-editor {
   max-width: 900px;
 }
-.observation-editor fieldset {
+.observation-editor fieldset,
+.review-editor fieldset {
   border: 0;
   padding: 0;
   margin: 0;
   min-width: 0;
 }
-.observation-editor fieldset > label {
+.observation-editor fieldset > label,
+.review-editor fieldset > label {
   display: grid;
   gap: 6px;
   margin: 20px 0 12px;

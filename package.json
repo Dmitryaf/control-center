@@ -21,6 +21,7 @@
     "check": "npm run lint && npm run typecheck && npm test && npm run test:react && npm run build"
   },
   "dependencies": {
+    "@date-fns/tz": "1.5.0",
     "@modelcontextprotocol/sdk": "1.32.1",
     "@tanstack/react-query": "^5.104.5",
     "date-fns": "^4.4.0",

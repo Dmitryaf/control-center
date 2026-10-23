@@ -201,7 +201,9 @@ export default function Overview() {
       >
         <div className="section-heading">
           <h2 id="recent-work-heading">Последние результаты</h2>
-          <Link to={`/timeline${range ? `?${range.slice(1)}` : ''}`}>Вся история →</Link>
+          <Link to={`/timeline${range ? `?${range.slice(1)}&timezone=UTC` : ''}`}>
+            Вся история →
+          </Link>
         </div>
         <label className="overview-period">
           Период записей

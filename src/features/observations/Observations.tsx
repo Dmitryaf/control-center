@@ -3,15 +3,19 @@ import { Link, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { observationFieldsSchema, type Observation } from '../../../shared/observations';
-import { calendarDate } from '../../../shared/time';
+import { dateInZone } from '../../../shared/periods';
 import { useWorkspace, useActions } from '../../shared/workspace';
 import { api } from '../../shared/http';
 import { UnsavedChanges } from '../../shared/UnsavedChanges';
 
 type Fields = { body: string; occurredOn: string; project: string };
-const fields = (initial?: Observation, project?: string | null): Fields => ({
+const fields = (
+  initial?: Observation,
+  project?: string | null,
+  timezone = 'Asia/Yekaterinburg',
+): Fields => ({
   body: initial?.body ?? '',
-  occurredOn: initial?.occurredOn ?? calendarDate(),
+  occurredOn: initial?.occurredOn ?? dateInZone(new Date(), timezone),
   project: initial
     ? (initial.projectId ?? (initial.scopeProjectId ? '__retained__' : ''))
     : (project ?? ''),
@@ -34,7 +38,7 @@ function Editor({
     reset,
     getValues,
     formState: { isDirty, isSubmitting },
-  } = useForm<Fields>({ defaultValues: fields(initial, project) });
+  } = useForm<Fields>({ defaultValues: fields(initial, project, w!.settings.timezone) });
   const [revision, setRevision] = useState(initial?.revision);
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
   const [lastSaved, setLastSaved] = useState('');
@@ -75,7 +79,7 @@ function Editor({
     setRevision(saved.revision);
     if (!initial) setRequestKey(crypto.randomUUID());
     if (JSON.stringify(getValues()) === JSON.stringify(values))
-      reset(initial ? fields(saved) : fields(undefined, project));
+      reset(initial ? fields(saved) : fields(undefined, project, w!.settings.timezone));
     else
       setValidation('Запись сохранена. Изменённый во время сохранения текст остаётся в черновике.');
   }

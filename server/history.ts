@@ -7,10 +7,12 @@ import {
 } from '../shared/history.js';
 import type { Store } from './db.js';
 import type { DecisionIndex } from './decisions/index.js';
+import { dateInZone } from '../shared/periods.js';
+import { reviewPageSchema, type Review } from '../shared/reviews.js';
 
 // A read projection over existing owners, never an event journal or a copy of their bodies.
-const entriesSql = `WITH entries(key,kind,event,sourceId,day,recordedAt,dateQuality,projectId,scopeProjectId,projectName,title,body,href) AS (
-  SELECT 'task:'||h.id,'task','task_'||h.kind,CAST(h.id AS TEXT),substr(h.recorded_at,1,10),h.recorded_at,
+const entriesSql = `WITH options(zone) AS (VALUES(?)), entries(key,kind,event,sourceId,day,recordedAt,dateQuality,projectId,scopeProjectId,projectName,title,body,href) AS (
+  SELECT 'task:'||h.id,'task','task_'||h.kind,CAST(h.id AS TEXT),history_day(h.recorded_at,(SELECT zone FROM options)),h.recorded_at,
     CASE WHEN h.kind='baseline' THEN 'baseline' ELSE 'recorded' END,h.project_id,COALESCE(h.project_id,json_extract(h.snapshot,'$.projectId')),h.project_name,
     json_extract(h.snapshot,'$.code')||' · '||json_extract(h.snapshot,'$.title'),
     CASE WHEN h.kind='reopened' THEN '' ELSE COALESCE(json_extract(h.snapshot,'$.result.summary'),'') END,
@@ -41,6 +43,11 @@ const entriesSql = `WITH entries(key,kind,event,sourceId,day,recordedAt,dateQual
   UNION ALL
   SELECT 'observation:'||o.id,'observation','observation',o.id,o.occurred_on,NULL,'declared',o.project_id,o.scope_project_id,o.project_name,
     substr(o.body,1,120),o.body,'/observations?id='||o.id FROM observations o
+  UNION ALL
+  SELECT 'review:'||r.id,'review','review',r.id,r.period_start,NULL,'declared',r.project_id,
+    CASE WHEN r.scope_key='general' THEN NULL ELSE substr(r.scope_key,9) END,r.project_name,
+    CASE WHEN r.period_kind='week' THEN 'Обзор недели · ' ELSE 'Обзор месяца · ' END||r.period_start||' — '||r.period_end,
+    r.user_text,'/reviews?id='||r.id FROM reviews r
 )
 `;
 
@@ -48,9 +55,34 @@ export class History {
   constructor(
     private store: Store,
     private decisions: DecisionIndex,
-  ) {}
+  ) {
+    store.db.function('history_day', (instant, zone) =>
+      dateInZone(new Date(String(instant)), String(zone)),
+    );
+  }
 
   list(input: unknown = {}): HistoryPage {
+    return this.listEntries(input);
+  }
+
+  forReview(review: Review, input: unknown = {}): HistoryPage {
+    const page = reviewPageSchema.parse(input);
+    return this.listEntries(
+      {
+        ...page,
+        ...(review.scopeKey !== 'general' ? { projectId: review.scopeKey.slice(8) } : {}),
+        from: review.periodStart,
+        to: review.periodEnd,
+        timezone: review.timezone,
+      },
+      review,
+    );
+  }
+
+  private listEntries(
+    input: unknown,
+    bounds?: Pick<Review, 'startAt' | 'nextStartAt'>,
+  ): HistoryPage {
     const query = historyQuerySchema.parse(input);
     const cursor = query.cursor ? historyCursorSchema.parse(JSON.parse(query.cursor)) : null;
     const projects = this.store.projects();
@@ -76,7 +108,7 @@ export class History {
         href: `/projects/${file.projectId}#file-decisions`,
       }));
     const where: string[] = [];
-    const values: (string | number)[] = [JSON.stringify(fileRows)];
+    const values: (string | number)[] = [query.timezone, JSON.stringify(fileRows)];
     if (query.projectId === null) where.push('projectId IS NULL');
     else if (query.projectId) {
       where.push('scopeProjectId=?');
@@ -86,11 +118,17 @@ export class History {
       where.push('kind=?');
       values.push(query.kind);
     }
-    if (query.from) {
+    if (bounds) {
+      where.push(
+        "kind<>'review'",
+        '((recordedAt IS NOT NULL AND recordedAt>=? AND recordedAt<?) OR (recordedAt IS NULL AND day>=? AND day<=?))',
+      );
+      values.push(bounds.startAt, bounds.nextStartAt, query.from!, query.to!);
+    } else if (query.from) {
       where.push('day>=?');
       values.push(query.from);
     }
-    if (query.to) {
+    if (!bounds && query.to) {
       where.push('day<=?');
       values.push(query.to);
     }

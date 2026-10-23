@@ -278,9 +278,14 @@ test('overview period uses inclusive UTC dates and carries them into history', a
   await expect(page.locator('.recent-work')).toContainText('На границе периода');
   await expect(page.locator('.recent-work')).not.toContainText('До периода');
   await expect(page.locator('.recent-work')).toContainText('Показано 1 из 1');
+  const historyRead = page.waitForRequest(
+    (request) => new URL(request.url()).pathname === '/api/history',
+  );
   await page.locator('.recent-work').getByRole('link', { name: 'Вся история →' }).click();
-  await expect(page.getByLabel('С даты (UTC)')).toHaveValue('2026-10-17');
-  await expect(page.getByLabel('По дату (UTC)')).toHaveValue('2026-10-23');
+  await expect(page.getByLabel('С даты', { exact: true })).toHaveValue('2026-10-17');
+  await expect(page.getByLabel('По дату', { exact: true })).toHaveValue('2026-10-23');
+  expect(new URL((await historyRead).url()).searchParams.get('timezone')).toBe('UTC');
+  await expect(page.getByText('Часовой пояс: UTC.', { exact: false })).toBeVisible();
 });
 
 test('recent work preserves newer reads, exposes a current failure and retries without clearing known results', async ({

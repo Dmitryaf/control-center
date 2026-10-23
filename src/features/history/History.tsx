@@ -5,7 +5,8 @@ import type { HistoryPage, HistoryEvent } from '../../../shared/history';
 import { api } from '../../shared/http';
 import { useWorkspace } from '../../shared/workspace';
 import { date } from '../../shared/labels';
-import { utcRange } from './period';
+import { zonedRange } from './period';
+import { dateInZone, timezoneSchema } from '../../../shared/periods';
 
 const kinds = {
   '': 'Все источники',
@@ -14,6 +15,7 @@ const kinds = {
   decision: 'Локальные решения',
   file_decision: 'Решения из файлов',
   observation: 'Наблюдения',
+  review: 'Обзоры периодов',
 };
 const events: Record<HistoryEvent, string> = {
   task_baseline: 'Запись при переходе',
@@ -27,13 +29,16 @@ const events: Record<HistoryEvent, string> = {
   decision: 'Локальное решение',
   file_decision: 'Решение из файла',
   observation: 'Наблюдение',
+  review: 'Обзор периода',
 };
 export default function History() {
   const [params, setParams] = useSearchParams();
   const { data: workspace } = useWorkspace();
   const client = useQueryClient();
-  const filterKey = params.toString();
-  const today = new Date().toISOString().slice(0, 10);
+  const parsedZone = timezoneSchema.safeParse(params.get('timezone'));
+  const timezone = parsedZone.success ? parsedZone.data : workspace!.settings.timezone;
+  const filterKey = `${params.toString()}|${timezone}`;
+  const today = dateInZone(new Date(), timezone);
   const includesToday =
     (!params.get('from') || params.get('from')! <= today) &&
     (!params.get('to') || params.get('to')! >= today);
@@ -65,6 +70,7 @@ export default function History() {
     refetchInterval: cursor ? false : 5000,
     queryFn: ({ signal }) => {
       const queryParams = new URLSearchParams();
+      queryParams.set('timezone', timezone);
       if (params.get('project')) queryParams.set('projectId', params.get('project')!);
       for (const key of ['kind', 'from', 'to'])
         if (params.get(key)) queryParams.set(key, params.get(key)!);
@@ -84,6 +90,17 @@ export default function History() {
         <div className="row">
           <Link
             className="button"
+            to={`/reviews?${new URLSearchParams({
+              ...(params.get('project') && params.get('project') !== '__unlinked__'
+                ? { project: params.get('project')! }
+                : {}),
+              ...(params.get('from') ? { day: params.get('from')! } : {}),
+            })}`}
+          >
+            Открыть обзор периода
+          </Link>
+          <Link
+            className="button"
             to={`/observations${params.get('project') && params.get('project') !== '__unlinked__' ? `?project=${params.get('project')}` : ''}`}
           >
             Записать наблюдение
@@ -96,6 +113,7 @@ export default function History() {
         onSubmit={(event) => {
           event.preventDefault();
           const next = new URLSearchParams();
+          next.set('timezone', timezone);
           for (const [key, value] of Object.entries(draft)) if (value) next.set(key, value);
           setPage({ key: next.toString(), cursors: [null] });
           setParams(next);
@@ -141,19 +159,19 @@ export default function History() {
             onChange={(event) => {
               setPeriod(event.target.value);
               if (event.target.value !== 'custom')
-                setDraft({ ...draft, ...utcRange(event.target.value) });
+                setDraft({ ...draft, ...zonedRange(event.target.value, timezone) });
             }}
           >
             <option value="all">Все время</option>
-            <option value="week">Текущая неделя (UTC)</option>
-            <option value="previous_week">Прошлая неделя (UTC)</option>
-            <option value="month">Текущий месяц (UTC)</option>
-            <option value="previous_month">Прошлый месяц (UTC)</option>
+            <option value="week">Текущая неделя</option>
+            <option value="previous_week">Прошлая неделя</option>
+            <option value="month">Текущий месяц</option>
+            <option value="previous_month">Прошлый месяц</option>
             <option value="custom">Свой диапазон</option>
           </select>
         </label>
         <label>
-          С даты (UTC)
+          С даты
           <input
             type="date"
             value={draft.from}
@@ -164,7 +182,7 @@ export default function History() {
           />
         </label>
         <label>
-          По дату (UTC)
+          По дату
           <input
             type="date"
             min={draft.from || undefined}
@@ -178,7 +196,7 @@ export default function History() {
         <button>Показать</button>
       </form>
       <p className="help section-space">
-        Даты фильтра включают весь день по UTC; точное время записей показано по местному времени.
+        Часовой пояс: {timezone}. Даты фильтра включают весь день в этой зоне.
         {includesToday && ' Текущий день ещё не завершён.'} Указанные даты проверок и решений не
         содержат времени.
       </p>
@@ -188,8 +206,8 @@ export default function History() {
           История задач хранит отдельные снимки результатов. Проверки и решения показаны в текущей
           сохранённой редакции с указанной датой; прошлые изменения не восстановлены. Удаление таких
           источников убирает их из ленты. Решения из файлов читаются из последнего индекса, их
-          тексты не копируются. История целей и статусов и обзоры периодов пока сюда не входят.
-          Наблюдения показаны в текущей редакции, без архива правок.
+          тексты не копируются. История целей и статусов пока сюда не входит. Наблюдения и обзоры
+          показаны в текущей редакции, без архива правок.
         </p>
         <p>
           Общие и отвязанные записи видны вместе. Прежняя связь локального решения с удалённым
@@ -249,7 +267,7 @@ export default function History() {
             <div className="history-date">
               <time dateTime={entry.recordedAt ?? entry.day}>
                 {entry.recordedAt
-                  ? new Date(entry.recordedAt).toLocaleString('ru')
+                  ? new Date(entry.recordedAt).toLocaleString('ru', { timeZone: timezone })
                   : date(entry.day)}
               </time>
               <p className="help">

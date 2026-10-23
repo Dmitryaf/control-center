@@ -51,7 +51,7 @@ export default function Settings() {
     if (ok && JSON.stringify(getValues()) === JSON.stringify(values)) reset(values);
   }
   const numberField = (
-    name: keyof Omit<Fields, 'roots' | 'exclusions' | 'excludedProjectPaths'>,
+    name: keyof Omit<Fields, 'roots' | 'exclusions' | 'excludedProjectPaths' | 'timezone'>,
     label: string,
     min = 1,
     max = 3650,
@@ -103,6 +103,14 @@ export default function Settings() {
           </p>
         </details>
         <h2>Обновление состояния проектов</h2>
+        <label>
+          Часовой пояс истории и обзоров
+          <input required {...register('timezone')} placeholder="Asia/Yekaterinburg" />
+        </label>
+        <p className="help">
+          Название IANA, например Asia/Yekaterinburg или Europe/Berlin. Неделя начинается в
+          понедельник. Сохранённые обзоры сохраняют прежнюю зону и границы.
+        </p>
         {numberField('autoRefreshMinutes', 'Интервал обновления, минут', 0, 60)}
         <p className="help">
           0 отключает автоматическое обновление. Пока запущен локальный сервер, он перечитывает Git,

@@ -33,7 +33,7 @@ test('v5 upgrade backs up committed WAL, keeps task snapshots, restarts and rest
   } finally {
     seed.close();
   }
-  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 6);
+  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 7);
   assert.deepEqual(upgraded.db.prepare('SELECT * FROM task_history').all(), before);
   assert.equal(new Tasks(upgraded).read(task.code).result?.summary, 'Keep work');
   const files = await readdir(path.join(f.root, 'backups'));
@@ -111,7 +111,7 @@ test('backup and DDL failures leave v5 unchanged; future version under the write
         const stale = get(...args);
         changed = true;
         const future = new DatabaseSync(futureFile);
-        future.exec('PRAGMA user_version=7');
+        future.exec('PRAGMA user_version=8');
         future.close();
         return stale;
       };
@@ -124,7 +124,7 @@ test('backup and DDL failures leave v5 unchanged; future version under the write
     DatabaseSync.prototype.prepare = prepare;
   }
   check = new DatabaseSync(futureFile, { readOnly: true });
-  assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 7);
+  assert.equal(check.prepare('PRAGMA user_version').get()?.user_version, 8);
   check.close();
 });
 

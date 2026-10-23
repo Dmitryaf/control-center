@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { timezoneSchema } from './periods.js';
 
 export const historyKindSchema = z.enum([
   'task',
@@ -6,6 +7,7 @@ export const historyKindSchema = z.enum([
   'decision',
   'file_decision',
   'observation',
+  'review',
 ]);
 export type HistoryKind = z.infer<typeof historyKindSchema>;
 export const historyQuerySchema = z
@@ -14,6 +16,7 @@ export const historyQuerySchema = z
     kind: historyKindSchema.optional(),
     from: z.string().date().optional(),
     to: z.string().date().optional(),
+    timezone: timezoneSchema.default('UTC'),
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(30),
   })
@@ -40,7 +43,8 @@ export type HistoryEvent =
   | 'check_evidence'
   | 'decision'
   | 'file_decision'
-  | 'observation';
+  | 'observation'
+  | 'review';
 export interface HistoryEntry {
   key: string;
   kind: HistoryKind;

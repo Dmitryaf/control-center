@@ -187,10 +187,10 @@ test('history read errors keep known entries, retry without losing filters, and 
   await expect(page.locator('.history-record')).toContainText('Known result');
   fail = false;
   await page.getByRole('button', { name: 'Повторить', exact: true }).click();
-  await page.getByLabel('С даты (UTC)').fill('2025-01-01');
+  await page.getByLabel('С даты', { exact: true }).fill('2025-01-01');
   await page.getByRole('button', { name: 'Показать', exact: true }).click();
   await expect(page.locator('.history-record')).toHaveCount(0);
-  await expect(page.getByLabel('С даты (UTC)')).toHaveValue('2025-01-01');
+  await expect(page.getByLabel('С даты', { exact: true })).toHaveValue('2025-01-01');
   await expect(
     page.getByText('В доступных источниках за выбранный период записей нет.', { exact: true }),
   ).toBeVisible();

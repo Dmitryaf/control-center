@@ -21,6 +21,7 @@ import { Tasks } from './tasks.js';
 import { TaskHistory } from './task-history.js';
 import { History } from './history.js';
 import { Observations } from './observations.js';
+import { Reviews } from './reviews.js';
 import { ProjectAnalysis } from './analysis/analysis.js';
 
 export function createApp(store: Store, port: number, analysis = new ProjectAnalysis(store)) {
@@ -32,6 +33,7 @@ export function createApp(store: Store, port: number, analysis = new ProjectAnal
   const tasks = new Tasks(store);
   const history = new History(store, projects.decisions);
   const observations = new Observations(store);
+  const reviews = new Reviews(store);
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -53,6 +55,19 @@ export function createApp(store: Store, port: number, analysis = new ProjectAnal
     next();
   });
   app.use(express.json({ limit: '256kb' }));
+  app.get('/api/reviews/:id/related', (req, res) =>
+    res.json(reviews.related(req.params.id, req.query)),
+  );
+  app.get('/api/reviews/:id/history', (req, res) =>
+    res.json(history.forReview(reviews.read(req.params.id), req.query)),
+  );
+  app.get('/api/reviews/:id', (req, res) => res.json(reviews.read(req.params.id)));
+  app.post('/api/reviews', (req, res) => res.status(201).json(reviews.create(req.body)));
+  app.patch('/api/reviews/:id', (req, res) => res.json(reviews.patch(req.params.id, req.body)));
+  app.delete('/api/reviews/:id', (req, res) => {
+    reviews.delete(req.params.id, req.body);
+    res.json({ ok: true });
+  });
   app.get('/api/observations/:id', (req, res) => res.json(observations.read(req.params.id)));
   app.post('/api/observations', (req, res) => res.status(201).json(observations.create(req.body)));
   app.patch('/api/observations/:id', (req, res) =>
@@ -103,6 +118,7 @@ export function createApp(store: Store, port: number, analysis = new ProjectAnal
       settings.excludedProjectPaths = store.settings().excludedProjectPaths;
     if (req.body.autoRefreshMinutes === undefined)
       settings.autoRefreshMinutes = store.settings().autoRefreshMinutes;
+    if (req.body.timezone === undefined) settings.timezone = store.settings().timezone;
     if (
       [...settings.roots, ...settings.excludedProjectPaths].some((root) => !path.isAbsolute(root))
     )

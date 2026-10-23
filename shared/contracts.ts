@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { CheckView, CheckEntry } from './checks.js';
 import type { FileDecision } from './decisions.js';
 import type { ProjectContext } from './context.js';
+import { timezoneSchema } from './periods.js';
 
 const text = z.string().trim().max(10000);
 const title = z.string().trim().min(1).max(240);
@@ -29,6 +30,7 @@ export const settingsSchema = z
     inactivityDays: z.number().int().min(1).max(3650),
     reviewDays: z.number().int().min(1).max(3650),
     autoRefreshMinutes: z.number().int().min(0).max(60).default(1),
+    timezone: timezoneSchema.default('Asia/Yekaterinburg'),
     movementInfoDays: z.number().int().min(1).max(3650).default(3),
     movementAttentionDays: z.number().int().min(1).max(3650).default(7),
     movementDecisionDays: z.number().int().min(1).max(3650).default(14),
@@ -47,6 +49,7 @@ export const defaultSettings: Settings = {
   inactivityDays: 14,
   reviewDays: 30,
   autoRefreshMinutes: 1,
+  timezone: 'Asia/Yekaterinburg',
   movementInfoDays: 3,
   movementAttentionDays: 7,
   movementDecisionDays: 14,
