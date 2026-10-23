@@ -19,11 +19,11 @@ While the local server runs, known projects are reread automatically, with a one
 
 ## Tasks and Codex
 
-Tasks have stable `CC-N` identifiers, search, project/state filters, priorities and saved results. A local stdio MCP server shares the same SQLite database and works without the UI. See the [Russian Codex setup and task guide](docs/codex.md).
+Tasks have stable `CC-N` identifiers, search, project/state filters, priorities and saved results. A local stdio MCP server shares the same SQLite database and works without the UI.
 
 Legacy focus and next steps remain readable on the project page; explicitly import next steps to the board when needed. Editing project details preserves that saved plan. YAML export retains legacy and unknown fields without copying current tasks or results into repository files; the existing metadata API remains compatible.
 
-Open **Work history** from Tasks or a project to see saved results, completions and reopenings by project, task and inclusive UTC date range. Earlier results remain after editing or deleting a task; history is read-only and stays in the local database and its backups. Reported checks are not independently verified. Upgrading from schema 4 creates a verified backup before schema 5; stop all older app and MCP processes first. See [backup and restore](docs/data.md).
+Open **Work history** from Tasks or a project to see saved results, completions and reopenings by project, task and inclusive UTC date range. Earlier results remain after editing or deleting a task; history is read-only and stays in the local database and its backups. Reported checks are not independently verified. Upgrading from schema 4 creates a verified backup before schema 5; stop all older app and MCP processes first.
 
 ## Checks
 
@@ -43,7 +43,7 @@ SQLite stores your settings, notes, tasks, ideas, checks, and local decisions. T
 
 Set `CONTROL_CENTER_DATA_DIR` to use another directory.
 
-**Settings → Create backup** saves and verifies a SQLite copy and shows its path. See [backup and restore](docs/data.md) for recovery instructions.
+**Settings → Create backup** saves and verifies a SQLite copy and shows its path.
 
 Moved a project? Scan its new location, open the unavailable project, and use **Rebind** to keep its ID and history. **Удалить из Control Center** removes any project after confirmation and excludes its directory from future scans. Records and checks remain unassigned; relations, local metadata and project notes are removed. Repository and private-context files stay intact. To discover it again, remove its path under **Settings → Проекты, удалённые из Control Center** and save settings. It receives a new ID; removed local data and former record links are not restored.
 
@@ -70,7 +70,7 @@ For public projects, **Проверка публикации** inspects `git ls-
 
 Visibility, private paths, publication confirmations, and the fact that private records were previously found stay only in SQLite and its private backups. They are never added to `PROJECT.yaml`, repository decisions, or Git configuration. Document bodies are not stored in SQLite. Only actionable publication/context problems are added to the overview. Control Center never installs Kit, moves source files, commits, pushes, or publishes automatically.
 
-Storage and scanning stay on your computer; scanning never runs project code. There are no accounts, cloud sync or GitHub API calls. Optional **Анализ проектов**, reached from the overview, sends an explicitly reviewed packet to OpenAI only when you request it. It proposes tasks; you choose, edit and create each one. See [setup, data and request limits](docs/analysis.md).
+Storage and scanning stay on your computer; scanning never runs project code. There are no accounts, cloud sync or GitHub API calls. Optional **Анализ проектов**, reached from the overview, sends an explicitly reviewed packet to OpenAI only when you request it. It proposes tasks; you choose, edit and create each one.
 
 ## Development
 

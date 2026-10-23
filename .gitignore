@@ -6,3 +6,9 @@ test-results/
 playwright-report/
 *.log
 .env
+
+# Project documentation stays local.
+/DECISIONS.md
+/decisions/
+/docs/
+/tests/e2e/README.md
