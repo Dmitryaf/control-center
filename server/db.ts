@@ -35,12 +35,12 @@ export class Store {
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (![0, 2, 3, 4, 5, 6, 7].includes(version.user_version)) {
+    if (![0, 2, 3, 4, 5, 6, 7, 8].includes(version.user_version)) {
       this.db.close();
       throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
     }
     try {
-      if (existing && version.user_version < 7) {
+      if (existing && version.user_version < 8) {
         const directory = join(dirname(path), 'backups');
         mkdirSync(directory, { recursive: true });
         const prefix =
@@ -50,7 +50,9 @@ export class Store {
               ? 'before-history-v5'
               : version.user_version < 6
                 ? 'before-observations-v6'
-                : 'before-reviews-v7';
+                : version.user_version < 7
+                  ? 'before-reviews-v7'
+                  : 'before-analysis-v8';
         snapshotDatabase(this.db, join(directory, `${prefix}-${randomUUID()}.sqlite`));
       }
       this.transaction(() => {
@@ -59,7 +61,7 @@ export class Store {
         const lockedVersion = this.db.prepare('PRAGMA user_version').get() as {
           user_version: number;
         };
-        if (![0, 2, 3, 4, 5, 6, 7].includes(lockedVersion.user_version))
+        if (![0, 2, 3, 4, 5, 6, 7, 8].includes(lockedVersion.user_version))
           throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
@@ -162,7 +164,21 @@ export class Store {
           this.db.exec(
             `UPDATE settings SET data=json_set(data,'$.timezone','Asia/Yekaterinburg') WHERE json_type(data,'$.timezone') IS NULL;`,
           );
-        this.db.exec('PRAGMA user_version = 7;');
+        this.db.exec(`CREATE TABLE IF NOT EXISTS analysis_runs (
+          id TEXT PRIMARY KEY,review_id TEXT REFERENCES reviews(id) ON DELETE SET NULL,
+          review_key TEXT NOT NULL,scope_key TEXT NOT NULL,generation INTEGER NOT NULL,
+          status TEXT NOT NULL CHECK(status IN ('pending','running','succeeded','failed','unknown','cancelled')),
+          trigger TEXT NOT NULL DEFAULT 'manual' CHECK(trigger IN ('manual','scheduled')),approved_at TEXT,
+          model TEXT NOT NULL,policy_version TEXT NOT NULL,
+          selection_json TEXT NOT NULL,payload_json TEXT NOT NULL,guards_json TEXT NOT NULL,packet_hash TEXT NOT NULL,
+          request_key TEXT NOT NULL UNIQUE,request_hash TEXT NOT NULL,
+          created_at TEXT NOT NULL,expires_at TEXT NOT NULL,started_at TEXT,finished_at TEXT,
+          lease_until TEXT,owner_id TEXT,cancel_requested INTEGER NOT NULL DEFAULT 0,
+          report_json TEXT,raw_output TEXT,error TEXT,usage_json TEXT,response_id TEXT,
+          UNIQUE(review_key,generation)
+        );
+        CREATE INDEX IF NOT EXISTS analysis_review_time ON analysis_runs(review_key,created_at,id);`);
+        this.db.exec('PRAGMA user_version = 8;');
       });
     } catch (error) {
       this.db.close();

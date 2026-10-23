@@ -23,8 +23,14 @@ import { History } from './history.js';
 import { Observations } from './observations.js';
 import { Reviews } from './reviews.js';
 import { ProjectAnalysis } from './analysis/analysis.js';
+import { PeriodAnalysis } from './analysis/period-analysis.js';
 
-export function createApp(store: Store, port: number, analysis = new ProjectAnalysis(store)) {
+export function createApp(
+  store: Store,
+  port: number,
+  analysis = new ProjectAnalysis(store),
+  suppliedPeriodAnalysis?: PeriodAnalysis,
+) {
   const app = express();
   const projects = new Projects(store);
   const refresh = new ProjectRefresh(projects);
@@ -33,6 +39,7 @@ export function createApp(store: Store, port: number, analysis = new ProjectAnal
   const tasks = new Tasks(store);
   const history = new History(store, projects.decisions);
   const observations = new Observations(store);
+  const periodAnalysis = suppliedPeriodAnalysis ?? new PeriodAnalysis(store, history);
   const reviews = new Reviews(store);
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   app.disable('x-powered-by');
@@ -55,6 +62,27 @@ export function createApp(store: Store, port: number, analysis = new ProjectAnal
     next();
   });
   app.use(express.json({ limit: '256kb' }));
+  app.get('/api/period-analysis/status', (_req, res) => res.json(periodAnalysis.status()));
+  app.post('/api/period-analysis/prepare', (req, res) =>
+    res.status(201).json(periodAnalysis.prepare(req.body)),
+  );
+  app.get('/api/period-analysis/:id', (req, res) => res.json(periodAnalysis.read(req.params.id)));
+  app.get('/api/reviews/:id/analyses', (req, res) =>
+    res.json(periodAnalysis.list(req.params.id, req.query)),
+  );
+  app.post('/api/period-analysis/:id/run', async (req, res) =>
+    res.json(await periodAnalysis.run(req.params.id, req.body)),
+  );
+  app.post('/api/period-analysis/:id/cancel', (req, res) =>
+    res.json(periodAnalysis.cancel(req.params.id)),
+  );
+  app.delete('/api/period-analysis/:id', (req, res) => {
+    z.object({ confirm: z.literal(true) })
+      .strict()
+      .parse(req.body);
+    periodAnalysis.delete(req.params.id);
+    res.json({ ok: true });
+  });
   app.get('/api/reviews/:id/related', (req, res) =>
     res.json(reviews.related(req.params.id, req.query)),
   );
@@ -331,5 +359,5 @@ export function createApp(store: Store, port: number, analysis = new ProjectAnal
         .json({ error: 'Операция не выполнена. Проверьте доступ к файлам и повторите.' });
   };
   app.use(onError);
-  return { app, projects, refresh, analysis };
+  return { app, projects, refresh, analysis, periodAnalysis };
 }

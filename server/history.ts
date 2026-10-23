@@ -4,6 +4,7 @@ import {
   historyCursorSchema,
   type HistoryEntry,
   type HistoryPage,
+  type HistoryKind,
 } from '../shared/history.js';
 import type { Store } from './db.js';
 import type { DecisionIndex } from './decisions/index.js';
@@ -64,8 +65,23 @@ export class History {
   list(input: unknown = {}): HistoryPage {
     return this.listEntries(input);
   }
+  fileMetadataStamp(key: string): string | null {
+    const file = this.decisions
+      .list()
+      .find((item) => 'file:' + createHash('sha256').update(item.key).digest('hex') === key);
+    if (!file?.metadata || file.error || !file.hasContent) return null;
+    return createHash('sha256')
+      .update(
+        JSON.stringify({ projectId: file.projectId, metadata: file.metadata, title: file.title }),
+      )
+      .digest('hex');
+  }
 
-  forReview(review: Review, input: unknown = {}): HistoryPage {
+  forReview(
+    review: Review,
+    input: unknown = {},
+    options?: { kinds?: HistoryKind[]; generalOnly?: boolean },
+  ): HistoryPage {
     const page = reviewPageSchema.parse(input);
     return this.listEntries(
       {
@@ -76,12 +92,14 @@ export class History {
         timezone: review.timezone,
       },
       review,
+      options,
     );
   }
 
   private listEntries(
     input: unknown,
     bounds?: Pick<Review, 'startAt' | 'nextStartAt'>,
+    options?: { kinds?: HistoryKind[]; generalOnly?: boolean },
   ): HistoryPage {
     const query = historyQuerySchema.parse(input);
     const cursor = query.cursor ? historyCursorSchema.parse(JSON.parse(query.cursor)) : null;
@@ -109,6 +127,11 @@ export class History {
       }));
     const where: string[] = [];
     const values: (string | number)[] = [query.timezone, JSON.stringify(fileRows)];
+    if (options?.generalOnly) where.push('scopeProjectId IS NULL');
+    if (options?.kinds) {
+      where.push('kind IN (SELECT value FROM json_each(?))');
+      values.push(JSON.stringify(options.kinds));
+    }
     if (query.projectId === null) where.push('projectId IS NULL');
     else if (query.projectId) {
       where.push('scopeProjectId=?');

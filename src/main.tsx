@@ -14,6 +14,7 @@ import Analysis from './features/analysis/Analysis';
 import History from './features/history/History';
 import Observations from './features/observations/Observations';
 import Reviews from './features/reviews/Reviews';
+import PeriodAnalysis from './features/period-analysis/PeriodAnalysis';
 import './style.css';
 import './styles/components.css';
 const router = createBrowserRouter([
@@ -28,6 +29,7 @@ const router = createBrowserRouter([
       { path: '/timeline', element: <History /> },
       { path: '/observations', element: <Observations /> },
       { path: '/reviews', element: <Reviews /> },
+      { path: '/period-analysis', element: <PeriodAnalysis /> },
       { path: '/checks', element: <Checks /> },
       { path: '/checks/:id', element: <CheckDetail /> },
       { path: '/ideas', element: <Ideas /> },

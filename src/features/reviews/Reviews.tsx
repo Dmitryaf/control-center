@@ -334,7 +334,10 @@ function Editor({ initial, onDeleted }: { initial: Review; onDeleted: () => void
             {date(initial.periodStart)} — {date(initial.periodEnd)} · {initial.timezone}
           </p>
         </div>
-        <Link to="/timeline?kind=review">Обзоры в истории →</Link>
+        <div className="row">
+          <Link to={`/period-analysis?review=${initial.id}`}>AI-анализ периода →</Link>
+          <Link to="/timeline?kind=review">Обзоры в истории →</Link>
+        </div>
       </div>
       {now < initial.nextStartAt && (
         <p role="status" className="message warning">

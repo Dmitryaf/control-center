@@ -8,7 +8,7 @@ const port = Number(process.env.PORT ?? 4310);
 if (!Number.isInteger(port) || port < 1024 || port > 65535)
   throw new Error('PORT должен быть от 1024 до 65535.');
 const store = new Store(path.join(dataDirectory(), 'control-center.sqlite'));
-const { app, projects, refresh, analysis } = createApp(store, port);
+const { app, projects, refresh, analysis, periodAnalysis } = createApp(store, port);
 if (process.argv.includes('--dev')) {
   const { createServer } = await import('vite');
   const vite = await createServer({ server: { middlewareMode: true, hmr: false }, appType: 'spa' });
@@ -30,6 +30,7 @@ function close(exitCode: number) {
     analysis.stop();
     await Promise.all([
       refresh.stop(),
+      periodAnalysis.stop(),
       new Promise<void>((resolve) => server.close(() => resolve())),
     ]);
     store.close();

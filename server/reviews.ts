@@ -85,6 +85,11 @@ export class Reviews {
     const { revision } = reviewDeleteSchema.parse(input);
     this.store.transaction(() => {
       this.checkRevision(this.read(id), revision);
+      this.store.db
+        .prepare(
+          "UPDATE analysis_runs SET status='cancelled',error=?,finished_at=? WHERE review_id=? AND status='pending'",
+        )
+        .run('Обзор удалён до отправки.', new Date().toISOString(), id);
       this.store.db.prepare('DELETE FROM reviews WHERE id=?').run(id);
     });
   }

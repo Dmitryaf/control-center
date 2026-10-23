@@ -19,9 +19,8 @@ import {
   type AnalysisConfig,
 } from './openai.js';
 
-// This is a coarse guard, not proof that a user-entered text contains no private information.
-export const sensitiveText =
-  /(?:[A-Za-z]:[\\/]|\\\\[^\s\\]+\\|\/(?:home|Users|etc|var|opt|tmp|mnt)\/|(?:\.local|\.codex|\.ai-rules)[\\/]|\b(?:sk-|gh[pousr]_)[A-Za-z0-9_-]{15,}|BEGIN [A-Z ]*PRIVATE KEY|\b(?:password|api[_ -]?key|token)\s*[:=]\s*\S+)/i;
+import { sensitiveText } from './privacy.js';
+export { sensitiveText } from './privacy.js';
 interface Prepared {
   preview: AnalysisPreview;
   attempted: boolean;

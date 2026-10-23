@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -8,6 +9,7 @@ import { fixture } from '../tests/fixtures.js';
 import type { Workspace, Task, TaskHistoryPage } from '../shared/contracts.js';
 import type { Observation } from '../shared/observations.js';
 import type { Review } from '../shared/reviews.js';
+import type { PeriodRun } from '../shared/period-analysis.js';
 
 const fixtureData = await fixture();
 const repo = await fixtureData.repo('production-project');
@@ -188,6 +190,24 @@ try {
   });
   assert.equal(editedReview.status, 200);
   const review = (await editedReview.json()) as Review;
+  const periodPreviewResponse = await request('/api/period-analysis/prepare', 'POST', {
+    reviewId: review.id,
+    requestKey: randomUUID(),
+    readConsent: true,
+    selection: {
+      projectIds: [id],
+      includeGeneral: false,
+      sourceKinds: [],
+      includeMetadata: false,
+      includeOpenTasks: false,
+      includeUserText: true,
+      includeRelatedReviews: false,
+    },
+  });
+  assert.equal(periodPreviewResponse.status, 201);
+  const periodPreview = (await periodPreviewResponse.json()) as PeriodRun;
+  assert.equal(periodPreview.status, 'pending');
+  assert.equal(periodPreview.approvedAt, null);
   const backupResponse = await request('/api/backup', 'POST', {});
   assert.equal(backupResponse.status, 200);
   const backup = (await backupResponse.json()) as { path: string };
@@ -198,6 +218,10 @@ try {
   );
   assert.equal(backupDb.prepare('PRAGMA quick_check').get()?.quick_check, 'ok');
   assert.equal(backupDb.prepare('SELECT COUNT(*) AS n FROM task_history').get()?.n, 1);
+  assert.equal(
+    backupDb.prepare('SELECT status FROM analysis_runs WHERE id=?').get(periodPreview.id)?.status,
+    'cancelled',
+  );
   assert.equal(
     backupDb.prepare('SELECT user_text FROM reviews WHERE id=?').get(review.id)?.user_text,
     'Production review',
@@ -216,6 +240,14 @@ try {
   await stop();
   await start();
   const restarted = (await (await request('/api/workspace')).json()) as Workspace;
+  assert.deepEqual(
+    await (await request(`/api/period-analysis/${periodPreview.id}`)).json(),
+    periodPreview,
+  );
+  assert.match(
+    await (await request(`/period-analysis?review=${review.id}&run=${periodPreview.id}`)).text(),
+    /Control Center/,
+  );
   assert.deepEqual(await (await request(`/api/reviews/${review.id}`)).json(), review);
   const reviewSources = await (await request(`/api/reviews/${review.id}/history`)).json();
   assert.ok(

@@ -275,9 +275,20 @@ export class Projects {
       (SELECT count(*) FROM task_history WHERE project_id=?) +
       (SELECT count(*) FROM observations WHERE project_id=?)
       + (SELECT count(*) FROM reviews WHERE project_id=?)
+      + (SELECT count(*) FROM analysis_runs WHERE scope_key='project:'||? OR EXISTS(SELECT 1 FROM json_each(json_extract(selection_json,'$.projectIds')) WHERE value=?))
     ) AS total`,
         )
-        .get(targetId, targetId, targetId, targetId, targetId, targetId, targetId) as {
+        .get(
+          targetId,
+          targetId,
+          targetId,
+          targetId,
+          targetId,
+          targetId,
+          targetId,
+          targetId,
+          targetId,
+        ) as {
         total: number;
       };
       if (

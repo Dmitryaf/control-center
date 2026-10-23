@@ -27,6 +27,7 @@ export const instructions = `Помоги владельцу выбрать сл
 Не добавляй внешние URL, команды, секреты или локальные пути. Не предлагай общие задачи без проекта.`;
 
 const responseSchema = z.object({
+  id: z.string().max(200).optional(),
   status: z.string(),
   output: z.array(
     z.object({
@@ -50,8 +51,21 @@ const responseSchema = z.object({
     .optional(),
 });
 
-export async function requestAnalysis(
-  payload: AnalysisPayload,
+export class OpenAIRequestError extends HttpError {
+  constructor(
+    message: string,
+    readonly outcome: 'failed' | 'unknown',
+    readonly usage: { inputTokens: number; outputTokens: number } | null = null,
+    readonly responseId: string | null = null,
+  ) {
+    super(502, message);
+  }
+}
+export async function requestStructured<T>(
+  payload: unknown,
+  schema: z.ZodType<T>,
+  prompt: string,
+  schemaName: string,
   config: AnalysisConfig,
   signal: AbortSignal,
   transport: typeof fetch = fetch,
@@ -67,22 +81,22 @@ export async function requestAnalysis(
         model: config.model,
         store: false,
         max_output_tokens: maxOutputTokens,
-        instructions,
+        instructions: prompt,
         input: [{ role: 'user', content: JSON.stringify(payload) }],
         text: {
           format: {
             type: 'json_schema',
-            name: 'project_analysis',
+            name: schemaName,
             strict: true,
-            schema: z.toJSONSchema(analysisReportSchema),
+            schema: z.toJSONSchema(schema),
           },
         },
       }),
     });
   } catch {
-    throw new HttpError(
-      502,
+    throw new OpenAIRequestError(
       'Ответ OpenAI не получен. Запрос мог быть оплачен; автоматического повтора нет.',
+      'unknown',
     );
   }
   if (!response.ok) {
@@ -93,13 +107,16 @@ export async function requestAnalysis(
         : response.status === 429
           ? 'OpenAI сообщил об ограничении запросов или баланса.'
           : 'OpenAI не выполнил запрос.';
-    throw new HttpError(502, `${message} Автоматического повтора нет.`);
+    throw new OpenAIRequestError(`${message} Автоматического повтора нет.`, 'failed');
   }
   // Bound reads even when Content-Length is absent or dishonest.
   const reader = response.body?.getReader();
-  if (!reader) throw new HttpError(502, 'OpenAI вернул пустой ответ.');
+  if (!reader) throw new OpenAIRequestError('OpenAI вернул пустой ответ.', 'unknown');
   const chunks: Uint8Array[] = [];
   let bytes = 0;
+  let received:
+    | { usage: { inputTokens: number; outputTokens: number } | null; responseId: string | null }
+    | undefined;
   try {
     while (true) {
       const item = await reader.read();
@@ -109,41 +126,66 @@ export async function requestAnalysis(
       chunks.push(item.value);
     }
     const parsed = responseSchema.parse(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+    const usage = parsed.usage
+      ? { inputTokens: parsed.usage.input_tokens, outputTokens: parsed.usage.output_tokens }
+      : null;
+    received = { usage, responseId: parsed.id ?? null };
     const content = parsed.output
       .filter((item) => item.type === 'message')
       .flatMap((item) => item.content ?? []);
     if (content.some((item) => item.type === 'refusal'))
-      throw new HttpError(
-        502,
+      throw new OpenAIRequestError(
         'Модель отказалась анализировать эти данные. Предложения не сохранены.',
+        'failed',
+        usage,
+        parsed.id ?? null,
       );
     if (parsed.status !== 'completed')
-      throw new HttpError(
-        502,
+      throw new OpenAIRequestError(
         'Ответ модели не завершён. Предложения не сохранены; автоматического повтора нет.',
+        'failed',
+        usage,
+        parsed.id ?? null,
       );
-    const report = analysisReportSchema.parse(
-      JSON.parse(
-        content
-          .filter((item) => item.type === 'output_text')
-          .map((item) => item.text ?? '')
-          .join(''),
-      ),
-    );
+    const rawOutput = content
+      .filter((item) => item.type === 'output_text')
+      .map((item) => item.text ?? '')
+      .join('');
+    const report = schema.parse(JSON.parse(rawOutput));
     return {
       report,
-      usage: parsed.usage
-        ? { inputTokens: parsed.usage.input_tokens, outputTokens: parsed.usage.output_tokens }
-        : null,
+      usage,
+      responseId: parsed.id ?? null,
+      rawOutput,
     };
   } catch (cause) {
     await reader.cancel().catch(() => {});
     if (cause instanceof HttpError) throw cause;
-    throw new HttpError(
-      502,
+    throw new OpenAIRequestError(
       'OpenAI вернул ответ неподходящего формата. Предложения не сохранены; автоматического повтора нет.',
+      received ? 'failed' : 'unknown',
+      received?.usage ?? null,
+      received?.responseId ?? null,
     );
   } finally {
     reader.releaseLock();
   }
+}
+
+export async function requestAnalysis(
+  payload: AnalysisPayload,
+  config: AnalysisConfig,
+  signal: AbortSignal,
+  transport: typeof fetch = fetch,
+) {
+  const response = await requestStructured(
+    payload,
+    analysisReportSchema,
+    instructions,
+    'project_analysis',
+    config,
+    signal,
+    transport,
+  );
+  return { report: response.report, usage: response.usage };
 }

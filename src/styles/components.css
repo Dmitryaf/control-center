@@ -97,6 +97,31 @@ time {
 .review-editor {
   max-width: 900px;
 }
+.analysis-packet {
+  max-height: 440px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 16px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  font-size: 0.85rem;
+}
+.period-analysis {
+  min-width: 0;
+}
+.period-source-form .check,
+.period-analysis .check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.period-source-form .check input[type='checkbox'],
+.period-analysis .check input[type='checkbox'] {
+  width: auto;
+  flex: 0 0 auto;
+  margin-top: 5px;
+}
 .observation-editor fieldset,
 .review-editor fieldset {
   border: 0;

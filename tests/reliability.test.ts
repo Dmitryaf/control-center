@@ -9,6 +9,8 @@ import { Checks } from '../server/checks/checks.js';
 import { Projects } from '../server/projects/projects.js';
 import { Observations } from '../server/observations.js';
 import { Reviews } from '../server/reviews.js';
+import { History } from '../server/history.js';
+import { PeriodAnalysis } from '../server/analysis/period-analysis.js';
 import { defaultSettings, metadataSchema } from '../shared/contracts.js';
 import { dataDirectory } from '../server/storage.js';
 
@@ -136,6 +138,29 @@ test('rebind rejects a target with user data', async (t) => {
   await assert.rejects(projects.rebind(one.id, two.id), /свои данные/);
   assert.equal(new Reviews(store).read(review.id).projectId, two.id);
   new Reviews(store).delete(review.id, { revision: review.revision });
+  const generalReview = new Reviews(store).create({ kind: 'week', anchorDate: '2024-10-01' });
+  const analysis = new PeriodAnalysis(store, new History(store, projects.decisions), {
+    key: '',
+    model: 'fixture-model',
+  });
+  const packet = analysis.prepare({
+    reviewId: generalReview.id,
+    requestKey: crypto.randomUUID(),
+    readConsent: true,
+    selection: {
+      projectIds: [two.id],
+      includeGeneral: false,
+      sourceKinds: [],
+      includeMetadata: true,
+      includeOpenTasks: false,
+      includeUserText: false,
+      includeRelatedReviews: false,
+    },
+  });
+  await assert.rejects(projects.rebind(one.id, two.id), /свои данные/);
+  assert.equal(analysis.read(packet.id).payload.scope.projectIds[0], two.id);
+  analysis.delete(packet.id);
+  new Reviews(store).delete(generalReview.id, { revision: generalReview.revision });
   const transaction = store.transaction.bind(store);
   let inserted = false;
   let concurrentId = '';

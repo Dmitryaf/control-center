@@ -1,5 +1,7 @@
 # Project analysis with OpenAI
 
+This guide distinguishes the original project analysis from the saved period-analysis workflow below. Both require the same server environment; neither validates provider access merely by reporting configured settings.
+
 From the overview, open **Анализ проектов**. Choose up to ten projects, click **Просмотреть данные**, inspect the complete packet and explicitly approve its transmission. **Отправить в OpenAI** makes one paid request. Suggestions are drafts: review or edit each one, then use **Создать задачу «Следом»**. Creation uses the same task storage, duplicate checks and request keys as the board; it does not complete work or change repository files.
 
 ## Server setup
@@ -19,3 +21,13 @@ Input is limited to 80,000 UTF-8 bytes and 200 open tasks per project; oversized
 The adapter sets [`store: false`](https://developers.openai.com/api/docs/guides/migrate-to-responses). Other provider retention controls may still apply; consult [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data). Nothing here promises zero retention.
 
 Preview packets and responses remain in server memory for 15 minutes, with up to ten entries. They are discarded on server restart; expired entries are reclaimed on subsequent analysis operations. The screen loses its draft suggestions when closed or reloaded. Only tasks you create persist in SQLite and database backups. Before leaving, create the tasks you want to keep. This feature does not inspect source code, perform proposed work, prove that checks passed, or maintain an autonomous background agent.
+
+## Saved analysis of a period review
+
+Open a saved week/month review and choose **AI-анализ периода**. Select projects (for a general review) and sources, then approve reading them to prepare a local packet. The complete packet, its limitations, model, hash and bounds are shown before a separate **Отправить пакет в OpenAI** confirmation. Preparing a packet does not contact OpenAI. There is no assumed model or browser API-key input. Source changes, revoked access, deleted projects, a changed model or expiry require a fresh packet.
+
+Each variant persists in SQLite with its approved packet, report, response ID/token usage when available, timestamps and status. The model's text never replaces your review. Current goals/open tasks do not reconstruct the end of a past period. Event excerpts are limited to 600 characters with a partial marker; dated file-decision metadata contains no file body. Packets above 80,000 bytes, 200 events, 100 open tasks or 20 related reviews are refused with guidance to select fewer sources. Inspect private information yourself; the additional path/secret filter is not a guarantee.
+
+**Ожидает подтверждения** is a prepared packet awaiting separate send consent, for up to 15 minutes. **Запрос отправлен** records dispatch, not a completed report. **Результат неизвестен** means a request may already have been charged; it is never automatically repeated. A new variant requires acknowledgement of that risk and its own packet approval. Refusal, incomplete output and rejected references remain visible as failed attempts. Closing the browser does not undo dispatch; cancellation is best effort after sending.
+
+Saved reports and minimal evidence survive restart and removal of the original review. Deleting the local analysis removes its packet/result while leaving the user review and source events intact. Database backups are private. A backup cancels pending dispatch approval and marks running attempts unknown **in the copy**, while preserving completed variants; restoring it does not silently resume a request. Stop all old HTTP/MCP processes before schema 8 migration; see [recovery](data.md). This saved workflow does not yet accept proposals into tasks or run on a schedule.
