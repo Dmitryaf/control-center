@@ -80,5 +80,6 @@ React 19, TypeScript, Vite, a local Node.js API, and SQLite.
 npm run check            # Lint, typecheck, tests, and build
 npm run test:e2e         # Browser tests; requires Microsoft Edge
 npm run test:production  # Built app, persistence, and backup
+npm run test:codex       # Optional: installed Codex, empty isolated home, no real chats
 npm start               # Run the built app
 ```

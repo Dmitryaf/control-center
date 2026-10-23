@@ -1,5 +1,8 @@
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { promisify } from 'node:util';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { HttpError } from '../errors.js';
 
 export type ReadMethod = 'thread/list' | 'thread/read' | 'thread/turns/list' | 'thread/items/list';
@@ -23,6 +26,7 @@ const failure = () =>
     'Codex недоступен, ответ слишком велик или протокол не поддерживается. Данные не сохранены; остальные функции приложения доступны.',
   );
 export class LocalCodex implements CodexTransport {
+  private checkedVersion: string | null = null;
   constructor(
     private program = process.env.CONTROL_CENTER_CODEX_PATH ||
       (process.platform === 'win32' ? 'codex.exe' : 'codex'),
@@ -37,8 +41,64 @@ export class LocalCodex implements CodexTransport {
         maxBuffer: 8192,
         env: this.env,
       });
-      const match = /^codex-cli (0\.158\.\d+)\s*$/.exec(stdout.trim());
+      const match = /^codex-cli ([^\r\n]{1,100})$/.exec(stdout.trim());
       if (!match) throw failure();
+      if (this.checkedVersion !== match[1]) {
+        const root = path.resolve(tmpdir());
+        const directory = await mkdtemp(path.join(root, 'control-center-codex-schema-'));
+        const relative = path.relative(root, path.resolve(directory));
+        if (
+          !relative ||
+          relative.startsWith('..') ||
+          path.isAbsolute(relative) ||
+          !path.basename(directory).startsWith('control-center-codex-schema-')
+        )
+          throw failure();
+        try {
+          // Schema generation reads no dialog content. Check safety-critical support before
+          // thread/list: older servers may silently ignore an unknown useStateDbOnly field.
+          await promisify(execFile)(
+            this.program,
+            [...this.args, 'app-server', 'generate-json-schema', '--out', directory],
+            {
+              windowsHide: true,
+              timeout: 10000,
+              maxBuffer: 8192,
+              env: this.env,
+            },
+          );
+          const requests = JSON.parse(
+            await readFile(path.join(directory, 'ClientRequest.json'), 'utf8'),
+          );
+          const methodNames = new Set<string>();
+          const visit = (node: unknown) => {
+            if (!node || typeof node !== 'object') return;
+            const object = node as Record<string, unknown>;
+            const properties = object.properties as { method?: { enum?: unknown[] } } | undefined;
+            for (const name of properties?.method?.enum ?? [])
+              if (typeof name === 'string') methodNames.add(name);
+            for (const value of Object.values(object)) visit(value);
+          };
+          visit(requests);
+          for (const method of methods) if (!methodNames.has(method)) throw failure();
+          const required = {
+            ThreadListParams: ['cwd', 'useStateDbOnly', 'cursor', 'limit'],
+            ThreadReadParams: ['threadId', 'includeTurns'],
+            ThreadTurnsListParams: ['threadId', 'itemsView', 'sortDirection', 'cursor'],
+            ThreadItemsListParams: ['threadId', 'turnId', 'cursor'],
+          };
+          for (const [name, fields] of Object.entries(required)) {
+            const schema = JSON.parse(
+              await readFile(path.join(directory, 'v2', `${name}.json`), 'utf8'),
+            );
+            if (fields.some((field) => !Object.hasOwn(schema.properties ?? {}, field)))
+              throw failure();
+          }
+          this.checkedVersion = match[1];
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
+      }
       return { version: match[1] };
     } catch {
       throw failure();

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile, readdir, rename, access } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, readdir, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createServer } from 'node:http';
@@ -18,6 +18,7 @@ import { AnalysisSchedules } from '../server/analysis/schedules.js';
 import { createApp } from '../server/app.js';
 import { snapshotDatabase } from '../server/storage.js';
 import { codexFixture } from './codex-fixture.js';
+import { protocolScript } from './codex-protocol-fixture.js';
 import { HttpError } from '../server/errors.js';
 
 async function setup(t: { after: (fn: () => void | Promise<void>) => void }) {
@@ -383,38 +384,14 @@ test('actual HTTP composition enforces local consent and persists selected text 
   const saved = await response.json();
   assert.equal(x.context.read(saved.id).summary, 'HTTP итог');
 });
-test('native CLI reads an empty isolated home; stdio rejects mutating methods, server approvals and incompatible versions', async (t) => {
+test('stdio accepts compatible versions and rejects mutating methods and server approvals', async (t) => {
   const f = await fixture();
   t.after(() => f.cleanup());
-  const home = path.join(f.root, 'isolated-home');
-  await mkdir(home);
-  const marker = path.join(home, 'mcp-must-not-start.txt');
-  const hook = path.join(home, 'mcp-marker.cjs');
-  await writeFile(
-    hook,
-    `require('node:fs').writeFileSync(${JSON.stringify(marker)},'unexpected');`,
-  );
-  await writeFile(
-    path.join(home, 'config.toml'),
-    `[mcp_servers.readonly_guard_fixture]\ncommand=${JSON.stringify(process.execPath)}\nargs=[${JSON.stringify(hook)}]\nenabled=true\nstartup_timeout_sec=1\n`,
-  );
-  const transport = new LocalCodex(undefined, [], {
-    ...process.env,
-    CODEX_HOME: home,
-    OPENAI_API_KEY: '',
-    CODEX_API_KEY: '',
-  });
-  assert.match((await transport.probe()).version, /^0\.158\./);
-  const result = await transport.read(new AbortController().signal, (rpc) =>
-    rpc.request('thread/list', { cwd: [f.root], limit: 10, archived: false, useStateDbOnly: true }),
-  );
-  assert.deepEqual((result as { data: unknown[] }).data, []);
-  await assert.rejects(() => access(marker), { code: 'ENOENT' });
   const script = path.join(f.root, 'rpc.cjs'),
     log = path.join(f.root, 'methods.log');
   await writeFile(
     script,
-    `const fs=require('node:fs'),rl=require('node:readline');if(process.argv.includes('--version')){console.log('codex-cli 0.158.0');process.exit();}rl.createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);fs.appendFileSync(process.env.FIXTURE_LOG,JSON.stringify(m)+'\\n');if(m.method==='initialize'){console.log(JSON.stringify({id:m.id,result:{userAgent:'fixture'}}));console.log(JSON.stringify({id:999,method:'item/commandExecution/requestApproval',params:{}}));}else if(m.method==='thread/list')setTimeout(()=>console.log(JSON.stringify({id:m.id,result:{data:[],nextCursor:null}})),20);});`,
+    `const fs=require('node:fs'),rl=require('node:readline');${protocolScript}rl.createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);fs.appendFileSync(process.env.FIXTURE_LOG,JSON.stringify(m)+'\\n');if(m.method==='initialize'){console.log(JSON.stringify({id:m.id,result:{userAgent:'fixture'}}));console.log(JSON.stringify({id:999,method:'item/commandExecution/requestApproval',params:{}}));}else if(m.method==='thread/list')setTimeout(()=>console.log(JSON.stringify({id:m.id,result:{data:[],nextCursor:null}})),20);});`,
   );
   const fake = new LocalCodex(process.execPath, [script], { ...process.env, FIXTURE_LOG: log });
   await fake.read(new AbortController().signal, async (rpc) => {
@@ -428,7 +405,25 @@ test('native CLI reads an empty isolated home; stdio rejects mutating methods, s
   assert.ok(lines.some((line) => line.id === 999 && line.error?.code === -32601));
   assert.ok(!lines.some((line) => line.method === 'turn/start'));
   await writeFile(script, "console.log('codex-cli 99.0.0');");
-  await assert.rejects(() => fake.probe(), /протокол/);
+  const incompatible = new LocalCodex(process.execPath, [script]);
+  await assert.rejects(() => incompatible.probe(), /протокол/);
+});
+test('protocol support accepts a development build but rejects missing state-DB-only support before dialog reads', async (t) => {
+  const f = await fixture();
+  t.after(() => f.cleanup());
+  const script = path.join(f.root, 'protocol.cjs');
+  const source = protocolScript.replace('codex-cli 2.42.7', 'codex-cli development-build');
+  await writeFile(script, source);
+  const compatible = new LocalCodex(process.execPath, [script]);
+  assert.equal((await compatible.probe()).version, 'development-build');
+  await writeFile(script, source.replace("'useStateDbOnly',", ''));
+  await assert.rejects(
+    () =>
+      new LocalCodex(process.execPath, [script]).read(new AbortController().signal, async () => {
+        throw new Error('Dialog read must not run');
+      }),
+    /протокол/,
+  );
 });
 test('schema 10 upgrades with a verified copy and retained IDs; failed DDL leaves version 10 intact', async (t) => {
   const x = await setup(t);
@@ -562,7 +557,7 @@ test('oversized stdio output is discarded and closed without echoing content', a
   const script = path.join(f.root, 'large.cjs');
   await writeFile(
     script,
-    "if(process.argv.includes('--version')){console.log('codex-cli 0.158.0');process.exit();}process.stdin.once('data',()=>process.stdout.write('DO_NOT_ECHO_PRIVATE_TEXT'+ 'x'.repeat(3*1024*1024)));process.stdin.resume();",
+    `${protocolScript}process.stdin.once('data',()=>process.stdout.write('DO_NOT_ECHO_PRIVATE_TEXT'+ 'x'.repeat(3*1024*1024)));process.stdin.resume();`,
   );
   const transport = new LocalCodex(process.execPath, [script]);
   await assert.rejects(
