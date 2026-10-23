@@ -72,6 +72,21 @@ export const periodReportSchema = z
   })
   .strict();
 export type PeriodReport = z.infer<typeof periodReportSchema>;
+export const codexAnalysisImportSchema = z
+  .object({
+    projectId: z.string().uuid(),
+    reviewId: z.string().uuid(),
+    requestKey: z.string().uuid(),
+    context: z.string().trim().min(1).max(20000),
+    report: periodReportSchema,
+    confirm: z.literal(true),
+  })
+  .strict();
+export const recentAnalysisQuerySchema = z
+  .object({
+    projectIds: z.string().max(400).optional(),
+  })
+  .strict();
 export interface PeriodSource {
   id: string;
   kind: string;
@@ -84,6 +99,7 @@ export interface PeriodSource {
   partial: boolean;
 }
 export interface PeriodPayload {
+  origin?: { kind: 'codex_manual' };
   policyVersion: string;
   preparedAt: string;
   period: {
@@ -108,6 +124,7 @@ export interface PeriodPayload {
 export type PeriodRunState =
   'pending' | 'running' | 'succeeded' | 'failed' | 'unknown' | 'cancelled';
 export interface PeriodRunSummary {
+  origin?: 'openai' | 'codex_manual';
   id: string;
   reviewId: string | null;
   reviewKey: string;
@@ -136,6 +153,10 @@ export interface PeriodRun extends PeriodRunSummary {
 export interface PeriodRunPage {
   items: PeriodRunSummary[];
   nextCursor: string | null;
+}
+export interface RecentAnalyses {
+  items: (PeriodRunSummary & { projectName: string })[];
+  truncated: boolean;
 }
 export const periodRunPageSchema = z
   .object({

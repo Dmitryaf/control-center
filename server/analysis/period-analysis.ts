@@ -6,11 +6,14 @@ import {
   periodRunPageSchema,
   periodRunCursorSchema,
   periodReportSchema,
+  codexAnalysisImportSchema,
+  recentAnalysisQuerySchema,
   type PeriodRun,
   type PeriodRunSummary,
   type PeriodRunPage,
   type PeriodReport,
   type PeriodPayload,
+  type RecentAnalyses,
 } from '../../shared/period-analysis.js';
 import type { Store } from '../db.js';
 import type { History } from '../history.js';
@@ -127,6 +130,10 @@ export class PeriodAnalysis {
   }
   private summary(row: RunRow): PeriodRunSummary {
     return {
+      origin:
+        (JSON.parse(row.payload_json) as PeriodPayload).origin?.kind === 'codex_manual'
+          ? 'codex_manual'
+          : 'openai',
       id: row.id,
       reviewId: row.review_id,
       reviewKey: row.review_key,
@@ -183,6 +190,134 @@ export class PeriodAnalysis {
   prepare(input: unknown): PeriodRun {
     return this.prepareRun(input);
   }
+  recent(input: unknown = {}): RecentAnalyses {
+    const query = recentAnalysisQuerySchema.parse(input);
+    const ids =
+      query.projectIds === undefined
+        ? []
+        : z.array(z.string().uuid()).min(1).max(10).parse(query.projectIds.split(','));
+    this.recover();
+    const rows = this.store.db
+      .prepare(
+        `SELECT * FROM analysis_runs WHERE status='succeeded' AND scope_key LIKE 'project:%'
+       ${ids.length ? `AND scope_key IN (${ids.map(() => '?').join(',')})` : ''}
+       ORDER BY created_at DESC,id DESC LIMIT 11`,
+      )
+      .all(...ids.map((id) => `project:${id}`)) as unknown as RunRow[];
+    return {
+      items: rows.slice(0, 10).map((row) => ({
+        ...this.summary(row),
+        projectName: (JSON.parse(row.payload_json) as PeriodPayload).scope.name || 'Прежний проект',
+      })),
+      truncated: rows.length > 10,
+    };
+  }
+  importCodex(input: unknown): PeriodRun {
+    const data = codexAnalysisImportSchema.parse(input);
+    if (
+      Buffer.byteLength(JSON.stringify({ context: data.context, report: data.report }), 'utf8') >
+      maxInputBytes
+    )
+      throw new HttpError(400, 'Анализ и основания больше 80 000 байт.');
+    if (sensitiveText.test(data.context))
+      throw new HttpError(
+        400,
+        'В основаниях обнаружен локальный путь или возможный секрет. Уберите его перед сохранением.',
+      );
+    const requestHash = digest({ origin: 'codex_manual', ...data });
+    return this.store.transaction(() => {
+      const previous = this.store.db
+        .prepare('SELECT id,request_hash FROM analysis_runs WHERE request_key=?')
+        .get(data.requestKey) as { id: string; request_hash: string } | undefined;
+      if (previous) {
+        if (previous.request_hash !== requestHash)
+          throw new HttpError(409, 'Этот ключ уже использован для другого анализа.');
+        return this.read(previous.id);
+      }
+      const review = new Reviews(this.store).read(data.reviewId);
+      if (review.scopeKey !== `project:${data.projectId}` || review.projectId !== data.projectId)
+        throw new HttpError(400, 'Выберите обзор того же действующего проекта.');
+      const selection = normalizeSelection({
+        projectIds: [data.projectId],
+        includeGeneral: false,
+        sourceKinds: [],
+        includeMetadata: true,
+        includeOpenTasks: false,
+        includeUserText: false,
+        includeRelatedReviews: false,
+        includeRelatedAnalyses: false,
+        codexDigestIds: [],
+      });
+      const { payload } = buildPeriodContext(
+        this.store,
+        this.history,
+        review,
+        selection,
+        this.now(),
+        false,
+      );
+      payload.origin = { kind: 'codex_manual' };
+      payload.sources.push({
+        id: `codex_context:${data.requestKey}`,
+        kind: 'codex_manual_context',
+        projectId: data.projectId,
+        title: 'Основания ручного анализа Codex',
+        text: data.context,
+        day: null,
+        recordedAt: null,
+        dateQuality: 'external_context',
+        partial: false,
+      });
+      payload.limitations.push(
+        'Готовый текст внесён вручную из Codex. Этот пакет не отправлялся в OpenAI API; исходный prompt, модель и токены внешнего сеанса не установлены.',
+        'Внешние основания внесены автором импорта, не проверены приложением независимо и не реконструируют состояние проекта в прошлом.',
+      );
+      if (Buffer.byteLength(JSON.stringify(payload), 'utf8') > maxInputBytes)
+        throw new HttpError(400, 'Пакет больше 80 000 байт.');
+      try {
+        this.validateReport(payload, data.report);
+      } catch (error) {
+        if (error instanceof OpenAIRequestError) throw new HttpError(400, error.message);
+        throw error;
+      }
+      const generation = Number(
+        this.store.db
+          .prepare(
+            'SELECT COALESCE(MAX(generation),0)+1 AS n FROM analysis_runs WHERE review_key=?',
+          )
+          .get(review.id)?.n,
+      );
+      const id = randomUUID(),
+        now = this.timestamp();
+      const hash = digest({ payload, model: '', policy: periodPolicyVersion });
+      this.store.db
+        .prepare(
+          `INSERT INTO analysis_runs
+        (id,review_id,review_key,scope_key,generation,status,model,policy_version,selection_json,payload_json,guards_json,packet_hash,request_key,request_hash,created_at,expires_at,finished_at,trigger,report_json,raw_output)
+        VALUES(?,?,?,?,?,'succeeded','',?,?,?,?,?,?,?,?,?,?,'manual',?,?)`,
+        )
+        .run(
+          id,
+          review.id,
+          review.id,
+          review.scopeKey,
+          generation,
+          periodPolicyVersion,
+          JSON.stringify(selection),
+          JSON.stringify(payload),
+          '[]',
+          hash,
+          data.requestKey,
+          requestHash,
+          now,
+          now,
+          now,
+          JSON.stringify(data.report),
+          JSON.stringify(data.report),
+        );
+      return this.read(id);
+    });
+  }
   prepareScheduled(
     input: unknown,
     schedule: { id: string; revision: number; key: string },
@@ -216,18 +351,25 @@ export class PeriodAnalysis {
       }
       const previous = this.store.db
         .prepare(
-          'SELECT id,request_hash,review_key,selection_json FROM analysis_runs WHERE request_key=?',
+          'SELECT id,request_hash,review_key,selection_json,payload_json FROM analysis_runs WHERE request_key=?',
         )
         .get(data.requestKey) as
-        | { id: string; request_hash: string; review_key: string; selection_json: string }
+        | {
+            id: string;
+            request_hash: string;
+            review_key: string;
+            selection_json: string;
+            payload_json: string;
+          }
         | undefined;
       if (previous) {
         if (
           previous.request_hash !== requestHash &&
-          digest({
-            reviewId: previous.review_key,
-            selection: normalizeSelection(JSON.parse(previous.selection_json)),
-          }) !== requestHash
+          ((JSON.parse(previous.payload_json) as PeriodPayload).origin?.kind === 'codex_manual' ||
+            digest({
+              reviewId: previous.review_key,
+              selection: normalizeSelection(JSON.parse(previous.selection_json)),
+            }) !== requestHash)
         )
           throw new HttpError(
             409,

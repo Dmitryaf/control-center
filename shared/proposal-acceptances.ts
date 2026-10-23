@@ -32,6 +32,7 @@ export interface ProposalAcceptance {
   createdAt: string;
   approved: ProposalApproval;
   original: {
+    origin?: 'openai' | 'codex_manual';
     reviewKey: string;
     proposal: PeriodReport['proposals'][number];
     sources: PeriodSource[];

@@ -53,7 +53,7 @@ const entriesSql = `WITH options(zone) AS (VALUES(?)), entries(key,kind,event,so
   SELECT 'analysis:'||a.id,'ai_analysis','ai_analysis',a.id,history_day(a.created_at,(SELECT zone FROM options)),a.created_at,'recorded',p.id,
     CASE WHEN a.scope_key='general' THEN NULL ELSE substr(a.scope_key,9) END,
     COALESCE(json_extract(a.payload_json,'$.scope.name'),json_extract(p.metadata,'$.name'),json_extract(p.snapshot,'$.directoryName')),
-    'AI · '||json_extract(a.payload_json,'$.period.from')||' — '||json_extract(a.payload_json,'$.period.to')||' · '||a.generation||' · '||a.status,
+    CASE WHEN json_extract(a.payload_json,'$.origin.kind')='codex_manual' THEN 'Codex вручную · ' ELSE 'AI · ' END||json_extract(a.payload_json,'$.period.from')||' — '||json_extract(a.payload_json,'$.period.to')||' · '||a.generation||' · '||a.status,
     COALESCE(json_extract(a.report_json,'$.narrative'),a.error,''),'/period-analysis?review='||a.review_key||'&run='||a.id
     FROM analysis_runs a LEFT JOIN projects p ON p.id=substr(a.scope_key,9)
 )

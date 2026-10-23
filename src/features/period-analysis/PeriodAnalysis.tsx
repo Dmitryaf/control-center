@@ -36,6 +36,7 @@ function RunDetail({
   const client = useQueryClient();
   const { act, busy } = useActions();
   const [approved, setApproved] = useState(false);
+  const manual = run.origin === 'codex_manual';
   useEffect(() => setApproved(false), [run.id, run.packetHash]);
   const refresh = async () => {
     await client.invalidateQueries({ queryKey: ['period-runs', run.reviewKey] });
@@ -59,13 +60,23 @@ function RunDetail({
         <span className="signal-label">{stateLabel[run.status]}</span>
       </div>
       <p className="help">
-        Модель: {run.model || 'Не настроена'} · {date(run.payload.period.from)} —{' '}
-        {date(run.payload.period.to)} · {run.payload.period.timezone}
+        {manual
+          ? 'Источник: Codex · внесён вручную; API-запрос не выполнялся'
+          : `Модель: ${run.model || 'Не настроена'}`}{' '}
+        · {date(run.payload.period.from)} — {date(run.payload.period.to)} ·{' '}
+        {run.payload.period.timezone}
       </p>
       <p className="help">
         Пакет сохранён: {new Date(run.createdAt).toLocaleString('ru')}. Источников:{' '}
-        {run.payload.sources.length}. Лимит: {status?.maxInputBytes ?? 80000} байт /{' '}
-        {status?.maxOutputTokens ?? 3000} выходных tokens.
+        {run.payload.sources.length}.{' '}
+        {manual ? (
+          'Модель и использование tokens внешнего сеанса не зафиксированы.'
+        ) : (
+          <>
+            Лимит: {status?.maxInputBytes ?? 80000} байт / {status?.maxOutputTokens ?? 3000}{' '}
+            выходных tokens.
+          </>
+        )}
       </p>
       {run.payload.period.incomplete && (
         <p className="message warning">Период на момент подготовки был неполным.</p>
@@ -79,7 +90,9 @@ function RunDetail({
         </p>
       )}
       <details open={run.status === 'pending'}>
-        <summary>Точный пакет и ограничения</summary>
+        <summary>
+          {manual ? 'Сохранённые основания и ограничения' : 'Точный пакет и ограничения'}
+        </summary>
         <p className="help">
           Проверьте личные сведения и секреты: автоматический фильтр не гарантирует их отсутствия.
           Пакет и ответ сохраняются в локальной базе и резервных копиях.
@@ -142,8 +155,8 @@ function RunDetail({
       )}
       {run.report && (
         <div className="section-space prose">
-          <h3>AI-обзор</h3>
-          <p className="prewrap">{run.report.narrative}</p>
+          <h3>{manual ? 'Анализ Codex' : 'AI-обзор'}</h3>
+          <p className="preserve">{run.report.narrative}</p>
           {run.report.findings.length > 0 && (
             <>
               <h3>Выводы и основания</h3>
@@ -198,8 +211,11 @@ function RunDetail({
             </>
           )}
           <p className="help">
-            Это вывод модели по сохранённому пакету. Он не доказывает правильность текста и не
-            заменяет ваш итог. Задачи и идеи автоматически не создаются.
+            {manual
+              ? 'Это готовый анализ, внесённый из Codex вместе с основаниями; приложение не проверяло исходный сеанс.'
+              : 'Это вывод модели по сохранённому пакету.'}{' '}
+            Он не доказывает правильность текста и не заменяет ваш итог. Задачи и идеи автоматически
+            не создаются.
           </p>
         </div>
       )}
@@ -295,7 +311,9 @@ function AnalysisPage({ reviewId }: { reviewId: string }) {
       <div className="page-heading">
         <div>
           <p className="section-label">Сохранённые варианты</p>
-          <h1>AI-анализ периода</h1>
+          <h1>
+            {selected.data?.origin === 'codex_manual' ? 'Анализ проекта' : 'AI-анализ периода'}
+          </h1>
           {review.data && (
             <p className="subtitle">
               {review.data.projectName ?? 'Общий обзор'} · {date(review.data.periodStart)} —{' '}
@@ -308,10 +326,12 @@ function AnalysisPage({ reviewId }: { reviewId: string }) {
         )}
       </div>
       <p className="help">
-        Сначала выберите источники и подготовьте пакет. Отправка требует отдельного подтверждения.
-        Прежний ручной анализ проектов остаётся доступен.
+        {selected.data?.origin === 'codex_manual'
+          ? 'Готовый анализ Codex сохранён локально. Его чтение не требует API-ключа.'
+          : 'Сначала выберите источники и подготовьте пакет. Отправка требует отдельного подтверждения.'}
       </p>
       <p>
+        <Link to="/analysis">Анализы проектов →</Link> ·{' '}
         <Link to="/proposal-acceptances">Принятые предложения →</Link> ·{' '}
         <Link to="/analysis-schedules">Все расписания →</Link> ·{' '}
         <Link to="/timeline?kind=ai_analysis">Все AI-запуски →</Link>
@@ -332,6 +352,22 @@ function AnalysisPage({ reviewId }: { reviewId: string }) {
           </p>
         ))}
       {(review.isPending || runs.isPending) && <p role="status">Загружаем обзор и варианты…</p>}
+      {runId && !deletedIds.includes(runId) && selected.isPending && (
+        <p role="status">Загружаем сохранённый анализ…</p>
+      )}
+      {runId && deletedIds.includes(runId) && (
+        <p role="status">Локальная запись анализа удалена.</p>
+      )}
+      {selected.data &&
+        !deletedIds.includes(selected.data.id) &&
+        selected.data.reviewKey === reviewId && (
+          <RunDetail
+            key={selected.data.id}
+            run={selected.data}
+            status={status.data}
+            onDeleted={() => setDeletedIds([...deletedIds, selected.data!.id])}
+          />
+        )}
       {review.data && (
         <form
           aria-label="Подготовка ручного анализа"
@@ -432,22 +468,6 @@ function AnalysisPage({ reviewId }: { reviewId: string }) {
           </div>
         </section>
       )}
-      {runId && !deletedIds.includes(runId) && selected.isPending && (
-        <p role="status">Загружаем сохранённый анализ…</p>
-      )}
-      {runId && deletedIds.includes(runId) && (
-        <p role="status">Локальная запись анализа удалена.</p>
-      )}
-      {selected.data &&
-        !deletedIds.includes(selected.data.id) &&
-        selected.data.reviewKey === reviewId && (
-          <RunDetail
-            key={selected.data.id}
-            run={selected.data}
-            status={status.data}
-            onDeleted={() => setDeletedIds([...deletedIds, selected.data!.id])}
-          />
-        )}
     </>
   );
 }

@@ -118,6 +118,10 @@ export function createApp(
     res.json({ ok: true });
   });
   app.get('/api/period-analysis/status', (_req, res) => res.json(periodAnalysis.status()));
+  app.get('/api/period-analysis/recent', (req, res) => res.json(periodAnalysis.recent(req.query)));
+  app.post('/api/period-analysis/import-codex', (req, res) =>
+    res.status(201).json(periodAnalysis.importCodex(req.body)),
+  );
   app.post('/api/period-analysis/prepare', (req, res) =>
     res.status(201).json(periodAnalysis.prepare(req.body)),
   );

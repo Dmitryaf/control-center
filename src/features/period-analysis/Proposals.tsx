@@ -19,8 +19,8 @@ function Provenance({ value }: { value: ProposalAcceptance['original'] }) {
       <p>Неизвестное: {p.uncertainty || 'Не указано'}</p>
       <p>Дешёвая проверка: {p.cheapCheck}</p>
       <p className="help">
-        Модель {value.model} · {value.period.from} — {value.period.to}. Это вывод модели, а не
-        независимая проверка.
+        {value.origin === 'codex_manual' ? 'Codex · внесён вручную' : `Модель ${value.model}`} ·{' '}
+        {value.period.from} — {value.period.to}. Это вывод модели, а не независимая проверка.
       </p>
       {value.sources.map((source) => (
         <details key={source.id}>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import type {
   AnalysisStatus,
@@ -11,11 +11,16 @@ import type { Task } from '../../../shared/contracts';
 import { api } from '../../shared/http';
 import { priorityLabels } from '../../shared/labels';
 import { useWorkspace, workspaceKey } from '../../shared/workspace';
+import { SavedAnalyses } from './RecentAnalyses';
 type Draft = AnalysisReport['proposals'][number] & { created: Task | null };
 export default function Analysis() {
   const { data: w } = useWorkspace();
   const client = useQueryClient();
-  const [selection, setSelection] = useState<string[]>([]);
+  const [params] = useSearchParams();
+  const [selection, setSelection] = useState<string[]>(() => {
+    const id = params.get('project');
+    return id && w!.projects.some((p) => p.id === id) ? [id] : [];
+  });
   const [status, setStatus] = useState<AnalysisStatus | null>(null);
   const [preview, setPreview] = useState<AnalysisPreview | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -84,9 +89,10 @@ export default function Analysis() {
         <Link to="/">К обзору →</Link>
       </div>
       <p>
-        Выберите проекты, просмотрите данные и запросите предложения у OpenAI. Каждую задачу вы
-        создаёте отдельно.
+        Откройте сохранённый анализ или выберите проекты для нового запроса к OpenAI. Готовый анализ
+        Codex хранится с отдельной отметкой об источнике. Задачи вы создаёте отдельно.
       </p>
+      <SavedAnalyses projectIds={selection} />
       {failure && (
         <div className="message error" role="alert" aria-label="Анализ проектов">
           {failure}

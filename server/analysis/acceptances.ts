@@ -128,6 +128,7 @@ export class ProposalAcceptances {
     const hex = bytes.toString('hex');
     const id = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
     const original = {
+      origin: run.origin ?? 'openai',
       reviewKey: run.reviewKey,
       proposal,
       sources,
