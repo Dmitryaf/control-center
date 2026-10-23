@@ -74,7 +74,7 @@ Storage and scanning stay on your computer; scanning never runs project code. Th
 
 ## Development
 
-Vue 3, TypeScript, Vite, a local Node.js API, and SQLite.
+React 19, TypeScript, Vite, a local Node.js API, and SQLite.
 
 ```sh
 npm run check            # Lint, typecheck, tests, and build

@@ -28,7 +28,9 @@ This separates public files from private context. [Context contract](decisions/D
 
 ## Runtime and code boundaries
 
-One loopback Express process serves the API and Vue application. An optional stdio MCP process uses the same task owner and database. Built-in node:sqlite avoids a Windows native-addon build; short synchronous queries are acceptable for this local tool. Discovery never runs project code or traverses symlinks.
+One loopback Express process serves the API and React application. An optional stdio MCP process uses the same task owner and database. Built-in node:sqlite avoids a Windows native-addon build; short synchronous queries are acceptable for this local tool. Discovery never runs project code or traverses symlinks.
+
+React Router owns client navigation, TanStack Query owns server state, and React Hook Form owns editable drafts. Successful writes refresh saved data without replacing dirty forms; stale task revisions remain explicit conflicts. One route guard aggregates dirty forms. HTTP writes keep the loopback header contract and have no automatic retry. The React migration preserves schema 5, API routes, task identities and MCP behavior. Vite serves the same SPA routes in development and production.
 
 The [original architecture rationale](decisions/MVP-architecture.md) also explains YAML ownership, filesystem safety and the import guard. Revisit before adding remote clients.
 
@@ -62,7 +64,9 @@ The overview prioritizes open `now` tasks with their stable code, project and pr
 
 The project UI treats `current_focus` and `next` as read-only legacy context, separate from current tasks. Explicit next-step import is repeatable and retains the original plan. The editor omits legacy fields; the API preserves their latest values under the write lock, while existing clients can still explicitly update them. Explicit YAML export retains the plan; tasks/results are not copied into YAML. The YAML format and metadata HTTP API remain compatible. No automatic conversion, deletion or schema migration is needed for this UI transition.
 
-This reduces competing plans and repeated detail while retaining access to signals and history. Revisit before retiring legacy API fields or supporting a different overview workflow. Implementation: `src/features/overview/Overview.vue`, `RecentWork.vue`, `src/features/projects/ProjectDetail.vue`; [usage](docs/codex.md).
+This reduces competing plans and repeated detail while retaining access to signals and history. Revisit before retiring legacy API fields or supporting a different overview workflow. Implementation: `src/features/overview/Overview.tsx`, `src/features/projects/ProjectDetail.tsx`; [usage](docs/codex.md).
+
+Attention does not require legacy focus/next fields or treat an empty task board as a problem. Git inactivity is informational; pending local decisions carry decision priority. Tasks remain the visible source of current work, while existing operational errors and blockers retain their signals.
 
 ## D-0009 — Review selected saved data before requesting AI proposals
 
@@ -70,4 +74,4 @@ Manual analysis uses a whitelisted packet from selected saved project metadata, 
 
 `ProjectAnalysis` owns up to ten previews/results in HTTP-process memory, accessible for 15 minutes; expired entries are reclaimed on subsequent operations and restart invalidates them. A project removed after preparation prevents dispatch. One preview can initiate at most one Responses API request, with one active call per process, a timeout, bounded input/output and no automatic retries. Success or failure is cached for safe local retry; a new preview is a new possible charge. The fixed OpenAI HTTPS adapter reads key/model only from server environment, uses `store: false`, rejects redirects and hides raw provider errors. This does not claim zero provider retention or a fixed monetary budget.
 
-Model output is untrusted: the schema, project/source references and recognizable secrets/paths are checked independently; Vue renders it as text. Each approved proposal goes through the existing Tasks API with duplicate protection and a stable request key. Only accepted tasks persist in SQLite/backups; analysis packets/results disappear from memory after expiry or restart. Revisit for persisted analysis history, background work or execution capabilities. Implementation: `server/analysis/`, `shared/analysis.ts`, `src/features/analysis/Analysis.vue`; [operator guide](docs/analysis.md).
+Model output is untrusted: the schema, project/source references and recognizable secrets/paths are checked independently; React renders it as text. Each approved proposal goes through the existing Tasks API with duplicate protection and a stable request key. Only accepted tasks persist in SQLite/backups; analysis packets/results disappear from memory after expiry or restart. Revisit for persisted analysis history, background work or execution capabilities. Implementation: `server/analysis/`, `shared/analysis.ts`, `src/features/analysis/Analysis.tsx`; [operator guide](docs/analysis.md).

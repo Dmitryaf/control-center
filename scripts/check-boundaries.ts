@@ -3,15 +3,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { builtinModules } from 'node:module';
 import ts from 'typescript';
-import { parse } from '@vue/compiler-sfc';
 
 export function violations(file: string, content: string): string[] {
-  const source = file.endsWith('.vue')
-    ? [parse(content).descriptor.script?.content, parse(content).descriptor.scriptSetup?.content]
-        .filter(Boolean)
-        .join('\n')
-    : content;
-  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const source = content;
+  const tree = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
   const imports: string[] = [];
   function visit(node: ts.Node) {
     if (
@@ -44,16 +45,17 @@ export function violations(file: string, content: string): string[] {
         if (target.startsWith('server/') || node) return true;
         if (
           normalized.startsWith('src/shared/') &&
-          (target.startsWith('src/features/') ||
-            target === 'src/App.vue' ||
-            target === 'src/main.ts')
+          (target.startsWith('src/features/') || /^src\/(App|main)(\.tsx?)?$/.test(target))
         )
           return true;
       }
       if (normalized.startsWith('server/') && target.startsWith('src/')) return true;
       return (
         normalized.startsWith('shared/') &&
-        (node || target.startsWith('server/') || target.startsWith('src/') || specifier === 'vue')
+        (node ||
+          target.startsWith('server/') ||
+          target.startsWith('src/') ||
+          /^(vue|react|react-dom)(\/|$)/.test(specifier))
       );
     })
     .map(
@@ -67,7 +69,7 @@ export function checkTree(root: string) {
     for (const entry of readdirSync(path.join(root, directory), { withFileTypes: true })) {
       const file = path.posix.join(directory, entry.name);
       if (entry.isDirectory()) walk(file);
-      else if (/\.(ts|vue)$/.test(file))
+      else if (/\.tsx?$/.test(file))
         errors.push(...violations(file, readFileSync(path.join(root, file), 'utf8')));
     }
   }

@@ -1,0 +1,149 @@
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+.task-details {
+  margin-block: 12px;
+}
+.task-details summary {
+  cursor: pointer;
+}
+.task-details .form-grid {
+  margin-top: 12px;
+}
+.task-search {
+  flex: 1;
+  min-width: min(220px, 100%);
+}
+.task-card code {
+  font-weight: 600;
+}
+.task-card p {
+  overflow-wrap: anywhere;
+}
+
+.history-list {
+  list-style: none;
+  padding: 0;
+  margin-block: 18px;
+}
+.history-entry {
+  padding: 20px;
+  margin-bottom: 14px;
+}
+.history-entry h2 {
+  margin-block: 10px 4px;
+}
+.history-entry p {
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+time {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.current-work {
+  border-top: 2px solid var(--ink);
+  padding-top: 16px;
+  margin-bottom: 28px;
+}
+.current-task-list {
+  list-style: none;
+  padding: 0;
+}
+.current-task-list > li {
+  padding-block: 12px;
+}
+.current-task-list > li > a {
+  font-weight: 600;
+}
+.current-task-list .row {
+  margin-top: 5px;
+  font-size: 12px;
+}
+.overview-links {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.overview-details > summary,
+.git-overview > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.overview-details {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.recent-work-list {
+  list-style: none;
+  padding: 0;
+  margin-block: 12px 0;
+}
+.activity time {
+  flex-shrink: 0;
+  width: 140px;
+}
+@media (max-width: 600px) {
+  .activity {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .activity time {
+    width: auto;
+  }
+}
+
+.analysis-page {
+  fieldset {
+    border: 1px solid var(--line);
+    margin: 0 0 16px;
+    padding: 14px;
+    min-width: 0;
+  }
+  legend {
+    font-weight: 600;
+    padding: 0 5px;
+  }
+  .project-selection {
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 10px 0;
+  }
+  .checkbox input {
+    width: auto;
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+  .checkbox span,
+  .proposal li {
+    overflow-wrap: anywhere;
+  }
+  pre {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    padding: 16px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 440px;
+    overflow-y: auto;
+    font-size: 0.9rem;
+  }
+  .proposal {
+    border-top: 1px solid var(--line);
+    padding: 18px 0;
+  }
+  .proposal .form {
+    max-width: 850px;
+  }
+  @media (max-width: 600px) {
+    fieldset,
+    pre {
+      padding: 10px;
+    }
+  }
+}
