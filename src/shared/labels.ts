@@ -12,6 +12,12 @@ export const typeLabels = {
 };
 export const priorityLabels = { high: 'Высокий', normal: 'Обычный', low: 'Низкий' };
 export const taskLabels = { now: 'Сейчас', next: 'Следом', later: 'Позже' };
+export const workKindLabels = {
+  baseline: 'Запись при переходе',
+  result: 'Результат сохранён',
+  completed: 'Задача завершена',
+  reopened: 'Возвращена в работу',
+};
 export const ideaLabels = {
   new: 'Новая',
   consider: 'Стоит проверить',

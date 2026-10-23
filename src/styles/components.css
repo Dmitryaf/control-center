@@ -93,6 +93,43 @@ time {
   }
 }
 
+.project-goal {
+  margin-top: 12px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.project-summary .current-task-list li {
+  padding: 10px 0;
+}
+.project-latest {
+  font-size: 14px;
+  margin-bottom: 16px;
+  overflow-wrap: anywhere;
+}
+.project-latest time {
+  display: block;
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.project-snapshot summary {
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.overview-shortcuts {
+  margin-bottom: 24px;
+}
+.overview-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.overview-period select {
+  width: auto;
+  max-width: 100%;
+}
 .analysis-page {
   fieldset {
     border: 1px solid var(--line);

@@ -355,8 +355,8 @@ export function TaskHistory() {
   const { data: w } = useWorkspace();
   const [project, setProject] = useState(params.get('project') ?? '');
   const [identifier, setIdentifier] = useState(params.get('task') ?? '');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [from, setFrom] = useState(params.get('from') ?? '');
+  const [to, setTo] = useState(params.get('to') ?? '');
   const [offset, setOffset] = useState(0);
   const [applied, setApplied] = useState({ projectId: project, identifier, from, to });
   const query = useQuery({

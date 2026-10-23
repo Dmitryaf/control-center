@@ -1,17 +1,23 @@
 import { Link } from 'react-router';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useWorkspace } from '../../shared/workspace';
 import { api } from '../../shared/http';
-import { date, priorityLabels } from '../../shared/labels';
+import { date, priorityLabels, workKindLabels } from '../../shared/labels';
 import type { TaskHistoryPage } from '../../../shared/contracts';
 import { ProjectCard } from '../projects/Projects';
 export default function Overview() {
   const { data: w } = useWorkspace();
+  const [period, setPeriod] = useState('all');
+  const today = new Date().toISOString().slice(0, 10);
+  const start = new Date(`${today}T00:00:00Z`);
+  start.setUTCDate(start.getUTCDate() - (period === 'all' ? 0 : Number(period) - 1));
+  const range = period === 'all' ? '' : `&from=${start.toISOString().slice(0, 10)}&to=${today}`;
   const history = useQuery({
-    queryKey: ['recent-work'],
+    queryKey: ['recent-work', range],
     refetchInterval: 5000,
     queryFn: ({ signal }) =>
-      api<TaskHistoryPage>('/task-history?limit=5', 'GET', undefined, signal),
+      api<TaskHistoryPage>(`/task-history?limit=5${range}`, 'GET', undefined, signal),
     retry: false,
   });
   const checks = w!.checks
@@ -22,20 +28,52 @@ export default function Overview() {
           Number(a.signals.some((s) => s.level === 'decision')) ||
         b.daysWithoutMovement - a.daysWithoutMovement,
     );
-  const active = w!.projects.filter((p) => p.metadata.status === 'active');
+  const projects = [...w!.projects].sort(
+    (a, b) =>
+      ({ active: 0, paused: 1, unknown: 2, completed: 3 })[a.metadata.status] -
+        { active: 0, paused: 1, unknown: 2, completed: 3 }[b.metadata.status] ||
+      Number(b.metadata.priority === 'high') - Number(a.metadata.priority === 'high') ||
+      a.metadata.name.localeCompare(b.metadata.name, 'ru'),
+  );
   const attention = [
     ...checks.map((c) => ({
       signals: c.signals,
       title: c.title,
       to: `/checks/${c.id}`,
       kind: 'Проверка',
+      key: `check:${c.id}`,
     })),
     ...w!.projects.map((p) => ({
-      signals: p.signals,
+      signals: p.signals.map((signal) =>
+        signal.code === 'decision'
+          ? {
+              ...signal,
+              message: `${signal.message} · ${w!.decisions
+                .filter((decision) => decision.projectId === p.id && decision.status === 'pending')
+                .map((decision) => decision.title)
+                .join('; ')}`,
+            }
+          : signal,
+      ),
       title: p.metadata.name,
       to: `/projects/${p.id}`,
       kind: 'Проект',
+      key: `project:${p.id}`,
     })),
+    ...w!.decisions
+      .filter(
+        (decision) =>
+          decision.status === 'pending' &&
+          (!decision.projectId ||
+            !w!.projects.some((project) => project.id === decision.projectId)),
+      )
+      .map((decision) => ({
+        signals: [{ code: 'decision', level: 'decision' as const, message: decision.decision }],
+        title: decision.title,
+        to: '/decisions',
+        key: decision.id,
+        kind: 'Общее решение',
+      })),
   ]
     .map((v) => ({
       ...v,
@@ -59,8 +97,9 @@ export default function Overview() {
     <>
       <div className="page-heading">
         <div>
-          <p className="section-label">Задачи и результаты</p>
-          <h1>Сейчас</h1>
+          <p className="section-label">Проекты и работа</p>
+          <h1>Обзор</h1>
+          <p className="subtitle">Где находятся проекты, что в работе и что удалось сохранить.</p>
         </div>
         <p className="scan-stamp">
           Последнее сканирование
@@ -72,33 +111,53 @@ export default function Overview() {
           </time>
         </p>
       </div>
+      <div className="row overview-shortcuts">
+        <a href="#attention">Решения и внимание · {attention.length} ↓</a>
+        <a href="#recent-work">Записи за период ↓</a>
+      </div>
       <section className="current-work" aria-labelledby="current-work-heading">
         <div className="section-heading">
-          <h2 id="current-work-heading">В работе</h2>
-          <Link to="/tasks">Задачи · {now.length} →</Link>
+          <h2 id="current-work-heading">Проекты сейчас</h2>
+          <Link to="/projects">Все проекты · {projects.length} →</Link>
         </div>
-        <ul className="work-list current-task-list">
-          {now.map((t) => (
-            <li key={t.id}>
-              <Link to={`/tasks?task=${t.code}`}>
-                {t.code} · {t.title}
-              </Link>
-              <div className="row">
-                {t.projectId ? (
-                  <Link to={`/projects/${t.projectId}`}>
-                    {w!.projects.find((p) => p.id === t.projectId)?.metadata.name}
-                  </Link>
-                ) : (
-                  <span className="muted">Общая задача</span>
-                )}
-                <span className="help">{priorityLabels[t.priority]}</span>
-              </div>
-            </li>
+        <div className="project-register">
+          {projects.map((project) => (
+            <ProjectCard key={project.id} project={project} overview />
           ))}
-        </ul>
-        {!now.length && (
-          <p className="empty">Выберите задачу на сейчас на доске или создайте новую.</p>
+        </div>
+        {!projects.length && (
+          <p className="empty">Проектов пока нет. Добавьте каталог в настройках.</p>
         )}
+        {now.some(
+          (task) => !task.projectId || !projects.some((project) => project.id === task.projectId),
+        ) && (
+          <section className="general-work section-space" aria-labelledby="general-work-heading">
+            <h3 id="general-work-heading">Общие задачи на сейчас</h3>
+            <ul className="work-list current-task-list">
+              {now
+                .filter(
+                  (task) =>
+                    !task.projectId || !projects.some((project) => project.id === task.projectId),
+                )
+                .map((t) => (
+                  <li key={t.id}>
+                    <Link to={`/tasks?task=${t.code}`}>
+                      {t.code} · {t.title}
+                    </Link>
+                    <div className="row">
+                      <span className="muted">
+                        {t.projectId ? 'Проект недоступен в списке' : 'Общая задача'}
+                      </span>
+                      <span className="help">{priorityLabels[t.priority]}</span>
+                    </div>
+                  </li>
+                ))}
+            </ul>
+          </section>
+        )}
+        <p className="help section-space">
+          <Link to="/tasks">Открыть доску задач →</Link>
+        </p>
       </section>
       {!w!.settings.roots.length && (
         <div className="panel welcome">
@@ -117,7 +176,7 @@ export default function Overview() {
           <span className="help">Сначала — решения, затем — сигналы</span>
         </div>
         {attention.map((item) => (
-          <div key={item.to} className={`attention-line ${item.level}`}>
+          <div key={item.key} className={`attention-line ${item.level}`}>
             <span className="signal-label">
               {item.level === 'decision' ? 'Решение' : 'Внимание'}
             </span>
@@ -134,13 +193,32 @@ export default function Overview() {
         ))}
         {!attention.length && <p className="empty">По доступным данным сигналов нет.</p>}
       </section>
-      <section className="recent-work section-space" aria-labelledby="recent-work-heading">
+      <section
+        id="recent-work"
+        className="recent-work section-space"
+        aria-labelledby="recent-work-heading"
+      >
         <div className="section-heading">
           <h2 id="recent-work-heading">Последние результаты</h2>
-          <Link to="/history">Вся история →</Link>
+          <Link to={`/history${range ? `?${range.slice(1)}` : ''}`}>Вся история →</Link>
         </div>
+        <label className="overview-period">
+          Период записей
+          <select value={period} onChange={(event) => setPeriod(event.target.value)}>
+            <option value="all">Все время</option>
+            <option value="7">Последние 7 дней</option>
+            <option value="30">Последние 30 дней</option>
+          </select>
+        </label>
         <p className="help">
-          Последние пять записей работы. Сведения о проверках сохранены со слов пользователя или
+          {history.data
+            ? `Показано ${history.data.items.length} из ${history.data.total} записей.`
+            : 'До пяти последних записей работы.'}{' '}
+          Даты периода — UTC
+          {range
+            ? `: ${start.toISOString().slice(0, 10)} — ${today}, текущий день ещё не завершён`
+            : ''}
+          . Здесь пока только история задач. Сведения о проверках сохранены со слов пользователя или
           агента.
         </p>
         {history.isPending && <p role="status">Загружаем результаты…</p>}
@@ -161,17 +239,13 @@ export default function Overview() {
                   {e.task.code} · {e.task.title}
                 </Link>
                 <p className="help">
-                  {e.projectName ?? 'Общая задача'} ·{' '}
-                  {
-                    {
-                      baseline: 'Запись при переходе',
-                      result: 'Результат сохранён',
-                      completed: 'Задача завершена',
-                      reopened: 'Возвращена в работу',
-                    }[e.kind]
-                  }
+                  {e.projectName ?? 'Общая задача'} · {workKindLabels[e.kind]}
                 </p>
-                <p className="preserve">{e.task.result?.summary ?? 'Результат не указан.'}</p>
+                <p className="preserve">
+                  {e.kind === 'reopened'
+                    ? e.task.title
+                    : (e.task.result?.summary ?? 'Результат не указан.')}
+                </p>
                 {e.task.result?.remaining && (
                   <p className="help">Осталось: {e.task.result.remaining}</p>
                 )}
@@ -187,8 +261,9 @@ export default function Overview() {
         </ol>
         {history.data && !history.data.items.length && (
           <p className="empty">
-            Сохранённых результатов пока нет. Они появятся после записи результата или завершения
-            задачи.
+            {range
+              ? 'За выбранный период записей работы нет.'
+              : 'Сохранённых записей работы пока нет. Они появятся после записи результата или завершения задачи.'}
           </p>
         )}
       </section>
@@ -203,9 +278,7 @@ export default function Overview() {
         )}
       </div>
       <details className="overview-details section-space">
-        <summary>
-          Проверки: {checks.length} · активные проекты: {active.length}
-        </summary>
+        <summary>Внешние проверки: {checks.length} · изменения в Git</summary>
         <div className="section-space">
           <section className="checks-overview">
             <div className="section-heading">
@@ -237,19 +310,6 @@ export default function Overview() {
                     </div>
                   </div>
                 </article>
-              ))}
-            </div>
-          </section>
-          <section className="section-space">
-            <div className="section-heading">
-              <h2>
-                Активные проекты <span className="count">{active.length}</span>
-              </h2>
-              <Link to="/projects">Все проекты →</Link>
-            </div>
-            <div className="project-register">
-              {active.map((p) => (
-                <ProjectCard key={p.id} project={p} />
               ))}
             </div>
           </section>

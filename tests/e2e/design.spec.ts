@@ -124,5 +124,5 @@ test('loading, disabled refresh and error recovery states are exposed', async ({
   await page.unroute('**/api/workspace');
   await page.route('**/api/workspace', (route) => route.fulfill({ json: designFixture() }));
   await page.getByRole('button', { name: 'Повторить загрузку' }).click();
-  await expect(page.getByRole('heading', { name: 'Сейчас', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Обзор', exact: true })).toBeVisible();
 });

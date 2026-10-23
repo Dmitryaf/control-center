@@ -1,11 +1,45 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import type { Project } from '../../../shared/contracts';
-import { statusLabels, typeLabels, date } from '../../shared/labels';
+import { useQuery } from '@tanstack/react-query';
+import type { Project, TaskHistoryPage } from '../../../shared/contracts';
+import {
+  statusLabels,
+  typeLabels,
+  date,
+  priorityLabels,
+  workKindLabels,
+} from '../../shared/labels';
 import { useWorkspace } from '../../shared/workspace';
-export function ProjectCard({ project }: { project: Project }) {
+import { api } from '../../shared/http';
+export function ProjectCard({
+  project,
+  overview = false,
+}: {
+  project: Project;
+  overview?: boolean;
+}) {
   const { data: w } = useWorkspace();
-  const tasks = w!.tasks.filter((t) => t.projectId === project.id && !t.completedAt);
+  const tasks = w!.tasks
+    .filter((t) => t.projectId === project.id && !t.completedAt)
+    .sort(
+      (a, b) =>
+        ({ high: 0, normal: 1, low: 2 })[a.priority] - { high: 0, normal: 1, low: 2 }[b.priority] ||
+        b.number - a.number,
+    );
+  const history = useQuery({
+    queryKey: ['project-recent-work', project.id],
+    enabled: overview,
+    queryFn: ({ signal }) =>
+      api<TaskHistoryPage>(
+        `/task-history?projectId=${project.id}&limit=1`,
+        'GET',
+        undefined,
+        signal,
+      ),
+    refetchInterval: overview ? 5000 : false,
+    retry: false,
+  });
+  const latest = history.data?.items[0];
   const checks = w!.checks.filter((c) => c.projectId === project.id && c.status === 'active');
   const current = tasks.filter((t) => t.state === 'now');
   const next = tasks.find((t) => t.state === 'next');
@@ -14,7 +48,10 @@ export function ProjectCard({ project }: { project: Project }) {
     .sort()
     .at(-1);
   return (
-    <article className="project-row">
+    <article
+      className={`project-row${overview ? ' project-summary' : ''}`}
+      aria-label={project.metadata.name}
+    >
       <div className="project-identity">
         <p className="section-label">
           {typeLabels[project.metadata.type]} · {statusLabels[project.metadata.status]}
@@ -23,38 +60,100 @@ export function ProjectCard({ project }: { project: Project }) {
           <Link to={`/projects/${project.id}`}>{project.metadata.name}</Link>
         </h3>
         {project.metadata.priority === 'high' && <p className="priority">↑ Высокий приоритет</p>}
+        {project.metadata.stage && <p className="help">Этап · {project.metadata.stage}</p>}
+        <p className="project-goal preserve">{project.metadata.goal || 'Цель пока не записана.'}</p>
+        {overview && !project.available && (
+          <p className="warning-text">Каталог недоступен · сохранённый снимок</p>
+        )}
       </div>
       <div className="project-focus">
-        <p>
-          {current.length
-            ? current.map((t) => `${t.code} · ${t.title}`).join('; ')
-            : 'Задачи на сейчас ещё не выбраны'}
-        </p>
+        <p className="section-label">Сейчас</p>
+        <ul className="work-list current-task-list">
+          {current.map((task) => (
+            <li key={task.id}>
+              <Link to={`/tasks?task=${task.code}`}>
+                {task.code} · {task.title}
+              </Link>
+              <p className="help">{priorityLabels[task.priority]} приоритет</p>
+            </li>
+          ))}
+        </ul>
+        {!current.length && <p className="help">Задачи на сейчас не выбраны.</p>}
         <p className="help">
-          Далее · {next ? `${next.code} · ${next.title}` : 'Следующие задачи не выбраны'}
+          Далее ·{' '}
+          {next ? (
+            <Link to={`/tasks?task=${next.code}`}>
+              {next.code} · {next.title}
+            </Link>
+          ) : (
+            'Следующие задачи не выбраны'
+          )}
         </p>
+        {project.metadata.blocked_by.length > 0 && (
+          <p className="help">Препятствия: {project.metadata.blocked_by.join('; ')}</p>
+        )}
       </div>
       <div className="project-activity">
-        <p className="help">
-          {project.available ? 'Снимок файлов:' : 'Последний доступный снимок:'}{' '}
-          <time dateTime={project.snapshot.scannedAt}>
-            {new Date(project.snapshot.scannedAt).toLocaleString('ru')}
-          </time>
-        </p>
-        <p>{checks.length} активных проверок</p>
-        <p className="help">
-          Внешний шаг: {action ? date(action) : 'нет записи в активных проверках'}
-        </p>
-        <p className="help">
-          {project.snapshot.git.present
-            ? `Git: ${date(project.snapshot.git.commits[0]?.date)}`
-            : 'Без Git'}
-        </p>
-        {!project.available ? (
-          <p className="warning-text">Каталог недоступен · сохранённый снимок</p>
-        ) : (
-          project.snapshot.git.dirty && <p className="help">Есть незакоммиченные изменения</p>
+        {overview && (
+          <div className="project-latest">
+            <p className="section-label">Последняя запись работы</p>
+            {history.isPending && <p role="status">Загружаем запись…</p>}
+            {history.error && (
+              <div role="alert">
+                <p>Не удалось обновить запись.</p>
+                <button onClick={() => history.refetch()} disabled={history.isFetching}>
+                  Повторить
+                </button>
+              </div>
+            )}
+            {latest && (
+              <>
+                <p>
+                  <Link to={`/history?task=${latest.task.code}`}>
+                    {workKindLabels[latest.kind]} · {latest.task.code}
+                  </Link>
+                </p>
+                <time dateTime={latest.recordedAt}>
+                  {new Date(latest.recordedAt).toLocaleString('ru')}
+                </time>
+                <p className="preserve">
+                  {latest.kind === 'reopened'
+                    ? latest.task.title
+                    : latest.task.result?.summary || latest.task.title}
+                </p>
+                {latest.kind === 'baseline' && (
+                  <p className="help">
+                    Сохранённое состояние при переходе, более ранняя история недоступна.
+                  </p>
+                )}
+              </>
+            )}
+            {history.data && !latest && <p className="help">Записей работы пока нет.</p>}
+          </div>
         )}
+        <details open={overview ? undefined : true} className="project-snapshot">
+          <summary>Файлы и проверки</summary>
+          <p className="help">
+            {project.available ? 'Снимок файлов:' : 'Последний доступный снимок:'}{' '}
+            <time dateTime={project.snapshot.scannedAt}>
+              {new Date(project.snapshot.scannedAt).toLocaleString('ru')}
+            </time>
+          </p>
+          <p>{checks.length} активных проверок</p>
+          <p className="help">
+            Внешний шаг: {action ? date(action) : 'нет записи в активных проверках'}
+          </p>
+          <p className="help">
+            {project.snapshot.git.present
+              ? `Git: ${date(project.snapshot.git.commits[0]?.date)}`
+              : 'Без Git'}
+          </p>
+          {!project.available ? (
+            <p className="warning-text">Каталог недоступен · сохранённый снимок</p>
+          ) : (
+            project.snapshot.git.dirty && <p className="help">Есть незакоммиченные изменения</p>
+          )}
+        </details>
       </div>
     </article>
   );

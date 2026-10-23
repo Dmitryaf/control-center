@@ -102,13 +102,16 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     ).toBeVisible();
     await page.getByRole('navigation').getByRole('link', { name: /Обзор/ }).click();
     await page.locator('.overview-details > summary').click();
-    await expect(page.getByRole('heading', { name: 'Активные проекты 1' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Задачи · 1 →' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Проекты сейчас' })).toBeVisible();
+    await expect(page.getByRole('article', { name: 'local-product', exact: true })).toBeVisible();
+    await expect(page.getByRole('article', { name: 'local-tool', exact: true })).toBeVisible();
+    await expect(page.locator('.current-work .current-task-list li')).toHaveCount(1);
+    await expect(page.getByRole('link', { name: 'Открыть доску задач →' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Идеи · 1 →' })).toBeVisible();
     await expect(page.locator('.current-work')).toContainText('Проверить выпуск');
     await page.screenshot({ path: '.local/overview-desktop.png', fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.getByRole('heading', { name: 'Сейчас', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Обзор', exact: true })).toBeVisible();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
