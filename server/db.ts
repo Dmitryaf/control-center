@@ -35,12 +35,12 @@ export class Store {
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (![0, 2, 3, 4, 5, 6, 7, 8, 9].includes(version.user_version)) {
+    if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(version.user_version)) {
       this.db.close();
       throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
     }
     try {
-      if (existing && version.user_version < 9) {
+      if (existing && version.user_version < 10) {
         const directory = join(dirname(path), 'backups');
         mkdirSync(directory, { recursive: true });
         const prefix =
@@ -54,7 +54,9 @@ export class Store {
                   ? 'before-reviews-v7'
                   : version.user_version < 8
                     ? 'before-analysis-v8'
-                    : 'before-schedules-v9';
+                    : version.user_version < 9
+                      ? 'before-schedules-v9'
+                      : 'before-proposals-v10';
         snapshotDatabase(this.db, join(directory, `${prefix}-${randomUUID()}.sqlite`));
       }
       this.transaction(() => {
@@ -63,7 +65,7 @@ export class Store {
         const lockedVersion = this.db.prepare('PRAGMA user_version').get() as {
           user_version: number;
         };
-        if (![0, 2, 3, 4, 5, 6, 7, 8, 9].includes(lockedVersion.user_version))
+        if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(lockedVersion.user_version))
           throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
@@ -197,7 +199,12 @@ export class Store {
         this.db
           .exec(`CREATE UNIQUE INDEX IF NOT EXISTS analysis_automatic_key ON analysis_runs(automatic_key) WHERE automatic_key IS NOT NULL;
           CREATE TABLE IF NOT EXISTS analysis_schedule_periods (automatic_key TEXT PRIMARY KEY,run_key TEXT NOT NULL);
-          PRAGMA user_version = 9;`);
+          CREATE TABLE IF NOT EXISTS analysis_acceptances (
+            id TEXT PRIMARY KEY,analysis_run_id TEXT REFERENCES analysis_runs(id) ON DELETE SET NULL,
+            run_key TEXT NOT NULL,proposal_index INTEGER NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('task','idea')),
+            result_id TEXT NOT NULL,approved_json TEXT NOT NULL,original_json TEXT NOT NULL,created_at TEXT NOT NULL,
+            UNIQUE(run_key,proposal_index));
+          PRAGMA user_version = 10;`);
       });
     } catch (error) {
       this.db.close();

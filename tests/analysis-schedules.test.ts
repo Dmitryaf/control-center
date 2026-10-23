@@ -308,7 +308,7 @@ test('schema 8 migration keeps old data and a verified backup; related AI needs 
   seed.close();
   const upgraded = new Store(file);
   assert.equal(new Reviews(upgraded).read(review.id).id, review.id);
-  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 9);
+  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 10);
   upgraded.close();
   const name = (await readdir(path.join(f.root, 'backups'))).find((n) =>
     n.startsWith('before-schedules-v9'),

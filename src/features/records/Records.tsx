@@ -103,7 +103,7 @@ export function Ideas() {
       </div>
       <div className="record-list">
         {w!.ideas.map((i) => (
-          <article className="panel" key={i.id}>
+          <article id={`idea-${i.id}`} className="panel" key={i.id}>
             <div className="row between">
               {i.projectId ? (
                 <Link to={`/projects/${i.projectId}`}>
@@ -115,6 +115,13 @@ export function Ideas() {
               <small>{date(i.createdAt)}</small>
             </div>
             <h3>{i.title}</h3>
+            {w!.proposalLinks?.[i.id] && (
+              <p>
+                <Link to={`/proposal-acceptances?id=${w!.proposalLinks[i.id]}`}>
+                  Основания принятого предложения →
+                </Link>
+              </p>
+            )}
             <p className="idea-age">
               Идея существует: {daysBetween(i.createdAt, today())} дн. · {date(i.createdAt)}
             </p>

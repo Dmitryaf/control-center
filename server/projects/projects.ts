@@ -277,9 +277,12 @@ export class Projects {
       + (SELECT count(*) FROM reviews WHERE project_id=?)
       + (SELECT count(*) FROM analysis_runs WHERE scope_key='project:'||? OR EXISTS(SELECT 1 FROM json_each(json_extract(selection_json,'$.projectIds')) WHERE value=?))
       + (SELECT count(*) FROM analysis_schedules WHERE scope_key='project:'||? OR EXISTS(SELECT 1 FROM json_each(json_extract(selection_json,'$.projectIds')) WHERE value=?))
+      + (SELECT count(*) FROM analysis_acceptances WHERE json_extract(approved_json,'$.projectId')=? OR EXISTS(SELECT 1 FROM json_each(json_extract(original_json,'$.proposal.projectIds')) WHERE value=?))
     ) AS total`,
         )
         .get(
+          targetId,
+          targetId,
           targetId,
           targetId,
           targetId,

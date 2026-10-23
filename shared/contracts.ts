@@ -213,4 +213,5 @@ export interface Workspace {
   checkEntries: CheckEntry[];
   fileDecisions: FileDecision[];
   storage: { databasePath: string };
+  proposalLinks?: Record<string, string>;
 }

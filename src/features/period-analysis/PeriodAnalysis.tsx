@@ -179,6 +179,15 @@ function RunDetail({
                   <h4>{proposal.title}</h4>
                   <p>{proposal.description}</p>
                   <p>{proposal.reason}</p>
+                  <p>
+                    Основания:{' '}
+                    {proposal.sources
+                      .map((id) => run.payload.sources.find((s) => s.id === id)?.title ?? id)
+                      .join('; ')}
+                  </p>
+                  <Link to={`/period-proposal?run=${run.id}&index=${index}`}>
+                    Проверить и принять предложение →
+                  </Link>
                   <p className="help">
                     Неизвестное: {proposal.uncertainty || 'Не указано'}. Дешёвая проверка:{' '}
                     {proposal.cheapCheck}
@@ -213,7 +222,7 @@ function RunDetail({
           onClick={() => {
             if (
               !confirm(
-                'Удалить локальные пакет и результат анализа? Ваш обзор и исходные события сохранятся.',
+                'Удалить локальные пакет и результат анализа? Ваш обзор, исходные события и уже принятые задачи/идеи с их основаниями сохранятся.',
               )
             )
               return;
@@ -302,6 +311,7 @@ function AnalysisPage({ reviewId }: { reviewId: string }) {
         Прежний ручной анализ проектов остаётся доступен.
       </p>
       <p>
+        <Link to="/proposal-acceptances">Принятые предложения →</Link> ·{' '}
         <Link to="/analysis-schedules">Все расписания →</Link> ·{' '}
         <Link to="/timeline?kind=ai_analysis">Все AI-запуски →</Link>
       </p>

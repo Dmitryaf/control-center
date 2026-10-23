@@ -87,7 +87,8 @@ export default function History() {
         <div>
           <p className="section-label">Проекты во времени</p>
           <p>
-            <Link to="/analysis-schedules">Расписания AI-анализа →</Link>
+            <Link to="/analysis-schedules">Расписания AI-анализа →</Link> ·{' '}
+            <Link to="/proposal-acceptances">Принятые предложения →</Link>
           </p>
           <h1>История</h1>
           <p className="subtitle">Результаты, внешние шаги и основания решений рядом.</p>

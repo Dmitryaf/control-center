@@ -23,6 +23,7 @@ import { History } from './history.js';
 import { Observations } from './observations.js';
 import { Reviews } from './reviews.js';
 import { ProjectAnalysis } from './analysis/analysis.js';
+import { ProposalAcceptances } from './analysis/acceptances.js';
 import { AnalysisSchedules } from './analysis/schedules.js';
 import { PeriodAnalysis } from './analysis/period-analysis.js';
 
@@ -43,6 +44,7 @@ export function createApp(
   const periodAnalysis = suppliedPeriodAnalysis ?? new PeriodAnalysis(store, history);
   const reviews = new Reviews(store);
   const schedules = new AnalysisSchedules(store, periodAnalysis);
+  const acceptances = new ProposalAcceptances(store, periodAnalysis);
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -64,6 +66,14 @@ export function createApp(
     next();
   });
   app.use(express.json({ limit: '256kb' }));
+  app.get('/api/proposal-acceptances', (req, res) => res.json(acceptances.list(req.query)));
+  app.get('/api/proposal-acceptances/:id', (req, res) => res.json(acceptances.read(req.params.id)));
+  app.get('/api/period-analysis/:id/acceptances', (req, res) =>
+    res.json(acceptances.forRun(req.params.id)),
+  );
+  app.post('/api/period-analysis/:id/proposals/:index/accept', (req, res) =>
+    res.status(201).json(acceptances.accept(req.params.id, req.params.index, req.body)),
+  );
   app.get('/api/analysis-schedules', (req, res) => res.json(schedules.list(req.query)));
   app.get('/api/reviews/:id/schedule', (req, res) => res.json(schedules.forReview(req.params.id)));
   app.post('/api/analysis-schedules', (req, res) => res.json(schedules.enable(req.body)));
@@ -145,6 +155,7 @@ export function createApp(
       checkEntries: checks.entries(),
       fileDecisions: projects.decisions.list(),
       storage: { databasePath: store.path },
+      proposalLinks: acceptances.links(),
     }),
   );
   app.post('/api/scan', async (_req, res) => {

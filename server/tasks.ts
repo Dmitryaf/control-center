@@ -54,86 +54,98 @@ export class Tasks {
   }
 
   save(input: unknown, id: string = randomUUID(), update = false): Task {
+    return this.store.transaction(() => this.saveInTransaction(input, id, update));
+  }
+
+  // Keep a caller-owned local link atomic with the existing task creation invariants.
+  // The callback may write its own table, never commit or start another transaction.
+  createLinked(input: unknown, link: (task: Task) => void): Task {
+    return this.store.transaction(() => {
+      const task = this.saveInTransaction(input, randomUUID(), false);
+      link(task);
+      return task;
+    });
+  }
+
+  private saveInTransaction(input: unknown, id: string, update: boolean): Task {
     const options = taskWriteOptions.parse(input);
     const data = taskSchema.parse(input);
     if (data.completedAt && data.result?.remaining)
       throw new HttpError(400, 'Осталась работа: сохраните результат без завершения задачи.');
     const hash = createHash('sha256').update(JSON.stringify(data)).digest('hex');
-    return this.store.transaction(() => {
-      if (!update && options.requestKey) {
-        const repeated = this.store.db
-          .prepare('SELECT record_id, request_hash FROM task_identity WHERE request_key=?')
-          .get(options.requestKey) as { record_id: string; request_hash: string } | undefined;
-        if (repeated) {
-          if (repeated.request_hash !== hash)
-            throw new HttpError(
-              409,
-              'Этот ключ создания уже использован с другими полями. Прочитайте исходную задачу.',
-            );
-          return this.read(repeated.record_id);
-        }
-      }
-      const existing = update ? this.read(id) : null;
-      if (existing && options.revision === undefined)
-        throw new HttpError(
-          409,
-          'Для изменения нужна revision из актуальной задачи. Прочитайте задачу и повторите.',
-        );
-      if (existing && options.revision !== existing.revision)
-        throw new HttpError(
-          409,
-          `${existing.code} уже изменена. Прочитайте задачу и согласуйте изменения; ваш ввод не записан.`,
-        );
-      if (data.projectId && !this.store.project(data.projectId))
-        throw new HttpError(400, 'Связанный проект не найден.');
-      if (!update && !options.allowDuplicate) {
-        const duplicate = this.list().find(
-          (task) =>
-            !task.completedAt &&
-            task.projectId === data.projectId &&
-            normalizeTitle(task.title) === normalizeTitle(data.title),
-        );
-        if (duplicate)
+    if (!update && options.requestKey) {
+      const repeated = this.store.db
+        .prepare('SELECT record_id, request_hash FROM task_identity WHERE request_key=?')
+        .get(options.requestKey) as { record_id: string; request_hash: string } | undefined;
+      if (repeated) {
+        if (repeated.request_hash !== hash)
           throw new HttpError(
             409,
-            `Похожая задача уже есть: ${duplicate.code}. Прочитайте её; для отдельной задачи подтвердите allowDuplicate.`,
+            'Этот ключ создания уже использован с другими полями. Прочитайте исходную задачу.',
           );
+        return this.read(repeated.record_id);
       }
-      const now = new Date().toISOString();
-      if (existing) {
-        this.store.db
-          .prepare(
-            "UPDATE records SET project_id=?, data=?, updated_at=? WHERE id=? AND kind='tasks'",
-          )
-          .run(data.projectId, JSON.stringify(data), now, existing.id);
-        this.store.db
-          .prepare('UPDATE task_identity SET revision=revision+1 WHERE record_id=?')
-          .run(existing.id);
-        const saved = this.read(existing.id);
-        const kind =
-          saved.completedAt && saved.completedAt !== existing.completedAt
-            ? 'completed'
-            : existing.completedAt && !saved.completedAt
-              ? 'reopened'
-              : JSON.stringify(saved.result) !== JSON.stringify(existing.result)
-                ? 'result'
-                : null;
-        if (kind) new TaskHistory(this.store).append(saved, kind);
-        return saved;
-      }
+    }
+    const existing = update ? this.read(id) : null;
+    if (existing && options.revision === undefined)
+      throw new HttpError(
+        409,
+        'Для изменения нужна revision из актуальной задачи. Прочитайте задачу и повторите.',
+      );
+    if (existing && options.revision !== existing.revision)
+      throw new HttpError(
+        409,
+        `${existing.code} уже изменена. Прочитайте задачу и согласуйте изменения; ваш ввод не записан.`,
+      );
+    if (data.projectId && !this.store.project(data.projectId))
+      throw new HttpError(400, 'Связанный проект не найден.');
+    if (!update && !options.allowDuplicate) {
+      const duplicate = this.list().find(
+        (task) =>
+          !task.completedAt &&
+          task.projectId === data.projectId &&
+          normalizeTitle(task.title) === normalizeTitle(data.title),
+      );
+      if (duplicate)
+        throw new HttpError(
+          409,
+          `Похожая задача уже есть: ${duplicate.code}. Прочитайте её; для отдельной задачи подтвердите allowDuplicate.`,
+        );
+    }
+    const now = new Date().toISOString();
+    if (existing) {
       this.store.db
         .prepare(
-          "INSERT INTO records(id,kind,project_id,data,created_at,updated_at) VALUES(?,'tasks',?,?,?,?)",
+          "UPDATE records SET project_id=?, data=?, updated_at=? WHERE id=? AND kind='tasks'",
         )
-        .run(id, data.projectId, JSON.stringify(data), now, now);
+        .run(data.projectId, JSON.stringify(data), now, existing.id);
       this.store.db
-        .prepare('INSERT INTO task_identity(record_id,request_key,request_hash) VALUES(?,?,?)')
-        .run(id, options.requestKey ?? null, options.requestKey ? hash : null);
-      const saved = this.read(id);
-      if (saved.completedAt || saved.result)
-        new TaskHistory(this.store).append(saved, saved.completedAt ? 'completed' : 'result');
+        .prepare('UPDATE task_identity SET revision=revision+1 WHERE record_id=?')
+        .run(existing.id);
+      const saved = this.read(existing.id);
+      const kind =
+        saved.completedAt && saved.completedAt !== existing.completedAt
+          ? 'completed'
+          : existing.completedAt && !saved.completedAt
+            ? 'reopened'
+            : JSON.stringify(saved.result) !== JSON.stringify(existing.result)
+              ? 'result'
+              : null;
+      if (kind) new TaskHistory(this.store).append(saved, kind);
       return saved;
-    });
+    }
+    this.store.db
+      .prepare(
+        "INSERT INTO records(id,kind,project_id,data,created_at,updated_at) VALUES(?,'tasks',?,?,?,?)",
+      )
+      .run(id, data.projectId, JSON.stringify(data), now, now);
+    this.store.db
+      .prepare('INSERT INTO task_identity(record_id,request_key,request_hash) VALUES(?,?,?)')
+      .run(id, options.requestKey ?? null, options.requestKey ? hash : null);
+    const saved = this.read(id);
+    if (saved.completedAt || saved.result)
+      new TaskHistory(this.store).append(saved, saved.completedAt ? 'completed' : 'result');
+    return saved;
   }
 
   patch(identifier: string, revision: number, change: unknown): Task {

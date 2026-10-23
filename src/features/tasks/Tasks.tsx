@@ -273,6 +273,13 @@ export default function Tasks() {
                     <span className="priority">{priorityLabels[t.priority]}</span>
                   </div>
                   <h3>{t.title}</h3>
+                  {w!.proposalLinks?.[t.id] && (
+                    <p>
+                      <Link to={`/proposal-acceptances?id=${w!.proposalLinks[t.id]}`}>
+                        Основания принятого предложения →
+                      </Link>
+                    </p>
+                  )}
                   <p className="preserve">{t.description}</p>
                   {(t.expectedResult || t.acceptance || t.links.length > 0 || t.result) && (
                     <details className="task-details">
