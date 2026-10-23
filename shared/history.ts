@@ -8,6 +8,7 @@ export const historyKindSchema = z.enum([
   'file_decision',
   'observation',
   'review',
+  'ai_analysis',
 ]);
 export type HistoryKind = z.infer<typeof historyKindSchema>;
 export const historyQuerySchema = z
@@ -44,7 +45,8 @@ export type HistoryEvent =
   | 'decision'
   | 'file_decision'
   | 'observation'
-  | 'review';
+  | 'review'
+  | 'ai_analysis';
 export interface HistoryEntry {
   key: string;
   kind: HistoryKind;

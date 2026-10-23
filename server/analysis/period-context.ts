@@ -16,7 +16,7 @@ import { HttpError } from '../errors.js';
 import { sensitiveText } from './privacy.js';
 import { maxInputBytes } from './openai.js';
 
-export const periodPolicyVersion = 'period-review-v1';
+export const periodPolicyVersion = 'period-review-v2';
 export const digest = (value: unknown) =>
   createHash('sha256')
     .update(typeof value === 'string' ? value : JSON.stringify(value))
@@ -31,11 +31,12 @@ export interface ContextGuard {
     | 'check'
     | 'check_entry'
     | 'decision'
-    | 'file_decision';
+    | 'file_decision'
+    | 'analysis';
   id: string;
   stamp: string;
 }
-const projectStamp = (row: NonNullable<ReturnType<Store['project']>>) =>
+export const projectStamp = (row: NonNullable<ReturnType<Store['project']>>) =>
   digest({
     visibility: row.visibility,
     privateContext: row.private_context_path,
@@ -84,6 +85,7 @@ export function buildPeriodContext(
   review: Review,
   selection: PeriodSelection,
   now: number,
+  allowEmpty = false,
 ) {
   if (
     review.scopeKey !== 'general' &&
@@ -242,7 +244,7 @@ export function buildPeriodContext(
     guards.push({ kind: 'review', id: row.id, stamp: String(row.revision) });
   };
   if (selection.includeUserText) addReview(review);
-  if (selection.includeRelatedReviews) {
+  if (selection.includeRelatedReviews || selection.includeRelatedAnalyses) {
     let cursor: string | undefined;
     let count = 0;
     do {
@@ -259,12 +261,41 @@ export function buildPeriodContext(
             400,
             'Больше 20 связанных обзоров. Исключите их или выберите меньше проектов.',
           );
-        addReview(reviews.read(item.id));
+        if (selection.includeRelatedReviews) addReview(reviews.read(item.id));
+        if (selection.includeRelatedAnalyses) {
+          const run = store.db
+            .prepare(
+              "SELECT id,report_json,packet_hash,review_id,finished_at FROM analysis_runs WHERE review_key=? AND status='succeeded' ORDER BY generation DESC LIMIT 1",
+            )
+            .get(item.id);
+          if (run) {
+            add({
+              id: `analysis:${run.id}`,
+              kind: 'ai_analysis',
+              projectId: item.scopeKey === 'general' ? null : item.scopeKey.slice(8),
+              title: `AI: ${item.periodStart} — ${item.periodEnd}`,
+              text: String(run.report_json),
+              day: item.periodStart,
+              recordedAt: String(run.finished_at),
+              dateQuality: 'model',
+              partial: false,
+            });
+            guards.push({
+              kind: 'analysis',
+              id: String(run.id),
+              stamp: digest({
+                report_json: run.report_json,
+                packet_hash: run.packet_hash,
+                review_id: run.review_id,
+              }),
+            });
+          }
+        }
       }
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
   }
-  if (!sources.length)
+  if (!sources.length && !allowEmpty)
     throw new HttpError(
       400,
       'В выбранных источниках нет данных. Выберите другие источники или сохраните собственный итог.',
@@ -282,6 +313,7 @@ export function buildPeriodContext(
       incomplete: new Date(now).toISOString() < review.nextStartAt,
     },
     scope: {
+      name: review.projectName,
       reviewId: review.id,
       key: review.scopeKey,
       projectIds: selection.projectIds,
@@ -289,6 +321,7 @@ export function buildPeriodContext(
     },
     sources,
     limitations: [
+      'Прежние AI-итоги — производные предположения, не независимые факты; вложенные старые ссылки не входят в этот пакет.',
       'Источники выбраны пользователем; отсутствие записи не доказывает отсутствие работы.',
       'Сохранённые результаты — сообщения авторов, не независимая проверка.',
       'Текущие цели, открытые задачи и тексты не восстанавливают состояние на конец периода.',
@@ -326,6 +359,13 @@ export function verifyContextGuards(store: Store, guards: ContextGuard[], histor
     } else if (guard.kind === 'project_metadata') {
       const row = store.project(guard.id);
       actual = row ? digest(projectFields(row)) : null;
+    } else if (guard.kind === 'analysis') {
+      const run = store.db
+        .prepare(
+          "SELECT report_json,packet_hash,review_id FROM analysis_runs WHERE id=? AND status='succeeded'",
+        )
+        .get(guard.id);
+      actual = run ? digest(run) : null;
     } else if (guard.kind === 'file_decision') actual = history.fileMetadataStamp(guard.id);
     else if (guard.kind === 'check' || guard.kind === 'check_entry' || guard.kind === 'decision')
       actual = mutableStamp(store, guard.kind, guard.id);

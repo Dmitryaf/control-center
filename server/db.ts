@@ -35,12 +35,12 @@ export class Store {
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (![0, 2, 3, 4, 5, 6, 7, 8].includes(version.user_version)) {
+    if (![0, 2, 3, 4, 5, 6, 7, 8, 9].includes(version.user_version)) {
       this.db.close();
       throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
     }
     try {
-      if (existing && version.user_version < 8) {
+      if (existing && version.user_version < 9) {
         const directory = join(dirname(path), 'backups');
         mkdirSync(directory, { recursive: true });
         const prefix =
@@ -52,7 +52,9 @@ export class Store {
                 ? 'before-observations-v6'
                 : version.user_version < 7
                   ? 'before-reviews-v7'
-                  : 'before-analysis-v8';
+                  : version.user_version < 8
+                    ? 'before-analysis-v8'
+                    : 'before-schedules-v9';
         snapshotDatabase(this.db, join(directory, `${prefix}-${randomUUID()}.sqlite`));
       }
       this.transaction(() => {
@@ -61,7 +63,7 @@ export class Store {
         const lockedVersion = this.db.prepare('PRAGMA user_version').get() as {
           user_version: number;
         };
-        if (![0, 2, 3, 4, 5, 6, 7, 8].includes(lockedVersion.user_version))
+        if (![0, 2, 3, 4, 5, 6, 7, 8, 9].includes(lockedVersion.user_version))
           throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
@@ -178,7 +180,24 @@ export class Store {
           UNIQUE(review_key,generation)
         );
         CREATE INDEX IF NOT EXISTS analysis_review_time ON analysis_runs(review_key,created_at,id);`);
-        this.db.exec('PRAGMA user_version = 8;');
+        this.db.exec(`CREATE TABLE IF NOT EXISTS analysis_schedules (
+          id TEXT PRIMARY KEY,scope_key TEXT NOT NULL,project_name TEXT,
+          period_kind TEXT NOT NULL,timezone TEXT NOT NULL,model TEXT NOT NULL,
+          policy_version TEXT NOT NULL,selection_json TEXT NOT NULL,access_json TEXT NOT NULL,
+          revision INTEGER NOT NULL,enabled INTEGER NOT NULL DEFAULT 0,
+          enabled_at TEXT NOT NULL,next_period_start TEXT NOT NULL,
+          lease_owner TEXT,lease_until TEXT,last_run_id TEXT,note TEXT,updated_at TEXT NOT NULL,
+          UNIQUE(scope_key,period_kind));`);
+        const runColumns = this.db.prepare('PRAGMA table_info(analysis_runs)').all();
+        if (!runColumns.some((c) => c.name === 'schedule_id'))
+          this.db.exec(`
+          ALTER TABLE analysis_runs ADD COLUMN schedule_id TEXT;
+          ALTER TABLE analysis_runs ADD COLUMN schedule_revision INTEGER;
+          ALTER TABLE analysis_runs ADD COLUMN automatic_key TEXT;`);
+        this.db
+          .exec(`CREATE UNIQUE INDEX IF NOT EXISTS analysis_automatic_key ON analysis_runs(automatic_key) WHERE automatic_key IS NOT NULL;
+          CREATE TABLE IF NOT EXISTS analysis_schedule_periods (automatic_key TEXT PRIMARY KEY,run_key TEXT NOT NULL);
+          PRAGMA user_version = 9;`);
       });
     } catch (error) {
       this.db.close();

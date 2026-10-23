@@ -29,10 +29,29 @@ export function snapshotDatabase(db: DatabaseSync, destination: string) {
         error='Восстановленная копия не возобновляет отправку. Подготовьте новый пакет; прежний запрос мог быть оплачен.',
         owner_id=NULL,lease_until=NULL WHERE status IN ('pending','running');`);
     }
+    revokeRestoredApprovals(check);
     check.exec('PRAGMA journal_mode=DELETE;');
     const result = check.prepare('PRAGMA quick_check').get() as { quick_check: string };
     if (result.quick_check !== 'ok') throw new Error('Проверка резервной копии не пройдена.');
   } finally {
     check.close();
   }
+}
+
+// Also used explicitly before starting a server on a raw, externally restored database.
+export function revokeRestoredApprovals(db: DatabaseSync) {
+  if (
+    db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='analysis_schedules'")
+      .get()
+  )
+    db.exec(
+      "UPDATE analysis_schedules SET enabled=0,revision=revision+1,lease_owner=NULL,lease_until=NULL,note='После восстановления требуется новое согласие.';",
+    );
+  if (
+    db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='analysis_runs'").get()
+  )
+    db.exec(
+      "UPDATE analysis_runs SET status=CASE WHEN status='running' THEN 'unknown' ELSE 'cancelled' END,owner_id=NULL,lease_until=NULL,error='Восстановленная копия не возобновляет отправку; прежний запрос мог быть оплачен.' WHERE status IN ('pending','running');",
+    );
 }

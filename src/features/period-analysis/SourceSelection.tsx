@@ -15,6 +15,7 @@ export const emptySelection = (projectId: string | null): PeriodSelection => ({
   includeOpenTasks: false,
   includeUserText: false,
   includeRelatedReviews: false,
+  includeRelatedAnalyses: false,
 });
 export function SourceSelection({
   value,
@@ -30,7 +31,12 @@ export function SourceSelection({
   disabled?: boolean;
 }) {
   const flag = (
-    key: 'includeMetadata' | 'includeOpenTasks' | 'includeUserText' | 'includeRelatedReviews',
+    key:
+      | 'includeMetadata'
+      | 'includeOpenTasks'
+      | 'includeUserText'
+      | 'includeRelatedReviews'
+      | 'includeRelatedAnalyses',
     label: string,
   ) => (
     <label className="check" key={key}>
@@ -96,6 +102,7 @@ export function SourceSelection({
           {label}
         </label>
       ))}
+      {flag('includeRelatedAnalyses', 'Последние успешные AI-итоги связанных обзоров')}
       {flag('includeUserText', 'Мой сохранённый текст этого обзора')}
       {flag('includeRelatedReviews', 'Тексты связанных обзоров выбранных проектов и общих записей')}
       <p className="help">

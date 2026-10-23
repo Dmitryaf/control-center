@@ -15,7 +15,8 @@ Project-removal exclusions are stored in local settings and included in backups.
 1. Note the active database path in Settings and stop every Control Center process, including all MCP processes launched by Codex.
 2. Move the current `control-center.sqlite` and any matching `control-center.sqlite-wal` and `control-center.sqlite-shm` files together to a separate recovery directory. Keep them until recovery is confirmed.
 3. Copy the selected verified backup into the active data directory as `control-center.sqlite`. Do not reuse the old WAL/SHM files with this copy.
-4. Start the app, inspect your records and settings, then refresh projects. Restore moved repository/private-source directories separately or update their configured paths.
+4. For a raw database copy made outside the verified app backup flow, first start with `npm start -- --restore-recovery` (or `npm run dev -- --restore-recovery`) before starting any other HTTP/MCP process. This disables standing AI grants and cancels pending dispatches; running attempts become unknown. An arbitrary raw file replacement is not automatically detectable. Verified app backups already disable grants in the copy.
+5. Start the app, inspect your records and settings, then refresh projects. Restore moved repository/private-source directories separately or update their configured paths.
 
 Use the current application version or a newer compatible version. An older app must not open a newer database schema. Restoring a backup replaces the active state; databases are not merged.
 
@@ -38,3 +39,8 @@ Review backups include current user text, revisions, stable scope/name, declared
 Schema version 8 adds saved period-analysis runs after a verified `backups/before-analysis-v8-*.sqlite` snapshot for a version 7 database; older supported databases retain their earlier backup prefixes. The migration keeps existing records, IDs, review text and event history, rechecks compatibility under the write lock and rolls back on DDL failure. Stop every old app/MCP writer before upgrading. Downgrade requires the pre-upgrade copy with all processes stopped.
 
 Analysis packets, minimal source evidence, reports, model/usage/response metadata and errors are private database data. In backups, pending runs become cancelled and running requests become unknown; completed variants remain intact, and the live database is unchanged. Restore does not resume dispatch. A request marked unknown may have been charged; a new variant needs explicit acknowledgement and send approval. Removing the review detaches its saved analyses and cancels pending packets, without erasing completed reports. Deleting a local analysis removes its packet and result, not the user review or sources. Provider retention is separate from local deletion.
+
+
+Schema version 9 adds opt-in period schedules, run provenance and minimal unique schedule/period markers after a verified `backups/before-schedules-v9-*.sqlite` snapshot for a version 8 database. Previous data and completed analyses remain intact. All DDL runs under the same compatibility/write-lock transaction; failure keeps the previous schema. Stop all HTTP/MCP writers before migration. No reverse migration is provided.
+
+Verified backups disable schedules, increment their revisions, clear leases and cancel pending runs in the copy; completed reports remain readable. Raw restores must use the explicit recovery startup above. Normal restart is not restoration and retains current grants. Deleting a schedule leaves saved analyses and no-repeat markers. Deleting an analysis removes its packet/report; its marker remains to prevent automatic repeat charges after a crash. These local UUID-only markers do not contain source bodies.

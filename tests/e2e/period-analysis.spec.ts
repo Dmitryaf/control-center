@@ -162,8 +162,14 @@ test('saved period AI flow: actual preview → explicit sending → retained res
       page.getByRole('heading', { name: 'AI-анализ периода', exact: true }),
     ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Подготовить точный пакет' })).toBeDisabled();
-    await page.getByLabel('Текущая цель и состояние выбранных проектов', { exact: true }).check();
-    await page.getByLabel('Наблюдения', { exact: true }).check();
+    await page
+      .getByRole('form', { name: 'Подготовка ручного анализа' })
+      .getByLabel('Текущая цель и состояние выбранных проектов', { exact: true })
+      .check();
+    await page
+      .getByRole('form', { name: 'Подготовка ручного анализа' })
+      .getByLabel('Наблюдения', { exact: true })
+      .check();
     await page.getByLabel('Разрешаю прочитать выбранные источники', { exact: false }).check();
     await page.getByRole('button', { name: 'Подготовить точный пакет' }).click();
     await expect(page.getByRole('alert')).toContainText('Ответ подготовки потерян');
@@ -208,8 +214,14 @@ test('saved period AI flow: actual preview → explicit sending → retained res
         fullPage: true,
       });
     }
-    await page.getByLabel('Текущая цель и состояние выбранных проектов', { exact: true }).check();
-    await page.getByLabel('Наблюдения', { exact: true }).check();
+    await page
+      .getByRole('form', { name: 'Подготовка ручного анализа' })
+      .getByLabel('Текущая цель и состояние выбранных проектов', { exact: true })
+      .check();
+    await page
+      .getByRole('form', { name: 'Подготовка ручного анализа' })
+      .getByLabel('Наблюдения', { exact: true })
+      .check();
     await page.getByLabel('Разрешаю прочитать выбранные источники', { exact: false }).check();
     await expect(page.getByRole('button', { name: 'Подготовить точный пакет' })).toBeDisabled();
     await page.getByLabel('Понимаю, что новый вариант', { exact: false }).check();

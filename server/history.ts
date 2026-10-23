@@ -49,6 +49,13 @@ const entriesSql = `WITH options(zone) AS (VALUES(?)), entries(key,kind,event,so
     CASE WHEN r.scope_key='general' THEN NULL ELSE substr(r.scope_key,9) END,r.project_name,
     CASE WHEN r.period_kind='week' THEN 'Обзор недели · ' ELSE 'Обзор месяца · ' END||r.period_start||' — '||r.period_end,
     r.user_text,'/reviews?id='||r.id FROM reviews r
+  UNION ALL
+  SELECT 'analysis:'||a.id,'ai_analysis','ai_analysis',a.id,history_day(a.created_at,(SELECT zone FROM options)),a.created_at,'recorded',p.id,
+    CASE WHEN a.scope_key='general' THEN NULL ELSE substr(a.scope_key,9) END,
+    COALESCE(json_extract(a.payload_json,'$.scope.name'),json_extract(p.metadata,'$.name'),json_extract(p.snapshot,'$.directoryName')),
+    'AI · '||json_extract(a.payload_json,'$.period.from')||' — '||json_extract(a.payload_json,'$.period.to')||' · '||a.generation||' · '||a.status,
+    COALESCE(json_extract(a.report_json,'$.narrative'),a.error,''),'/period-analysis?review='||a.review_key||'&run='||a.id
+    FROM analysis_runs a LEFT JOIN projects p ON p.id=substr(a.scope_key,9)
 )
 `;
 
@@ -143,7 +150,7 @@ export class History {
     }
     if (bounds) {
       where.push(
-        "kind<>'review'",
+        "kind NOT IN ('review','ai_analysis')",
         '((recordedAt IS NOT NULL AND recordedAt>=? AND recordedAt<?) OR (recordedAt IS NULL AND day>=? AND day<=?))',
       );
       values.push(bounds.startAt, bounds.nextStartAt, query.from!, query.to!);

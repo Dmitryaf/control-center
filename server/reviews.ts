@@ -30,10 +30,10 @@ export class Reviews {
   }
   // Creation only opens a document. Text is saved separately with its revision.
   // The unique calendar key also makes a lost create response safe to retry.
-  create(input: unknown): Review {
+  create(input: unknown, timezone = this.store.settings().timezone): Review {
     const data = reviewCreateSchema.parse(input);
     return this.store.transaction(() => {
-      const bounds = periodBounds(data.kind, data.anchorDate, this.store.settings().timezone);
+      const bounds = periodBounds(data.kind, data.anchorDate, timezone);
       const scope = data.projectId ? `project:${data.projectId}` : 'general';
       const existing = this.store.db
         .prepare('SELECT id FROM reviews WHERE scope_key=? AND period_kind=? AND period_start=?')

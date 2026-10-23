@@ -12,6 +12,7 @@ import type {
 import { useWorkspace, useActions } from '../../shared/workspace';
 import { api } from '../../shared/http';
 import { date } from '../../shared/labels';
+import { ScheduleForm } from './Schedules';
 import { SourceSelection, emptySelection } from './SourceSelection';
 
 const stateLabel: Record<PeriodRunState, string> = {
@@ -292,13 +293,27 @@ function AnalysisPage({ reviewId }: { reviewId: string }) {
             </p>
           )}
         </div>
-        <Link to={`/reviews?id=${reviewId}`}>Вернуться к своему обзору →</Link>
+        {selected.data?.reviewId !== null && (
+          <Link to={`/reviews?id=${reviewId}`}>Вернуться к своему обзору →</Link>
+        )}
       </div>
       <p className="help">
         Сначала выберите источники и подготовьте пакет. Отправка требует отдельного подтверждения.
         Прежний ручной анализ проектов остаётся доступен.
       </p>
-      {[review.error, status.error, runs.error, selected.error]
+      <p>
+        <Link to="/analysis-schedules">Все расписания →</Link> ·{' '}
+        <Link to="/timeline?kind=ai_analysis">Все AI-запуски →</Link>
+      </p>
+      {selected.data?.reviewId === null && (
+        <p>Обзор удалён; сохранённый анализ остаётся доступен.</p>
+      )}
+      {[
+        selected.data?.reviewId === null ? null : review.error,
+        status.error,
+        runs.error,
+        selected.error,
+      ]
         .filter(Boolean)
         .map((error, index) => (
           <p role="alert" key={index}>
@@ -308,6 +323,7 @@ function AnalysisPage({ reviewId }: { reviewId: string }) {
       {(review.isPending || runs.isPending) && <p role="status">Загружаем обзор и варианты…</p>}
       {review.data && (
         <form
+          aria-label="Подготовка ручного анализа"
           className="panel form section-space period-source-form"
           onSubmit={async (event) => {
             event.preventDefault();
@@ -375,6 +391,7 @@ function AnalysisPage({ reviewId }: { reviewId: string }) {
           </div>
         </form>
       )}
+      {review.data && <ScheduleForm review={review.data} status={status.data} />}
       {runs.data && (
         <section className="panel section-space" aria-label="История AI-анализов">
           <h2>История вариантов</h2>

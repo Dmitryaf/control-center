@@ -6,11 +6,12 @@ export const periodSelectionSchema = z
   .object({
     projectIds: z.array(z.string().uuid()).max(10),
     includeGeneral: z.boolean(),
-    sourceKinds: z.array(historyKindSchema.exclude(['review'])).max(5),
+    sourceKinds: z.array(historyKindSchema.exclude(['review', 'ai_analysis'])).max(5),
     includeMetadata: z.boolean(),
     includeOpenTasks: z.boolean(),
     includeUserText: z.boolean(),
     includeRelatedReviews: z.boolean(),
+    includeRelatedAnalyses: z.boolean().default(false),
   })
   .strict()
   .refine(
@@ -19,7 +20,8 @@ export const periodSelectionSchema = z
       s.includeMetadata ||
       s.includeOpenTasks ||
       s.includeUserText ||
-      s.includeRelatedReviews,
+      s.includeRelatedReviews ||
+      s.includeRelatedAnalyses,
     'Выберите хотя бы один источник.',
   );
 export type PeriodSelection = z.infer<typeof periodSelectionSchema>;
@@ -91,7 +93,13 @@ export interface PeriodPayload {
     nextStartAt: string;
     incomplete: boolean;
   };
-  scope: { reviewId: string; key: string; projectIds: string[]; includesGeneral: boolean };
+  scope: {
+    name?: string | null;
+    reviewId: string;
+    key: string;
+    projectIds: string[];
+    includesGeneral: boolean;
+  };
   sources: PeriodSource[];
   limitations: string[];
 }

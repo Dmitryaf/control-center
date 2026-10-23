@@ -276,9 +276,12 @@ export class Projects {
       (SELECT count(*) FROM observations WHERE project_id=?)
       + (SELECT count(*) FROM reviews WHERE project_id=?)
       + (SELECT count(*) FROM analysis_runs WHERE scope_key='project:'||? OR EXISTS(SELECT 1 FROM json_each(json_extract(selection_json,'$.projectIds')) WHERE value=?))
+      + (SELECT count(*) FROM analysis_schedules WHERE scope_key='project:'||? OR EXISTS(SELECT 1 FROM json_each(json_extract(selection_json,'$.projectIds')) WHERE value=?))
     ) AS total`,
         )
         .get(
+          targetId,
+          targetId,
           targetId,
           targetId,
           targetId,
@@ -340,6 +343,11 @@ export class Projects {
         .prepare('UPDATE reviews SET revision=revision+1,updated_at=? WHERE project_id=?')
         .run(new Date().toISOString(), id);
       this.store.db.prepare('DELETE FROM relations WHERE sourceId=? OR targetId=?').run(id, id);
+      this.store.db
+        .prepare(
+          "UPDATE analysis_schedules SET enabled=0,revision=revision+1,note='Состав проектов изменился; подтвердите источники заново.' WHERE scope_key='project:'||? OR json_extract(selection_json,'$.includeGeneral')=1 OR EXISTS(SELECT 1 FROM json_each(json_extract(selection_json,'$.projectIds')) WHERE value=?)",
+        )
+        .run(id, id);
       this.store.db.prepare('DELETE FROM projects WHERE id=?').run(id);
     });
     this.decisions.forget(id);

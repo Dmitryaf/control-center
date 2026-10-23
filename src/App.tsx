@@ -47,7 +47,9 @@ export default function App() {
       : location.pathname.startsWith(path) ||
         (path === '/tasks' && location.pathname === '/history') ||
         (path === '/timeline' &&
-          ['/observations', '/reviews', '/period-analysis'].includes(location.pathname)) ||
+          ['/observations', '/reviews', '/period-analysis', '/analysis-schedules'].includes(
+            location.pathname,
+          )) ||
         (path === '/projects' && location.pathname === '/analysis');
   return (
     <div className="shell">

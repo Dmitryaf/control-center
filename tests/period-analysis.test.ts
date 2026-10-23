@@ -42,6 +42,7 @@ const selection = (id: string): PeriodSelection => ({
   includeOpenTasks: false,
   includeUserText: false,
   includeRelatedReviews: false,
+  includeRelatedAnalyses: false,
 });
 async function setup(t: { after: (fn: () => void | Promise<void>) => void }, file = false) {
   const f = await fixture();

@@ -23,6 +23,7 @@ import { History } from './history.js';
 import { Observations } from './observations.js';
 import { Reviews } from './reviews.js';
 import { ProjectAnalysis } from './analysis/analysis.js';
+import { AnalysisSchedules } from './analysis/schedules.js';
 import { PeriodAnalysis } from './analysis/period-analysis.js';
 
 export function createApp(
@@ -41,6 +42,7 @@ export function createApp(
   const observations = new Observations(store);
   const periodAnalysis = suppliedPeriodAnalysis ?? new PeriodAnalysis(store, history);
   const reviews = new Reviews(store);
+  const schedules = new AnalysisSchedules(store, periodAnalysis);
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -62,6 +64,16 @@ export function createApp(
     next();
   });
   app.use(express.json({ limit: '256kb' }));
+  app.get('/api/analysis-schedules', (req, res) => res.json(schedules.list(req.query)));
+  app.get('/api/reviews/:id/schedule', (req, res) => res.json(schedules.forReview(req.params.id)));
+  app.post('/api/analysis-schedules', (req, res) => res.json(schedules.enable(req.body)));
+  app.post('/api/analysis-schedules/:id/disable', (req, res) =>
+    res.json(schedules.disable(req.params.id, req.body)),
+  );
+  app.delete('/api/analysis-schedules/:id', (req, res) => {
+    schedules.delete(req.params.id, req.body);
+    res.json({ ok: true });
+  });
   app.get('/api/period-analysis/status', (_req, res) => res.json(periodAnalysis.status()));
   app.post('/api/period-analysis/prepare', (req, res) =>
     res.status(201).json(periodAnalysis.prepare(req.body)),
@@ -359,5 +371,5 @@ export function createApp(
         .json({ error: 'Операция не выполнена. Проверьте доступ к файлам и повторите.' });
   };
   app.use(onError);
-  return { app, projects, refresh, analysis, periodAnalysis };
+  return { app, projects, refresh, analysis, periodAnalysis, schedules };
 }

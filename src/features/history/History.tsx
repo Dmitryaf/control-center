@@ -16,6 +16,7 @@ const kinds = {
   file_decision: 'Решения из файлов',
   observation: 'Наблюдения',
   review: 'Обзоры периодов',
+  ai_analysis: 'AI-анализы',
 };
 const events: Record<HistoryEvent, string> = {
   task_baseline: 'Запись при переходе',
@@ -30,6 +31,7 @@ const events: Record<HistoryEvent, string> = {
   file_decision: 'Решение из файла',
   observation: 'Наблюдение',
   review: 'Обзор периода',
+  ai_analysis: 'Сохранённый AI-анализ',
 };
 export default function History() {
   const [params, setParams] = useSearchParams();
@@ -84,6 +86,9 @@ export default function History() {
       <div className="page-heading">
         <div>
           <p className="section-label">Проекты во времени</p>
+          <p>
+            <Link to="/analysis-schedules">Расписания AI-анализа →</Link>
+          </p>
           <h1>История</h1>
           <p className="subtitle">Результаты, внешние шаги и основания решений рядом.</p>
         </div>
