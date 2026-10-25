@@ -35,6 +35,7 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await expect(page.getByRole('heading', { name: 'local-product', exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'local-product', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'local-product', exact: true })).toBeVisible();
+    await page.getByText('Настройки проекта', { exact: true }).click();
     await expect(page.getByText('Есть незакоммиченные изменения', { exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByRole('heading', { name: 'local-product', exact: true })).toBeVisible();
@@ -50,6 +51,7 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await page.getByRole('button', { name: 'Пересмотрено сегодня' }).click();
     await page.getByRole('button', { name: 'Сохранить сводку', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Сводка сохранена');
+    await page.getByText('Настройки проекта', { exact: true }).click();
     await page.getByRole('button', { name: 'Обновить PROJECT.yaml' }).click();
     await expect(page.getByRole('status')).toContainText('PROJECT.yaml записан');
     expect(await readFile(path.join(product, 'PROJECT.yaml'), 'utf8')).toContain(
@@ -62,14 +64,12 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await expect(page.getByRole('status')).toContainText('Связь добавлена');
     await page.getByRole('link', { name: 'Добавить задачу →' }).click();
     await page.getByLabel('Название задачи').fill('Проверить выпуск');
-    await page.getByRole('combobox', { name: 'Когда', exact: true }).selectOption('now');
+    await expect(page.getByRole('combobox', { name: 'Когда', exact: true })).toHaveCount(0);
     await page.getByLabel('Название задачи').press('Enter');
     await expect(
       page.getByRole('heading', { name: 'Проверить выпуск', exact: true }),
     ).toBeVisible();
-    await page.getByLabel('Состояние: Проверить выпуск').selectOption('later');
-    await expect(page.getByRole('status')).toContainText('Задача обновлена');
-    await page.getByLabel('Состояние: Проверить выпуск').selectOption('now');
+    await expect(page.getByLabel('Состояние: Проверить выпуск')).toHaveCount(0);
     await page.getByRole('button', { name: 'Завершить', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Проверить выпуск', exact: true })).toHaveCount(
       0,
@@ -106,8 +106,12 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await expect(page.getByRole('heading', { name: 'Проекты сейчас' })).toBeVisible();
     await expect(page.getByRole('article', { name: 'local-product', exact: true })).toBeVisible();
     await expect(page.getByRole('article', { name: 'local-tool', exact: true })).toBeVisible();
-    await expect(page.locator('.current-work .current-task-list li')).toHaveCount(1);
-    await expect(page.getByRole('link', { name: 'Открыть доску задач →' })).toBeVisible();
+    await expect(
+      page
+        .getByRole('article', { name: 'local-product', exact: true })
+        .locator('.current-task-list li'),
+    ).toHaveCount(1);
+    await expect(page.getByRole('link', { name: 'Все задачи →', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Идеи · 1 →' })).toBeVisible();
     await expect(page.locator('.current-work')).toContainText('Проверить выпуск');
     await page.screenshot({ path: '.local/overview-desktop.png', fullPage: true });

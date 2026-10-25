@@ -90,8 +90,8 @@ export default function Overview() {
     }))
     .filter((v) => v.signals.length)
     .sort((a, b) => Number(b.level === 'decision') - Number(a.level === 'decision'));
-  const now = w!.tasks
-    .filter((t) => !t.completedAt && t.state === 'now')
+  const openTasks = w!.tasks
+    .filter((t) => !t.completedAt)
     .sort(
       (a, b) =>
         ({ high: 0, normal: 1, low: 2 })[a.priority] - { high: 0, normal: 1, low: 2 }[b.priority] ||
@@ -144,13 +144,13 @@ export default function Overview() {
         {!projects.length && (
           <p className="empty">Проектов пока нет. Добавьте каталог в настройках.</p>
         )}
-        {now.some(
+        {openTasks.some(
           (task) => !task.projectId || !projects.some((project) => project.id === task.projectId),
         ) && (
           <section className="general-work section-space" aria-labelledby="general-work-heading">
-            <h3 id="general-work-heading">Общие задачи на сейчас</h3>
+            <h3 id="general-work-heading">Общие открытые задачи</h3>
             <ul className="work-list current-task-list">
-              {now
+              {openTasks
                 .filter(
                   (task) =>
                     !task.projectId || !projects.some((project) => project.id === task.projectId),
@@ -172,7 +172,7 @@ export default function Overview() {
           </section>
         )}
         <p className="help section-space">
-          <Link to="/tasks">Открыть доску задач →</Link>
+          <Link to="/tasks">Все задачи →</Link>
         </p>
       </section>
       {!w!.settings.roots.length && (

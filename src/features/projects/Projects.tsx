@@ -22,8 +22,6 @@ export function ProjectCard({
         b.number - a.number,
     );
   const checks = w!.checks.filter((c) => c.projectId === project.id && c.status === 'active');
-  const current = tasks.filter((t) => t.state === 'now');
-  const next = tasks.find((t) => t.state === 'next');
   const action = checks
     .flatMap((c) => (c.lastExternalActionAt ? [c.lastExternalActionAt] : []))
     .sort()
@@ -48,9 +46,9 @@ export function ProjectCard({
         )}
       </div>
       <div className="project-focus">
-        <p className="section-label">Сейчас</p>
+        <p className="section-label">Открытые задачи · {tasks.length}</p>
         <ul className="work-list current-task-list">
-          {current.map((task) => (
+          {tasks.slice(0, 3).map((task) => (
             <li key={task.id}>
               <Link to={`/tasks?task=${task.code}`}>
                 {task.code} · {task.title}
@@ -59,17 +57,8 @@ export function ProjectCard({
             </li>
           ))}
         </ul>
-        {!current.length && <p className="help">Задачи на сейчас не выбраны.</p>}
-        <p className="help">
-          Далее ·{' '}
-          {next ? (
-            <Link to={`/tasks?task=${next.code}`}>
-              {next.code} · {next.title}
-            </Link>
-          ) : (
-            'Следующие задачи не выбраны'
-          )}
-        </p>
+        {!tasks.length && <p className="help">Открытых задач нет.</p>}
+        {tasks.length > 3 && <Link to={`/tasks?project=${project.id}`}>Все задачи →</Link>}
         {project.metadata.blocked_by.length > 0 && (
           <p className="help">Препятствия: {project.metadata.blocked_by.join('; ')}</p>
         )}

@@ -89,7 +89,6 @@ test('owner journey across active, paused, waiting and completed projects: brows
     });
     await test.step('3–4: UI task → actual compiled MCP → immutable saved result', async () => {
       await page.getByLabel('Название задачи').fill(taskTitle);
-      await page.getByRole('combobox', { name: 'Когда', exact: true }).selectOption('now');
       await page.getByLabel('Название задачи').press('Enter');
       await expect(page.getByRole('status')).toContainText('Задача сохранена');
       const listed = await mcp!.call('task_list', { projectId: project.id, query: taskTitle });
@@ -127,6 +126,7 @@ test('owner journey across active, paused, waiting and completed projects: brows
       await expect(page.getByRole('region', { name: 'Последние записи проекта' })).toContainText(
         'Сохранён тестовый экспорт',
       );
+      await page.getByText('Мои обзоры', { exact: true }).click();
       await expect(page.getByRole('link', { name: 'Обзор месяца →', exact: true })).toBeVisible();
       await page.goto(
         `/timeline?project=${project.id}&from=${bounds.periodStart}&to=${bounds.periodEnd}&timezone=UTC`,
@@ -218,6 +218,7 @@ test('owner journey across active, paused, waiting and completed projects: brows
       await expect(page.getByRole('region', { name: 'Последние записи проекта' })).toContainText(
         'Сохранён тестовый экспорт',
       );
+      await page.getByText('Мои обзоры', { exact: true }).click();
       await expect(page.getByRole('link', { name: 'Обзор месяца →', exact: true })).toBeVisible();
       await page.goto(`/reviews?id=${weekId}`);
       await expect(page.getByLabel('Текст обзора')).toHaveValue(weekText);

@@ -25,7 +25,7 @@ test('observation capture → history → revision conflict → retained project
     const workspace = (await (await request.get('/api/workspace')).json()) as Workspace;
     const project = workspace.projects.find((p) => p.path === repo)!;
     await page.goto(`/projects/${project.id}`);
-    await page.getByRole('link', { name: 'Записать наблюдение →', exact: true }).click();
+    await page.getByRole('link', { name: 'Записать наблюдение', exact: true }).click();
     await expect(page.getByRole('combobox', { name: 'Проект наблюдения' })).toHaveValue(project.id);
     await page.getByLabel('Дата наблюдения').fill('2020-02-29');
     await page

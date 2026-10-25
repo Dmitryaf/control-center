@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import type { Task, TaskInput, TaskHistoryPage } from '../../../shared/contracts';
-import { taskLabels, priorityLabels, lines, date } from '../../shared/labels';
+import { priorityLabels, lines, date } from '../../shared/labels';
 import { api } from '../../shared/http';
 import { useActions, useWorkspace } from '../../shared/workspace';
 import { UnsavedChanges } from '../../shared/UnsavedChanges';
@@ -22,7 +22,6 @@ export default function Tasks() {
   const [filter, setFilter] = useState(params.get('project') || '');
   const [done, setDone] = useState(false);
   const [search, setSearch] = useState('');
-  const [state, setState] = useState('');
   const [editing, setEditing] = useState<{ id: string; revision: number } | null>(null);
   const requestKey = useRef(crypto.randomUUID());
   const empty = (): Draft => ({
@@ -119,7 +118,6 @@ export default function Tasks() {
       (t) =>
         (!filter || (filter === '__general__' ? !t.projectId : t.projectId === filter)) &&
         !!t.completedAt === done &&
-        (!state || t.state === state) &&
         `${t.code} ${t.title} ${t.description}`
           .toLocaleLowerCase('ru')
           .includes(search.toLocaleLowerCase('ru')),
@@ -174,16 +172,6 @@ export default function Tasks() {
             </select>
           </label>
           <label>
-            Когда
-            <select {...register('state')}>
-              {Object.entries(taskLabels).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
             Приоритет
             <select {...register('priority')}>
               {Object.entries(priorityLabels).map(([k, v]) => (
@@ -232,17 +220,6 @@ export default function Tasks() {
           </select>
         </label>
         <label>
-          Состояние
-          <select value={state} onChange={(e) => setState(e.target.value)}>
-            <option value="">Все состояния</option>
-            {Object.entries(taskLabels).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
           Поиск задач
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} />
         </label>
@@ -251,108 +228,100 @@ export default function Tasks() {
           Завершённые
         </label>
       </div>
-      <div className="task-board">
-        {Object.entries(taskLabels).map(([key, label]) => (
-          <section key={key}>
-            <h2>
-              {label} <span className="count">{items.filter((t) => t.state === key).length}</span>
-            </h2>
-            {items
-              .filter((t) => t.state === key)
-              .map((t) => (
-                <article className="panel task-card" key={t.id}>
-                  <div className="row between">
-                    <code>{t.code}</code>
-                    {t.projectId ? (
-                      <Link to={`/projects/${t.projectId}`}>
-                        {w!.projects.find((p) => p.id === t.projectId)?.metadata.name}
-                      </Link>
-                    ) : (
-                      <span>Вся экосистема</span>
-                    )}
-                    <span className="priority">{priorityLabels[t.priority]}</span>
-                  </div>
-                  <h3>{t.title}</h3>
-                  {w!.proposalLinks?.[t.id] && (
-                    <p>
-                      <Link to={`/proposal-acceptances?id=${w!.proposalLinks[t.id]}`}>
-                        Основания принятого предложения →
-                      </Link>
+      <section className="task-list section-space" aria-label="Список задач">
+        <h2>
+          {done ? 'Завершённые задачи' : 'Открытые задачи'}{' '}
+          <span className="count">{items.length}</span>
+        </h2>
+        {!items.length && (
+          <p className="empty">
+            {search
+              ? 'По запросу задач не найдено.'
+              : done
+                ? 'Завершённых задач пока нет.'
+                : 'Открытых задач нет.'}
+          </p>
+        )}
+        {items.map((t) => (
+          <article className="panel task-card" key={t.id}>
+            <div className="row between">
+              <code>{t.code}</code>
+              {t.projectId ? (
+                <Link to={`/projects/${t.projectId}`}>
+                  {w!.projects.find((p) => p.id === t.projectId)?.metadata.name}
+                </Link>
+              ) : (
+                <span>Вся экосистема</span>
+              )}
+              <span className="priority">{priorityLabels[t.priority]}</span>
+            </div>
+            <h3>{t.title}</h3>
+            {w!.proposalLinks?.[t.id] && (
+              <p>
+                <Link to={`/proposal-acceptances?id=${w!.proposalLinks[t.id]}`}>
+                  Основания принятого предложения →
+                </Link>
+              </p>
+            )}
+            <p className="preserve">{t.description}</p>
+            {(t.expectedResult || t.acceptance || t.links.length > 0 || t.result) && (
+              <details className="task-details">
+                <summary>Условия и результат</summary>
+                {t.expectedResult && (
+                  <p className="preserve">
+                    <strong>Ожидаемый результат:</strong> {t.expectedResult}
+                  </p>
+                )}
+                {t.acceptance && (
+                  <p className="preserve">
+                    <strong>Условия завершения:</strong> {t.acceptance}
+                  </p>
+                )}
+                {t.links.map((v, i) => (
+                  <p key={i} className="preserve">
+                    {v}
+                  </p>
+                ))}
+                {t.result && (
+                  <>
+                    <p className="preserve">
+                      <strong>Что сделано:</strong> {t.result.summary}
                     </p>
-                  )}
-                  <p className="preserve">{t.description}</p>
-                  {(t.expectedResult || t.acceptance || t.links.length > 0 || t.result) && (
-                    <details className="task-details">
-                      <summary>Условия и результат</summary>
-                      {t.expectedResult && (
-                        <p className="preserve">
-                          <strong>Ожидаемый результат:</strong> {t.expectedResult}
-                        </p>
-                      )}
-                      {t.acceptance && (
-                        <p className="preserve">
-                          <strong>Условия завершения:</strong> {t.acceptance}
-                        </p>
-                      )}
-                      {t.links.map((v, i) => (
-                        <p key={i} className="preserve">
-                          {v}
-                        </p>
-                      ))}
-                      {t.result && (
-                        <>
-                          <p className="preserve">
-                            <strong>Что сделано:</strong> {t.result.summary}
-                          </p>
-                          <p className="preserve">
-                            <strong>Проверено:</strong> {t.result.verified || 'Не указано'}
-                          </p>
-                          <p className="preserve">
-                            <strong>Не проверено:</strong> {t.result.unverified || 'Не указано'}
-                          </p>
-                          {t.result.remaining && (
-                            <p className="preserve">
-                              <strong>Осталось:</strong> {t.result.remaining}
-                            </p>
-                          )}
-                        </>
-                      )}
-                    </details>
-                  )}
-                  {t.completedAt && <small>Завершена: {date(t.completedAt)}</small>}
-                  <select
-                    aria-label={`Состояние: ${t.title}`}
-                    value={t.state}
-                    disabled={busy}
-                    onChange={(e) => update(t, { state: e.target.value as Task['state'] })}
-                  >
-                    {Object.entries(taskLabels).map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="row">
-                    <button disabled={busy} onClick={() => finish(t)}>
-                      {t.completedAt ? 'Вернуть' : 'Завершить'}
-                    </button>
-                    <button onClick={() => edit(t)}>Изменить</button>
-                    <Link to={`/history?task=${t.code}`}>История</Link>
-                    <button
-                      disabled={busy}
-                      onClick={() => {
-                        if (confirm(`Удалить «${t.title}»?`))
-                          void act(() => api(`/tasks/${t.id}`, 'DELETE'), 'Запись удалена');
-                      }}
-                    >
-                      Удалить
-                    </button>
-                  </div>
-                </article>
-              ))}
-          </section>
+                    <p className="preserve">
+                      <strong>Проверено:</strong> {t.result.verified || 'Не указано'}
+                    </p>
+                    <p className="preserve">
+                      <strong>Не проверено:</strong> {t.result.unverified || 'Не указано'}
+                    </p>
+                    {t.result.remaining && (
+                      <p className="preserve">
+                        <strong>Осталось:</strong> {t.result.remaining}
+                      </p>
+                    )}
+                  </>
+                )}
+              </details>
+            )}
+            {t.completedAt && <small>Завершена: {date(t.completedAt)}</small>}
+            <div className="row">
+              <button disabled={busy} onClick={() => finish(t)}>
+                {t.completedAt ? 'Вернуть' : 'Завершить'}
+              </button>
+              <button onClick={() => edit(t)}>Изменить</button>
+              <Link to={`/history?task=${t.code}`}>История</Link>
+              <button
+                disabled={busy}
+                onClick={() => {
+                  if (confirm(`Удалить «${t.title}»?`))
+                    void act(() => api(`/tasks/${t.id}`, 'DELETE'), 'Запись удалена');
+                }}
+              >
+                Удалить
+              </button>
+            </div>
+          </article>
         ))}
-      </div>
+      </section>
     </>
   );
 }

@@ -37,14 +37,22 @@ test('idea → check → external action/evidence → archive; canonical sources
     await page.getByRole('button', { name: 'Сохранить и сканировать' }).click();
     await expect(page.getByRole('status')).toContainText('Настройки сохранены');
     const project = (await state()).projects.find((p) => p.path === repo)!;
+    // Existing source configuration remains compatible after its editor is removed.
+    expect(
+      (
+        await page.request.put(`/api/projects/${project.id}/decision-sources`, {
+          headers: { 'X-Control-Center': '1' },
+          data: { paths: [privateDir] },
+        })
+      ).ok(),
+    ).toBe(true);
     await page.goto(`/projects/${project.id}`);
+    await expect(page.getByText('Дополнительные каталоги решений', { exact: true })).toHaveCount(0);
+    await page.getByText('Настройки проекта', { exact: true }).click();
     await expect(page.getByRole('heading', { name: 'D-0001 File choice' })).toBeVisible();
     await expect(
       page.getByText('Пора пересмотреть решение D-0001', { exact: true }).last(),
     ).toBeVisible();
-    await page.getByText('Дополнительные каталоги решений', { exact: true }).click();
-    await page.getByLabel('Каталоги решений, каждый с новой строки').fill(privateDir);
-    await page.getByRole('button', { name: 'Сохранить источники решений' }).click();
     await expect(page.getByRole('heading', { name: 'Private rationale' })).toBeVisible();
     await page.getByRole('button', { name: 'Изменить сводку' }).click();
     await page.getByLabel('Зачем существует', { exact: true }).fill('Keep local goal');
@@ -145,6 +153,7 @@ test('idea → check → external action/evidence → archive; canonical sources
     await expect(page.getByRole('status')).toContainText('история сохранена');
     expect((await state()).checks.find((c) => c.id === checkId)?.projectId).toBe(project.id);
     expect((await state()).projects.find((p) => p.id === project.id)?.path).toBe(moved);
+    await page.getByText('Настройки проекта', { exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Private rationale' })).toBeVisible();
     await page.goto('/settings');
     await page.getByRole('button', { name: 'Создать резервную копию' }).click();
@@ -153,6 +162,7 @@ test('idea → check → external action/evidence → archive; canonical sources
     await page.getByRole('button', { name: 'Сохранить и сканировать' }).click();
     await expect(page.getByRole('status')).toContainText('Настройки сохранены');
     await page.goto(`/projects/${project.id}`);
+    await page.getByText('Настройки проекта', { exact: true }).click();
     await page.getByRole('button', { name: 'Удалить из Control Center' }).click();
     await expect(page.getByRole('status')).toContainText('Проект удалён из Control Center');
     expect((await state()).checks.find((c) => c.id === checkId)?.projectId).toBe(null);

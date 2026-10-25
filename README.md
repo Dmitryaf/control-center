@@ -17,6 +17,8 @@ In PowerShell use `npm.cmd`. Open [Control Center](http://127.0.0.1:4310), add p
 
 The main sections are **Обзор**, **Проекты**, **Задачи** and **История**. Checks, ideas, decisions and settings are under **Ещё**. Project pages link to tasks, observations, history, reviews and saved analyses. History combines task results, checks, decisions, observations, reviews and AI analyses; dates use your chosen timezone. Earlier task results survive later task edits and deletion. Other texts show their current saved edition, not an archive of every edit.
 
+Tasks use one list of open items, with a separate view for completed work. Project pages show the purpose, tasks, recent work and period reviews. File connections, project relations, export and removal are under **Настройки проекта**.
+
 Known projects refresh while the HTTP server runs, with a one-minute pause between passes by default. Settings allow 0–60 minutes; 0 disables refresh. Startup or an explicit scan discovers new projects. Failed reads retain saved data. Scanning never runs project code or changes repository files.
 
 ## Reviews and analysis
@@ -73,7 +75,7 @@ Checks record a question, external actions, evidence and an explicit outcome. Gi
 
 Control Center still reads decisions from connected projects' `DECISIONS.md` and `decisions/*.md`, including structured and older Markdown records. It never edits them. Bodies remain in their source files; a disposable metadata index is refreshed. Conflicting IDs remain visible separately, and unavailable sources do not serve cached bodies.
 
-Repository visibility, additional decision folders, private-context links and exact-path publication confirmations are local settings. Private-context roots must be outside the repository. These paths never enter YAML. The publication check examines the Git index, including staged files; it does not audit remote visibility, Git history or secrets. It never commits or publishes. Keep private sources backed up separately.
+Repository visibility, private-context links and exact-path publication confirmations are local settings. Previously configured additional decision folders remain readable, but their editor is no longer shown. Private-context roots must be outside the repository. These paths never enter YAML. The publication check examines the Git index, including staged files; it does not audit remote visibility, Git history or secrets. It never commits or publishes. Keep private sources backed up separately.
 
 ## Storage, backup and restore
 

@@ -44,6 +44,7 @@ test('project week → conflict/draft recovery → month links → frozen timezo
       ).ok(),
     ).toBe(true);
     await page.goto(`/projects/${project.id}`);
+    await page.getByText('Мои обзоры', { exact: true }).click();
     await page.getByRole('link', { name: 'Обзор недели →', exact: true }).click();
     await expect(page.getByLabel('Проект обзора')).toHaveValue(project.id);
     await page.getByLabel('Дата внутри периода').fill('2024-10-01');

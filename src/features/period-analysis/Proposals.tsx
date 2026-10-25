@@ -43,7 +43,7 @@ function AcceptedCard({ value }: { value: ProposalAcceptance }) {
     <section className="panel section-space" aria-label="Принятое предложение">
       <h2>{a.title}</h2>
       <p>
-        {value.kind === 'task' ? 'Задача «Следом»' : 'Идея'} принята{' '}
+        {value.kind === 'task' ? 'Задача' : 'Идея'} принята{' '}
         {new Date(value.createdAt).toLocaleString('ru')}.
       </p>
       {value.resultExists ? (
@@ -178,7 +178,7 @@ function ProposalEditor({ run, index }: { run: PeriodRun; index: number }) {
             <label>
               Создать
               <select {...register('kind')}>
-                <option value="task">Задачу «Следом»</option>
+                <option value="task">Задачу</option>
                 <option value="idea">Идею</option>
               </select>
             </label>

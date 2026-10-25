@@ -194,8 +194,12 @@ test('overview shows project context and exact current tasks once, keeps attenti
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/');
-    await expect(page.locator('.current-task-list li')).toHaveCount(2);
-    await expect(page.locator('.current-task-list li').first()).toContainText(base.code);
+    await expect(page.locator('.current-task-list li')).toHaveCount(3);
+    await expect(page.locator('.current-task-list li')).toContainText([
+      'CC-23',
+      base.code,
+      'CC-22',
+    ]);
     await expect(page.locator('.current-task-list li').last()).toContainText('Общая задача');
     await expect(page.locator('.current-work .project-row')).toHaveCount(12);
     await expect(
@@ -479,9 +483,9 @@ test('legacy plans remain readable and importable, editing/export preserve origi
     await expect(page.locator('.legacy-plan')).toContainText('Прежний фокус из другого клиента');
     await expect(page.locator('.legacy-plan')).toContainText('Прежний шаг');
     await expect(page.locator('.legacy-plan')).toContainText('Прежний шаг из другого клиента');
-    await page.getByRole('button', { name: 'Добавить шаги на доску', exact: true }).click();
+    await page.getByRole('button', { name: 'Добавить шаги в задачи', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Прежняя сводка сохранена');
-    await page.getByRole('button', { name: 'Добавить шаги на доску', exact: true }).click();
+    await page.getByRole('button', { name: 'Добавить шаги в задачи', exact: true }).click();
     const imported = (await (await request.get('/api/workspace')).json()) as Workspace;
     const tasks = imported.tasks.filter((item) => item.projectId === project.id);
     expect(tasks).toHaveLength(1);
@@ -491,6 +495,7 @@ test('legacy plans remain readable and importable, editing/export preserve origi
     });
     expect(changed.status()).toBe(200);
     const task = (await changed.json()) as Task;
+    await page.getByText('Настройки проекта', { exact: true }).click();
     await page.getByRole('button', { name: 'Обновить PROJECT.yaml', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('PROJECT.yaml записан');
     const content = await readFile(yaml, 'utf8');

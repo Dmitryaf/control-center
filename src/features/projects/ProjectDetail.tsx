@@ -12,7 +12,6 @@ import {
   typeLabels,
   priorityLabels,
   relationLabels,
-  taskLabels,
   decisionLabels,
 } from '../../shared/labels';
 import { useWorkspace, useActions, workspaceKey } from '../../shared/workspace';
@@ -442,7 +441,6 @@ function Maintenance({ project }: { project: Project }) {
   const { data: w } = useWorkspace();
   const { act, busy } = useActions();
   const [candidate, setCandidate] = useState('');
-  const [sources, setSources] = useState(project.decisionSources.join('\n'));
   const hash = { expectedHash: project.snapshot.yaml.hash };
   return (
     <>
@@ -552,26 +550,6 @@ function Maintenance({ project }: { project: Project }) {
           </div>
         </section>
       )}
-      <details className="panel section-space">
-        <summary>Дополнительные каталоги решений</summary>
-        <form
-          className="form section-space"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void act(
-              () =>
-                api(`/projects/${project.id}/decision-sources`, 'PUT', { paths: lines(sources) }),
-              'Источники решений сохранены и прочитаны',
-            );
-          }}
-        >
-          <label>
-            Каталоги решений, каждый с новой строки
-            <textarea rows={3} value={sources} onChange={(e) => setSources(e.target.value)} />
-          </label>
-          <button disabled={busy}>Сохранить источники решений</button>
-        </form>
-      </details>
     </>
   );
 }
@@ -600,6 +578,10 @@ export default function ProjectDetail() {
   if (!p) return <p className="empty">Проект не загружен.</p>;
   const tasks = w!.tasks.filter((t) => t.projectId === p.id && !t.completedAt);
   const checks = w!.checks.filter((c) => c.projectId === p.id && c.status !== 'completed');
+  const technicalSignals = p.signals.filter(
+    (s) => s.code === 'dirty' || s.code === 'review' || s.level === 'info',
+  );
+  const workSignals = p.signals.filter((s) => !technicalSignals.includes(s));
   const request = (suffix: string, message: string) =>
     act(
       () => api(`/projects/${p.id}/${suffix}`, 'POST', { expectedHash: p.snapshot.yaml.hash }),
@@ -612,19 +594,18 @@ export default function ProjectDetail() {
       </Link>
       <div className="page-heading">
         <div>
-          <p className="section-label">{typeLabels[p.metadata.type]}</p>
+          {p.metadata.type !== 'other' && (
+            <p className="section-label">{typeLabels[p.metadata.type]}</p>
+          )}
           <h1>{p.metadata.name}</h1>
           <div className="row">
-            <span className={`badge ${p.metadata.status}`}>{statusLabels[p.metadata.status]}</span>
-            <span className="muted">Приоритет: {priorityLabels[p.metadata.priority]}</span>
+            {p.metadata.status !== 'unknown' && (
+              <span className={`badge ${p.metadata.status}`}>
+                {statusLabels[p.metadata.status]}
+              </span>
+            )}
             <span className="muted">{p.metadata.stage}</span>
           </div>
-          <p className="help">
-            {p.available ? 'Снимок файлов:' : 'Последний доступный снимок:'}{' '}
-            <time dateTime={p.snapshot.scannedAt}>
-              {new Date(p.snapshot.scannedAt).toLocaleString('ru')}
-            </time>
-          </p>
         </div>
         <div className="row">
           {!editing && (
@@ -632,23 +613,6 @@ export default function ProjectDetail() {
               Изменить сводку
             </button>
           )}
-          <button
-            disabled={busy}
-            onClick={async () => {
-              if (
-                confirm(
-                  `Удалить «${p.metadata.name}» из Control Center? Каталог и файлы останутся на диске. Записи будут отвязаны, локальная сводка и связи удалены, путь исключён из сканирования.`,
-                ) &&
-                (await act(
-                  () => api(`/projects/${p.id}`, 'DELETE'),
-                  'Проект удалён из Control Center',
-                ))
-              )
-                void navigate('/projects');
-            }}
-          >
-            Удалить из Control Center
-          </button>
         </div>
       </div>
       {!p.available && (
@@ -656,14 +620,6 @@ export default function ProjectDetail() {
           Каталог недоступен или вне настроек. Показан сохранённый снимок.
         </div>
       )}
-      <div className="row overview-shortcuts" aria-label="Работа с проектом">
-        <Link to={`/tasks?project=${p.id}`}>Задачи проекта →</Link>
-        <Link to={`/timeline?project=${p.id}`}>История проекта →</Link>
-        <Link to={`/observations?project=${p.id}`}>Записать наблюдение →</Link>
-        <Link to={`/reviews?project=${p.id}&kind=week`}>Обзор недели →</Link>
-        <Link to={`/reviews?project=${p.id}&kind=month`}>Обзор месяца →</Link>
-        <Link to={`/analysis?project=${p.id}`}>Анализы проекта →</Link>
-      </div>
       {editing && (
         <MetadataEditor key={`metadata:${p.id}`} project={p} onClose={() => setEditing(false)} />
       )}
@@ -672,30 +628,6 @@ export default function ProjectDetail() {
           <section className="project-brief prose">
             <h2>Зачем существует</h2>
             <p className="preserve">{p.metadata.goal || 'Цель пока не описана.'}</p>
-            {(['now', 'next'] as const).map((state) => (
-              <div key={state}>
-                <h2>{state === 'now' ? 'Сейчас' : 'Следующий шаг'}</h2>
-                {tasks.some((t) => t.state === state) ? (
-                  <ol>
-                    {tasks
-                      .filter((t) => t.state === state)
-                      .map((t) => (
-                        <li key={t.id}>
-                          <Link to={`/tasks?project=${p.id}&task=${t.code}`}>
-                            {t.code} · {t.title}
-                          </Link>
-                        </li>
-                      ))}
-                  </ol>
-                ) : (
-                  <p className="muted">
-                    {state === 'now'
-                      ? 'Задачи на сейчас ещё не выбраны.'
-                      : 'Следующие задачи ещё не выбраны.'}
-                  </p>
-                )}
-              </div>
-            ))}
             {(p.metadata.current_focus || p.metadata.next.length > 0) && (
               <details className="section-space legacy-plan">
                 <summary>Прежний план из сводки</summary>
@@ -708,20 +640,17 @@ export default function ProjectDetail() {
                   ))}
                 </ol>
                 <p>
-                  Текущая работа редактируется на доске задач. Прежний план доступен только для
+                  Текущая работа редактируется в списке задач. Прежний план доступен только для
                   чтения; экспорт сохраняет его и не заменяет задачами.
                 </p>
                 {p.metadata.next.length > 0 && (
                   <button
                     disabled={busy}
                     onClick={() =>
-                      request(
-                        'import-plan',
-                        'Следующие шаги добавлены на доску. Прежняя сводка сохранена.',
-                      )
+                      request('import-plan', 'Шаги добавлены в задачи. Прежняя сводка сохранена.')
                     }
                   >
-                    Добавить шаги на доску
+                    Добавить шаги в задачи
                   </button>
                 )}
               </details>
@@ -746,8 +675,10 @@ export default function ProjectDetail() {
             <div className="panel compact-list">
               {tasks.map((t) => (
                 <div className="row between" key={t.id}>
-                  <span>{t.title}</span>
-                  <span className="badge">{taskLabels[t.state]}</span>
+                  <Link to={`/tasks?project=${p.id}&task=${t.code}`}>
+                    {t.code} · {t.title}
+                  </Link>
+                  {t.priority === 'high' && <span className="priority">Высокий приоритет</span>}
                 </div>
               ))}
               {!tasks.length && <p className="muted">Открытых задач нет.</p>}
@@ -755,14 +686,36 @@ export default function ProjectDetail() {
           </section>
           <section className="section-space" aria-label="Последние записи проекта">
             <h2>Что происходило</h2>
+            <Link className="button" to={`/observations?project=${p.id}`}>
+              Записать наблюдение
+            </Link>
             <RecentHistory projectId={p.id} />
+            <Link to={`/timeline?project=${p.id}`}>История проекта →</Link>
             <details>
               <summary>История результатов задач</summary>
               <Link to={`/history?project=${p.id}`}>Открыть прежнюю историю задач →</Link>
             </details>
           </section>
-          <section className="section-space">
-            <h2>Последние изменения</h2>
+          <section className="panel section-space" aria-label="Итоги проекта">
+            <h2>Подвести итоги</h2>
+            <p>
+              Посмотрите, что изменилось за период, сохраните свои выводы или подготовьте анализ.
+            </p>
+            <p className="section-space">
+              <Link className="button primary" to={`/analysis?project=${p.id}`}>
+                Анализы проекта →
+              </Link>
+            </p>
+            <details className="section-space">
+              <summary>Мои обзоры</summary>
+              <div className="row section-space">
+                <Link to={`/reviews?project=${p.id}&kind=week`}>Обзор недели →</Link>
+                <Link to={`/reviews?project=${p.id}&kind=month`}>Обзор месяца →</Link>
+              </div>
+            </details>
+          </section>
+          <details className="section-space">
+            <summary>Изменения в коде</summary>
             <div className="panel activity-list">
               {p.snapshot.git.commits.map((c) => (
                 <div className="activity" key={c.hash}>
@@ -777,26 +730,28 @@ export default function ProjectDetail() {
                 <p className="empty">{p.snapshot.git.error || 'История commits отсутствует.'}</p>
               )}
             </div>
-          </section>
-          <section className="section-space">
-            <div className="section-heading">
-              <h2>Локальные решения Control Center</h2>
-              <Link to="/decisions">Все решения →</Link>
-            </div>
-            <div className="panel compact-list">
-              {w!.decisions
-                .filter((d) => d.projectId === p.id)
-                .map((d) => (
-                  <div key={d.id}>
-                    <strong>{d.title}</strong>
-                    <p>{d.decision}</p>
-                    <small>
-                      {decisionLabels[d.status]} · {date(d.date)}
-                    </small>
-                  </div>
-                ))}
-            </div>
-          </section>
+          </details>
+          {!!w!.decisions.some((d) => d.projectId === p.id) && (
+            <section className="section-space">
+              <div className="section-heading">
+                <h2>Решения проекта</h2>
+                <Link to="/decisions">Все решения →</Link>
+              </div>
+              <div className="panel compact-list">
+                {w!.decisions
+                  .filter((d) => d.projectId === p.id)
+                  .map((d) => (
+                    <div key={d.id}>
+                      <strong>{d.title}</strong>
+                      <p>{d.decision}</p>
+                      <small>
+                        {decisionLabels[d.status]} · {date(d.date)}
+                      </small>
+                    </div>
+                  ))}
+              </div>
+            </section>
+          )}
           {p.notes && (
             <section className="panel prose section-space">
               <h2>Заметки</h2>
@@ -805,156 +760,190 @@ export default function ProjectDetail() {
           )}
         </div>
         <aside>
-          <section className="panel prose">
-            <h2>Требуют внимания</h2>
-            <ul className="project-signals">
-              {p.signals.map((s, i) => (
-                <li key={i} className={`signal ${s.level || 'attention'}`}>
-                  <strong>
-                    {s.level === 'info'
-                      ? 'Информация'
-                      : s.level === 'decision'
-                        ? 'Решение'
-                        : 'Внимание'}
-                    .
-                  </strong>{' '}
-                  <span>{s.message}</span>
-                </li>
-              ))}
-            </ul>
-            {!p.signals.length && <p className="muted">По доступным данным сигналов нет.</p>}
-            <h3>Блокировки</h3>
-            {p.metadata.blocked_by.length ? (
-              <ul>
-                {p.metadata.blocked_by.map((v, i) => (
-                  <li key={i}>{v}</li>
+          {(workSignals.length > 0 || p.metadata.blocked_by.length > 0) && (
+            <section className="panel prose">
+              <h2>Требуют внимания</h2>
+              <ul className="project-signals">
+                {workSignals.map((s, i) => (
+                  <li key={i} className={`signal ${s.level || 'attention'}`}>
+                    <strong>
+                      {s.level === 'info'
+                        ? 'Информация'
+                        : s.level === 'decision'
+                          ? 'Решение'
+                          : 'Внимание'}
+                      .
+                    </strong>{' '}
+                    <span>{s.message}</span>
+                  </li>
                 ))}
               </ul>
-            ) : (
-              <p>Не указаны.</p>
+              {!!p.metadata.blocked_by.length && (
+                <>
+                  <h3>Что мешает работе</h3>
+                  <ul>
+                    {p.metadata.blocked_by.map((v, i) => (
+                      <li key={i}>{v}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </section>
+          )}
+          <details className="panel section-space project-settings">
+            <summary>Настройки проекта</summary>
+            <p className="help section-space">
+              Подключение файлов, связи с другими проектами и сохранение сводки в репозитории.
+            </p>
+            {!!technicalSignals.length && (
+              <ul className="help">
+                {technicalSignals.map((s, i) => (
+                  <li key={i}>{s.message}</li>
+                ))}
+              </ul>
             )}
-          </section>
-          <Context key={p.id} project={p} />
-          <section className="panel section-space">
-            <h2>Связи</h2>
-            {w!.relations
-              .filter((r) => r.sourceId === p.id || r.targetId === p.id)
-              .map((r) => (
-                <div className="relation-item" key={r.id}>
-                  <div>
-                    <small>
-                      {r.sourceId === p.id
-                        ? relationLabels[r.type]
-                        : `Входящая связь: ${relationLabels[r.type].toLowerCase()}`}
-                    </small>
-                    <Link to={`/projects/${r.sourceId === p.id ? r.targetId : r.sourceId}`}>
-                      {
-                        w!.projects.find(
-                          (v) => v.id === (r.sourceId === p.id ? r.targetId : r.sourceId),
-                        )?.metadata.name
+            <Context key={p.id} project={p} />
+            <section className="panel section-space">
+              <h2>Связи</h2>
+              {w!.relations
+                .filter((r) => r.sourceId === p.id || r.targetId === p.id)
+                .map((r) => (
+                  <div className="relation-item" key={r.id}>
+                    <div>
+                      <small>
+                        {r.sourceId === p.id
+                          ? relationLabels[r.type]
+                          : `Входящая связь: ${relationLabels[r.type].toLowerCase()}`}
+                      </small>
+                      <Link to={`/projects/${r.sourceId === p.id ? r.targetId : r.sourceId}`}>
+                        {
+                          w!.projects.find(
+                            (v) => v.id === (r.sourceId === p.id ? r.targetId : r.sourceId),
+                          )?.metadata.name
+                        }
+                      </Link>
+                    </div>
+                    <button
+                      className="text-button"
+                      aria-label="Удалить связь"
+                      disabled={busy}
+                      onClick={() =>
+                        act(() => api(`/relations/${r.id}`, 'DELETE'), 'Связь удалена')
                       }
-                    </Link>
+                    >
+                      ×
+                    </button>
                   </div>
-                  <button
-                    className="text-button"
-                    aria-label="Удалить связь"
-                    disabled={busy}
-                    onClick={() => act(() => api(`/relations/${r.id}`, 'DELETE'), 'Связь удалена')}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            <form
-              className="form section-space"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (
-                  await act(
-                    () =>
-                      api('/relations', 'POST', {
-                        sourceId: p.id,
-                        targetId: target,
-                        type: relationType,
-                      }),
-                    'Связь добавлена',
+                ))}
+              <form
+                className="form section-space"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (
+                    await act(
+                      () =>
+                        api('/relations', 'POST', {
+                          sourceId: p.id,
+                          targetId: target,
+                          type: relationType,
+                        }),
+                      'Связь добавлена',
+                    )
                   )
-                )
-                  setTarget('');
-              }}
-            >
-              <label>
-                Тип связи
-                <select value={relationType} onChange={(e) => setRelationType(e.target.value)}>
-                  {Object.entries(relationLabels).map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Связанный проект
-                <select value={target} onChange={(e) => setTarget(e.target.value)} required>
-                  <option value="" disabled>
-                    Выберите проект
-                  </option>
-                  {w!.projects
-                    .filter((v) => v.id !== p.id)
-                    .map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.metadata.name}
+                    setTarget('');
+                }}
+              >
+                <label>
+                  Тип связи
+                  <select value={relationType} onChange={(e) => setRelationType(e.target.value)}>
+                    {Object.entries(relationLabels).map(([k, v]) => (
+                      <option key={k} value={k}>
+                        {v}
                       </option>
                     ))}
-                </select>
-              </label>
-              <button disabled={busy || !target}>Добавить связь</button>
-            </form>
-          </section>
-          <section className="panel section-space prose">
-            <h2>Метаданные</h2>
-            <p>
-              Источник:{' '}
-              <strong>
-                {p.metadataSource === 'local'
-                  ? 'Control Center'
-                  : p.metadataSource === 'yaml'
-                    ? 'PROJECT.yaml'
-                    : 'Имя каталога'}
-              </strong>
-            </p>
-            <p className="help">
-              Экспорт записывает сводку и сохранённый прежний план в PROJECT.yaml. Задачи и
-              результаты остаются в Control Center. Неизвестные поля сохраняются.
-            </p>
-            <div className="form">
-              <button
-                disabled={busy || editing || !p.available}
-                onClick={() => request('export', 'PROJECT.yaml записан в репозиторий')}
-              >
-                {p.snapshot.yaml.exists ? 'Обновить PROJECT.yaml' : 'Создать PROJECT.yaml'}
-              </button>
-              {p.metadataSource === 'local' && (
+                  </select>
+                </label>
+                <label>
+                  Связанный проект
+                  <select value={target} onChange={(e) => setTarget(e.target.value)} required>
+                    <option value="" disabled>
+                      Выберите проект
+                    </option>
+                    {w!.projects
+                      .filter((v) => v.id !== p.id)
+                      .map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.metadata.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <button disabled={busy || !target}>Добавить связь</button>
+              </form>
+            </section>
+            <section className="panel section-space prose">
+              <h2>Сводка в файле</h2>
+              <p>
+                Источник:{' '}
+                <strong>
+                  {p.metadataSource === 'local'
+                    ? 'Control Center'
+                    : p.metadataSource === 'yaml'
+                      ? 'PROJECT.yaml'
+                      : 'Имя каталога'}
+                </strong>
+              </p>
+              <p className="help">
+                Экспорт записывает сводку и сохранённый прежний план в PROJECT.yaml. Задачи и
+                результаты остаются в Control Center. Неизвестные поля сохраняются.
+              </p>
+              <div className="form">
                 <button
-                  disabled={busy}
-                  onClick={() => {
-                    if (
-                      confirm(
-                        'Убрать локальные правки сводки и использовать PROJECT.yaml? Заметки сохранятся.',
-                      )
-                    )
-                      void request('use-yaml', 'Источник сводки обновлён');
-                  }}
+                  disabled={busy || editing || !p.available}
+                  onClick={() => request('export', 'PROJECT.yaml записан в репозиторий')}
                 >
-                  Использовать данные из YAML
+                  {p.snapshot.yaml.exists ? 'Обновить PROJECT.yaml' : 'Создать PROJECT.yaml'}
                 </button>
-              )}
-            </div>
-            <small>Пересмотрено: {date(p.metadata.last_reviewed)}</small>
-          </section>
+                {p.metadataSource === 'local' && (
+                  <button
+                    disabled={busy}
+                    onClick={() => {
+                      if (
+                        confirm(
+                          'Убрать локальные правки сводки и использовать PROJECT.yaml? Заметки сохранятся.',
+                        )
+                      )
+                        void request('use-yaml', 'Источник сводки обновлён');
+                    }}
+                  >
+                    Использовать данные из YAML
+                  </button>
+                )}
+              </div>
+              <small>Пересмотрено: {date(p.metadata.last_reviewed)}</small>
+            </section>
+            <DecisionFiles projectId={p.id} />
+            <button
+              className="section-space"
+              disabled={busy}
+              onClick={async () => {
+                if (
+                  confirm(
+                    `Удалить «${p.metadata.name}» из Control Center? Каталог и файлы останутся на диске. Записи будут отвязаны, локальная сводка и связи удалены, путь исключён из сканирования.`,
+                  ) &&
+                  (await act(
+                    () => api(`/projects/${p.id}`, 'DELETE'),
+                    'Проект удалён из Control Center',
+                  ))
+                )
+                  void navigate('/projects');
+              }}
+            >
+              Удалить из Control Center
+            </button>
+          </details>
         </aside>
       </div>
-      <DecisionFiles projectId={p.id} />
       <Maintenance key={`maintenance:${p.id}`} project={p} />
       <details className="panel section-space">
         <summary>Информация о репозитории</summary>
@@ -987,7 +976,11 @@ export default function ProjectDetail() {
             {p.snapshot.package?.scripts.join(', ') || 'нет'}
           </dd>
           <dt>Снимок</dt>
-          <dd>{new Date(p.snapshot.scannedAt).toLocaleString('ru')}</dd>
+          <dd>
+            <time dateTime={p.snapshot.scannedAt}>
+              {new Date(p.snapshot.scannedAt).toLocaleString('ru')}
+            </time>
+          </dd>
         </dl>
       </details>
     </>

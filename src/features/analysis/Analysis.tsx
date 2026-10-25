@@ -397,7 +397,7 @@ export default function Analysis() {
                       })
                     }
                   >
-                    Создать задачу «Следом»
+                    Создать задачу
                   </button>
                 )}
               </article>

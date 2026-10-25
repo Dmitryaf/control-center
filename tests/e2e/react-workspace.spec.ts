@@ -27,7 +27,6 @@ test('React settings → real scan → tasks → immutable history → backup; d
     await page
       .getByRole('combobox', { name: 'Проект', exact: true })
       .selectOption({ label: 'react-product' });
-    await page.getByRole('combobox', { name: 'Когда', exact: true }).selectOption('now');
     await page.getByRole('button', { name: 'Создать задачу', exact: true }).click();
     await expect(
       page.getByRole('heading', { name: 'React contract task', exact: true }),

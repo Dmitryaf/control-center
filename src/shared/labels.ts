@@ -11,7 +11,6 @@ export const typeLabels = {
   other: 'Другое',
 };
 export const priorityLabels = { high: 'Высокий', normal: 'Обычный', low: 'Низкий' };
-export const taskLabels = { now: 'Сейчас', next: 'Следом', later: 'Позже' };
 export const workKindLabels = {
   baseline: 'Запись при переходе',
   result: 'Результат сохранён',

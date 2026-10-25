@@ -19,6 +19,7 @@ test('remove an available project, cancel, recover from failure, rescan and rest
     await expect(page.getByRole('status')).toContainText('Настройки сохранены');
     const project = (await state()).projects.find((p) => p.path === repo)!;
     await page.goto(`/projects/${project.id}`);
+    await page.getByText('Настройки проекта', { exact: true }).click();
     const remove = page.getByRole('button', { name: 'Удалить из Control Center' });
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });

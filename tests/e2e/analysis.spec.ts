@@ -136,7 +136,7 @@ test('selected saved payload → explicit approval → proposals → one edited 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
-    await draft.getByRole('button', { name: 'Создать задачу «Следом»', exact: true }).click();
+    await draft.getByRole('button', { name: 'Создать задачу', exact: true }).click();
     const link = draft.getByRole('link', { name: /Открыть CC-/ });
     await expect(link).toBeVisible();
     const after = (await (await request.get('/api/workspace')).json()) as Workspace;

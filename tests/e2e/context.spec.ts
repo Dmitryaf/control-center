@@ -48,6 +48,7 @@ test('public audit → allowlist → private context → combined decisions → 
     const project = (await state()).projects.find((item) => item.path === repo)!;
     projectId = project.id;
     await page.goto(`/projects/${project.id}`);
+    await page.getByText('Настройки проекта', { exact: true }).click();
     const panel = page.locator('.context-panel');
     await expect(panel).toContainText('Не указано');
     await panel.getByText('Настройки контекста', { exact: true }).click();
@@ -86,6 +87,7 @@ test('public audit → allowlist → private context → combined decisions → 
       text('D-0001', 'Conflicting private'),
     );
     await page.reload();
+    await page.getByText('Настройки проекта', { exact: true }).click();
     await expect(page.getByText(/Конфликт ID решений: D-0001/).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: 'D-0001 Public choice' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'D-0001 Conflicting private' })).toBeVisible();
@@ -106,6 +108,7 @@ test('public audit → allowlist → private context → combined decisions → 
       page.getByText('Не найден ранее подключённый приватный контекст', { exact: true }),
     ).toBeVisible();
     await page.goto(`/projects/${project.id}`);
+    await page.getByText('Настройки проекта', { exact: true }).click();
     await panel.getByText('Настройки контекста', { exact: true }).click();
     await panel.getByRole('button', { name: 'Отключить приватный контекст' }).click();
     await expect(panel).toContainText('Не подключён');

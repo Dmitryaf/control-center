@@ -39,6 +39,7 @@ test('journal hierarchy, time semantics, overflow and keyboard contracts', async
         await expect(page.locator('.movement-clock').first()).toContainText('18');
       }
       if (name === 'project') {
+        await page.getByText('Настройки проекта', { exact: true }).click();
         await expect(page.locator('.context-panel')).toContainText('Приватный контекст недоступен');
         await page.getByText(/Проверка публикации ·/).click();
         await expect(page.locator('.context-panel')).toContainText('.ai-rules/PROJECT_RULES.md');

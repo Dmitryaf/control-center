@@ -21,7 +21,6 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
     await page.goto(`/tasks?project=${project.id}`);
     const title = 'Найти обращения и сохранить результат проверки без потери данных';
     await page.getByLabel('Название задачи').fill(title);
-    await page.getByRole('combobox', { name: 'Когда', exact: true }).selectOption('now');
     await page.getByLabel('Название задачи').press('Enter');
     await expect(page.getByRole('status')).toContainText('Задача сохранена');
     const found = (await mcp.call('task_list', { projectId: project.id, query: title })).value
@@ -73,9 +72,7 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
     await page.getByLabel('Завершённые', { exact: true }).uncheck();
     await page.getByLabel('Поиск задач', { exact: true }).fill(found.code);
     await expect(card).toBeVisible();
-    await page.getByRole('combobox', { name: 'Состояние', exact: true }).selectOption('later');
-    await expect(card).toHaveCount(0);
-    await page.getByRole('combobox', { name: 'Состояние', exact: true }).selectOption('');
+    await expect(page.getByRole('combobox', { name: 'Состояние', exact: true })).toHaveCount(0);
     await expect(card).toBeVisible();
     const general = await mcp.call('task_create', {
       title: 'Общая задача из Codex',

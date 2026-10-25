@@ -304,16 +304,12 @@ main {
 .relation-item a {
   display: block;
 }
-.task-board {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 28px;
-}
-.task-board > section {
+.task-list {
+  max-width: 1000px;
   border-top: 2px solid var(--ink);
   padding-top: 14px;
 }
-.task-board h2 {
+.task-list > h2 {
   margin-bottom: 15px;
 }
 .task-card {
@@ -324,11 +320,6 @@ main {
 }
 .task-card p {
   margin-bottom: 12px;
-}
-.task-card select {
-  width: auto;
-  max-width: 100%;
-  font-size: 12px;
 }
 .task-card button,
 .subtle-link {
@@ -408,8 +399,7 @@ main {
 }
 @media (max-width: 800px) {
   .journal-columns,
-  .project-dossier,
-  .task-board {
+  .project-dossier {
     grid-template-columns: 1fr;
   }
   .working-notes,

@@ -118,7 +118,8 @@ test('production timer → saved snapshot → open draft, YAML conflict, freshne
     expect(updated.notes).toBe('Сохранённые заметки');
     expect(updated.metadata.current_focus).toBe('Сохранённый фокус');
     expect(latest.projects.some((p) => p.path === undiscovered)).toBe(false);
-    await expect(page.locator('.page-heading time')).toHaveAttribute(
+    await page.getByText('Информация о репозитории', { exact: true }).click();
+    await expect(page.locator('.repository-info time')).toHaveAttribute(
       'datetime',
       updated.snapshot.scannedAt,
     );
@@ -139,7 +140,7 @@ test('production timer → saved snapshot → open draft, YAML conflict, freshne
       fullPage: true,
     });
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.locator('.page-heading time')).toBeVisible();
+    await expect(page.locator('.repository-info time')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
