@@ -83,13 +83,21 @@ export function CodexChoices({
   });
   const query = useQuery({
     queryKey: ['codex-digests', reviewId],
-    queryFn: ({ signal }) =>
-      api<{ items: CodexDigest[] }>(
-        `/codex-context/digests?reviewId=${reviewId}`,
-        'GET',
-        undefined,
-        signal,
-      ),
+    queryFn: async ({ signal }) => {
+      const items: CodexDigest[] = [];
+      let cursor: string | null = null;
+      do {
+        const page: { items: CodexDigest[]; nextCursor: string | null } = await api(
+          `/codex-context/digests?${new URLSearchParams({ reviewId, ...(cursor ? { cursor } : {}) })}`,
+          'GET',
+          undefined,
+          signal,
+        );
+        items.push(...page.items);
+        cursor = page.nextCursor;
+      } while (cursor);
+      return { items };
+    },
     refetchInterval: 5000,
   });
   return (
@@ -143,7 +151,9 @@ export function CodexChoices({
         </div>
       )}
       <p>
-        <Link to={`/codex-context?review=${reviewId}`}>
+        <Link
+          to={`/codex-context?${new URLSearchParams({ review: reviewId, projects: value.projectIds.join(',') })}`}
+        >
           Выбрать отдельный диалог, исправить итог или отключить чтение →
         </Link>
       </p>

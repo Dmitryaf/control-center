@@ -480,7 +480,6 @@ export class CodexContext {
             if (cause instanceof HttpError && cause.status === 400) {
               if (previous) {
                 this.markStale(previous);
-                selected++;
                 limitations.push(
                   `Проект ${project.projectId}: ранее сохранённый диалог больше не содержит доступной выборки. Итог исключён до пересмотра.`,
                 );
@@ -499,13 +498,13 @@ export class CodexContext {
                 previous.thread.updatedAt === preview.thread.updatedAt
               ) {
                 items.push(previous);
+                selected++;
               } else {
                 this.markStale(previous);
                 limitations.push(
                   `Проект ${project.projectId}: диалог «${previous.thread.name}» требует пересмотра. Прежний итог и выдержки сохранены, но не включены в анализ.`,
                 );
               }
-              selected++;
               continue;
             }
             const extraction = extractContext(preview);
@@ -514,6 +513,12 @@ export class CodexContext {
             cached.dto.excerpts = cached.dto.excerpts.map(
               (item) => extraction.excerpts.find((e) => e.id === item.id) ?? item,
             );
+            if (this.savedForProject(review.id, project.projectId).length >= 4) {
+              limitations.push(
+                `Проект ${project.projectId}: сохранены четыре итога для этого обзора. Чтобы добавить другой диалог, пересмотрите или явно удалите ненужные итоги. Сохранённый текст не изменён.`,
+              );
+              continue;
+            }
             const saved = await this.save(project.projectId, {
               previewId: preview.id,
               revision: null,
@@ -542,11 +547,22 @@ export class CodexContext {
   private markStale(previous: CodexDigest) {
     const changed = this.store.db
       .prepare(
-        'UPDATE codex_digests SET stale=1,checked_at=?,revision=revision+1 WHERE id=? AND revision=?',
+        'UPDATE codex_digests SET stale=1,checked_at=?,revision=revision+1 WHERE id=? AND revision=? AND stale=0',
       )
       .run(this.timestamp(), previous.id, previous.revision);
-    if (!changed.changes)
-      throw new HttpError(409, 'Итог изменён во время подготовки. Повторите просмотр.');
+    if (!changed.changes) {
+      const current = this.store.db
+        .prepare('SELECT revision,stale FROM codex_digests WHERE id=?')
+        .get(previous.id);
+      if (!current?.stale || Number(current.revision) !== previous.revision)
+        throw new HttpError(409, 'Итог изменён во время подготовки. Повторите просмотр.');
+    }
+  }
+  private savedForProject(reviewId: string, projectId: string) {
+    return this.store.db
+      .prepare('SELECT id FROM codex_digests WHERE review_key=? AND scope_project_id=?')
+      .all(reviewId, projectId)
+      .map((row) => this.read(String(row.id)));
   }
   async save(projectId: string, input: unknown) {
     const data = codexSaveSchema.parse(input);
@@ -607,19 +623,16 @@ export class CodexContext {
         );
       if ((old ? Number(old.revision) : null) !== data.revision)
         throw new HttpError(409, 'Итог уже изменён. Обновите страницу.');
-      if (
-        !old &&
-        Number(
-          this.store.db
-            .prepare(
-              'SELECT count(*) AS n FROM codex_digests WHERE review_key=? AND scope_project_id=?',
-            )
-            .get(cached.dto.reviewId, projectId)?.n,
-        ) >= 2
-      )
+      const saved = this.savedForProject(cached.dto.reviewId, projectId);
+      if (saved.filter((item) => item.id !== old?.id && item.eligible).length >= 2)
         throw new HttpError(
           400,
-          'Для одного обзора сохраняются максимум два диалога каждого проекта. Удалите ненужный итог.',
+          'Для одного обзора доступны максимум два актуальных диалога каждого проекта. Удалите ненужный итог перед добавлением или пересмотром другого.',
+        );
+      if (!old && saved.length >= 4)
+        throw new HttpError(
+          400,
+          'Для одного обзора сохраняются максимум четыре итога каждого проекта, включая устаревшие. Пересмотрите или явно удалите ненужные итоги.',
         );
       const project = this.store.project(projectId)!;
       const snapshot = JSON.parse(project.snapshot);
@@ -765,6 +778,14 @@ export class CodexContext {
         threadId: saved.thread.id,
       });
       this.previews.delete(fresh.id);
+      if (
+        saved.stale ||
+        fresh.sourceHash !== saved.sourceHash ||
+        fresh.thread.updatedAt !== saved.thread.updatedAt
+      ) {
+        this.markStale(saved);
+        return this.read(id);
+      }
       const updated = this.store.db
         .prepare(
           'UPDATE codex_digests SET stale=?,checked_at=?,revision=revision+1 WHERE id=? AND revision=?',
@@ -782,7 +803,9 @@ export class CodexContext {
       return this.read(id);
     } catch (cause) {
       this.store.db
-        .prepare('UPDATE codex_digests SET stale=1,revision=revision+1 WHERE id=? AND revision=?')
+        .prepare(
+          'UPDATE codex_digests SET stale=1,revision=revision+1 WHERE id=? AND revision=? AND stale=0',
+        )
         .run(id, data.revision);
       throw cause;
     }

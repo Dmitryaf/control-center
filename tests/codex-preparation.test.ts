@@ -13,7 +13,7 @@ import { PeriodAnalysis } from '../server/analysis/period-analysis.js';
 import { AnalysisSchedules } from '../server/analysis/schedules.js';
 import type { CodexTransport } from '../server/codex/rpc.js';
 
-async function setup(t: { after: (fn: () => Promise<void>) => void }) {
+async function setup(t: { after: (fn: () => Promise<void>) => void }, perProject = 3) {
   const f = await fixture();
   const roots = [await f.repo('one'), await f.repo('two')];
   const store = new Store(path.join(f.root, 'data.sqlite'));
@@ -25,7 +25,9 @@ async function setup(t: { after: (fn: () => Promise<void>) => void }) {
   const projects = new Projects(store);
   await projects.scan();
   const ids = roots.map((root) => projects.list().find((project) => project.path === root)!.id);
-  const dialogs = roots.flatMap((root) => Array.from({ length: 3 }, () => codexFixture(root)));
+  const dialogs = roots.flatMap((root) =>
+    Array.from({ length: perProject }, () => codexFixture(root)),
+  );
   dialogs.forEach((dialog, index) => {
     dialog.state.updatedAt = Date.parse('2024-03-07T00:00:00Z') / 1000 + index;
     dialog.state.name = `Рабочий диалог ${index}`;
@@ -35,6 +37,7 @@ async function setup(t: { after: (fn: () => Promise<void>) => void }) {
       );
   });
   let unavailable = false;
+  let onRead: (() => Promise<void>) | undefined;
   const transport: CodexTransport = {
     probe: async () => ({ version: '2.42.7' }),
     read: (signal, action) =>
@@ -58,7 +61,11 @@ async function setup(t: { after: (fn: () => Promise<void>) => void }) {
           }
           const dialog = dialogs.find((dialog) => dialog.threadId === input.threadId);
           assert.ok(dialog, 'Only a listed, scoped dialog can be read');
-          return dialog.transport.read(signal, (rpc) => rpc.request(method, params));
+          const response = await dialog.transport.read(signal, (rpc) =>
+            rpc.request(method, params),
+          );
+          if (method === 'thread/items/list') await onRead?.();
+          return response;
         },
       }),
   };
@@ -95,6 +102,9 @@ async function setup(t: { after: (fn: () => Promise<void>) => void }) {
     permissions,
     prepare,
     projects,
+    setReadHook: (hook?: () => Promise<void>) => {
+      onRead = hook;
+    },
     clock: () => now,
     setNow: (value: string) => {
       now = Date.parse(value);
@@ -366,4 +376,101 @@ test('changed dialog never combines old manual or automatic summary with new exc
     (await x.prepare()).items.find((item) => item.id === reviewed.id)?.summary,
     reviewed.summary,
   );
+});
+
+test('two stale summaries leave room for two current dialogs; repeats preserve revisions and bounded storage', async (t) => {
+  const x = await setup(t, 4);
+  const initial = (await x.prepare()).items.filter((item) => item.scopeProjectId === x.ids[0]);
+  const edited = x.context.edit(initial[0].id, {
+    revision: initial[0].revision,
+    summary: 'Ручной вывод: проверка спроса ещё не завершена.',
+    confirm: true,
+  });
+  for (const item of initial)
+    x.dialogs.find((d) => d.threadId === item.thread.id)!.state.text =
+      'Новый вывод: прежнюю гипотезу отменили после сравнения.';
+  const next = await x.prepare();
+  const current = next.items.filter((item) => item.scopeProjectId === x.ids[0]);
+  assert.equal(current.length, 2);
+  assert.ok(current.every((item) => !initial.some((old) => old.id === item.id)));
+  const stale = initial.map((item) => x.context.read(item.id));
+  assert.equal(stale[0].summary, edited.summary);
+  assert.deepEqual(stale[0].excerpts, edited.excerpts);
+  x.setNow('2024-03-06T13:00:00Z');
+  await x.prepare();
+  for (const item of stale) assert.deepEqual(x.context.read(item.id), item);
+  assert.equal(x.context.list({ reviewId: x.review.id, projectId: x.ids[0] }).items.length, 4);
+
+  const preview = await x.context.preview(x.ids[0], {
+    revision: x.permissions[0].revision,
+    reviewId: x.review.id,
+    threadId: stale[0].thread.id,
+  });
+  const input = {
+    previewId: preview.id,
+    revision: stale[0].revision,
+    summary: edited.summary,
+    excerptIds: preview.excerpts.map((e) => e.id),
+    confirm: true,
+  };
+  await assert.rejects(() => x.context.save(x.ids[0], input), /два актуальных/);
+  x.context.delete(current[0].id, { revision: current[0].revision, confirm: true });
+  const reviewed = await x.context.save(x.ids[0], input);
+  assert.equal(reviewed.eligible, true);
+  assert.equal(reviewed.summary, edited.summary);
+  assert.ok((await x.prepare()).items.some((item) => item.id === reviewed.id));
+});
+
+test('saved stale context is bounded and concurrent edits or revocation cannot be silently overwritten', async (t) => {
+  const x = await setup(t, 4);
+  const first = (await x.prepare()).items.filter((item) => item.scopeProjectId === x.ids[0]);
+  for (const item of first)
+    x.dialogs.find((d) => d.threadId === item.thread.id)!.state.text = 'Пересмотр первого решения.';
+  const second = (await x.prepare()).items.filter((item) => item.scopeProjectId === x.ids[0]);
+  for (const item of second)
+    x.dialogs.find((d) => d.threadId === item.thread.id)!.state.text = 'Пересмотр второго решения.';
+  await x.prepare();
+  const extra = codexFixture(x.dialogs[0].state.cwd);
+  extra.state.updatedAt = Date.parse('2024-03-08') / 1000;
+  x.dialogs.push(extra);
+  const full = await x.prepare();
+  assert.equal(full.items.filter((item) => item.scopeProjectId === x.ids[0]).length, 0);
+  assert.ok(full.limitations.some((text) => text.includes('четыре итога')));
+  const preview = await x.context.preview(x.ids[0], {
+    revision: x.permissions[0].revision,
+    reviewId: x.review.id,
+    threadId: extra.threadId,
+  });
+  await assert.rejects(
+    () =>
+      x.context.save(x.ids[0], {
+        previewId: preview.id,
+        revision: null,
+        summary: 'Новый итог',
+        excerptIds: [],
+        confirm: true,
+      }),
+    /четыре итога/,
+  );
+  assert.equal(x.context.list({ reviewId: x.review.id, projectId: x.ids[0] }).items.length, 4);
+  x.dialogs.pop();
+  const stale = x.context.read(first[0].id);
+  let edited = stale;
+  x.setReadHook(async () => {
+    x.setReadHook();
+    edited = x.context.edit(stale.id, {
+      revision: stale.revision,
+      summary: 'Правка из другого окна',
+      confirm: true,
+    });
+  });
+  await assert.rejects(x.prepare, /изменён во время подготовки/);
+  assert.deepEqual(x.context.read(stale.id), edited);
+  x.setReadHook(async () => {
+    x.setReadHook();
+    await x.context.configure(x.ids[0], { revision: x.permissions[0].revision, enabled: false });
+  });
+  await assert.rejects(x.prepare, /отключено|измен|отмен/i);
+  assert.equal(x.context.read(stale.id).summary, edited.summary);
+  assert.equal(x.context.read(stale.id).eligible, false);
 });

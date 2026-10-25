@@ -494,7 +494,12 @@ export default function CodexContext() {
         {reviewId && (
           <>
             {' '}
-            · <Link to={`/period-analysis?review=${reviewId}`}>К ручному AI-анализу →</Link>
+            ·{' '}
+            <Link
+              to={`/period-analysis?${new URLSearchParams({ review: reviewId, ...(params.has('projects') ? { projects: params.get('projects')! } : {}) })}`}
+            >
+              К ручному AI-анализу →
+            </Link>
           </>
         )}
       </p>
