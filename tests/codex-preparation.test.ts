@@ -284,3 +284,86 @@ test('scheduled new dialogs require separate read/send permission, respect revoc
   );
   assert.ok(packets[0].sources.every((source) => source.kind !== 'codex_digest'));
 });
+
+test('changed dialog never combines old manual or automatic summary with new excerpts, even at the same timestamp', async (t) => {
+  const x = await setup(t);
+  const initial = await x.prepare();
+  const edited = x.context.edit(initial.items[0].id, {
+    revision: initial.items[0].revision,
+    summary: 'Моя поправка: выбрали локальную версию без облачной синхронизации.',
+    confirm: true,
+  });
+  const unchanged = initial.items[2];
+  let sends = 0;
+  const owner = new PeriodAnalysis(
+    x.store,
+    new History(x.store, x.projects.decisions),
+    { key: 'fixture', model: 'fixture-model' },
+    async () => {
+      sends++;
+      throw new Error('Stale context must not be dispatched');
+    },
+    x.clock,
+  );
+  const input = {
+    reviewId: x.review.id,
+    requestKey: randomUUID(),
+    readConsent: true,
+    selection: {
+      projectIds: x.ids,
+      includeGeneral: false,
+      sourceKinds: [],
+      includeMetadata: false,
+      includeOpenTasks: false,
+      includeUserText: false,
+      includeRelatedReviews: false,
+      codexDigestIds: [edited.id],
+    },
+  };
+  const pending = owner.prepare(input);
+  for (const item of [edited, initial.items[1]]) {
+    const dialog = x.dialogs.find((dialog) => dialog.threadId === item.thread.id)!;
+    // Metadata timestamp deliberately unchanged; source hash must detect this.
+    dialog.state.text = 'После проверки отменили прежнее решение. Теперь сравниваем два варианта.';
+  }
+  const next = await x.prepare();
+  assert.ok(next.limitations.some((text) => text.includes('требует пересмотра')));
+  for (const old of [edited, initial.items[1]]) {
+    const stale = x.context.read(old.id);
+    assert.equal(stale.stale, true);
+    assert.equal(stale.eligible, false);
+    assert.equal(stale.summary, old.summary);
+    assert.deepEqual(stale.excerpts, old.excerpts);
+    assert.equal(stale.sourceHash, old.sourceHash);
+    assert.ok(!next.items.some((item) => item.id === old.id));
+  }
+  assert.equal(next.items.find((item) => item.id === unchanged.id)?.revision, unchanged.revision);
+  assert.equal(
+    (await owner.run(pending.id, { packetHash: pending.packetHash, consent: true })).status,
+    'cancelled',
+  );
+  assert.equal(sends, 0);
+  assert.throws(
+    () => owner.prepare({ ...input, requestKey: randomUUID(), repeatConsent: true }),
+    /повторного просмотра/,
+  );
+  // Explicit review of changed source is the only path back to eligibility.
+  const preview = await x.context.preview(edited.scopeProjectId, {
+    revision: x.permissions[0].revision,
+    reviewId: x.review.id,
+    threadId: edited.thread.id,
+  });
+  const reviewed = await x.context.save(edited.scopeProjectId, {
+    previewId: preview.id,
+    revision: x.context.read(edited.id).revision,
+    summary: 'Пересмотрено: прежний выбор отменён, исход новой проверки пока неизвестен.',
+    excerptIds: preview.excerpts.map((item) => item.id),
+    confirm: true,
+  });
+  assert.equal(reviewed.eligible, true);
+  assert.notEqual(reviewed.sourceHash, edited.sourceHash);
+  assert.equal(
+    (await x.prepare()).items.find((item) => item.id === reviewed.id)?.summary,
+    reviewed.summary,
+  );
+});

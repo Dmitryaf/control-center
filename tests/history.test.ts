@@ -165,6 +165,14 @@ test('history HTTP stays behind loopback guards and validates every filter', asy
     }),
   );
   assert.equal(foreignHost, 403);
+  assert.equal((await fetch(root + '/latest-projects')).status, 200);
+  assert.equal((await fetch(root + '/latest-projects?timezone=invalid')).status, 400);
+  assert.equal((await fetch(root + '/latest-projects?limit=10')).status, 400);
+  assert.equal(
+    (await fetch(root + '/latest-projects', { headers: { Origin: 'https://foreign.invalid' } }))
+      .status,
+    403,
+  );
   for (const query of [
     '?limit=101',
     '?kind=unknown',

@@ -1,5 +1,8 @@
 import { Link } from 'react-router';
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import type { HistoryPage } from '../../../shared/history';
+import { api } from '../../shared/http';
 import { useWorkspace } from '../../shared/workspace';
 import { date, priorityLabels } from '../../shared/labels';
 import { RecentHistory } from '../history/RecentHistory';
@@ -7,6 +10,19 @@ import { dateInZone } from '../../../shared/periods';
 import { ProjectCard } from '../projects/Projects';
 export default function Overview() {
   const { data: w } = useWorkspace();
+  const timezone = w!.settings.timezone;
+  const latestHistory = useQuery({
+    queryKey: ['history', 'latest-projects', timezone],
+    queryFn: ({ signal }) =>
+      api<HistoryPage>(
+        `/history/latest-projects?timezone=${encodeURIComponent(timezone)}`,
+        'GET',
+        undefined,
+        signal,
+      ),
+    retry: false,
+    refetchInterval: 5000,
+  });
   const [period, setPeriod] = useState('all');
   const today = dateInZone(new Date(), w!.settings.timezone);
   const start = new Date(`${today}T00:00:00Z`);
@@ -117,7 +133,12 @@ export default function Overview() {
         </div>
         <div className="project-register">
           {projects.map((project) => (
-            <ProjectCard key={project.id} project={project} overview />
+            <ProjectCard
+              key={project.id}
+              project={project}
+              overview
+              recentHistory={latestHistory}
+            />
           ))}
         </div>
         {!projects.length && (

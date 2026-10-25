@@ -10,6 +10,8 @@ import type { Store } from './db.js';
 import type { DecisionIndex } from './decisions/index.js';
 import { dateInZone } from '../shared/periods.js';
 import { reviewPageSchema, type Review } from '../shared/reviews.js';
+import { z } from 'zod';
+import { timezoneSchema } from '../shared/periods.js';
 
 // A read projection over existing owners, never an event journal or a copy of their bodies.
 const entriesSql = `WITH options(zone) AS (VALUES(?)), entries(key,kind,event,sourceId,day,recordedAt,dateQuality,projectId,scopeProjectId,projectName,title,body,href) AS (
@@ -72,6 +74,13 @@ export class History {
   list(input: unknown = {}): HistoryPage {
     return this.listEntries(input);
   }
+  latestProjects(input: unknown = {}): HistoryPage {
+    const query = z
+      .object({ timezone: timezoneSchema.default('UTC') })
+      .strict()
+      .parse(input);
+    return this.listEntries(query, undefined, { latestProjects: true });
+  }
   fileMetadataStamp(key: string): string | null {
     const file = this.decisions
       .list()
@@ -106,7 +115,7 @@ export class History {
   private listEntries(
     input: unknown,
     bounds?: Pick<Review, 'startAt' | 'nextStartAt'>,
-    options?: { kinds?: HistoryKind[]; generalOnly?: boolean },
+    options?: { kinds?: HistoryKind[]; generalOnly?: boolean; latestProjects?: boolean },
   ): HistoryPage {
     const query = historyQuerySchema.parse(input);
     const cursor = query.cursor ? historyCursorSchema.parse(JSON.parse(query.cursor)) : null;
@@ -166,25 +175,35 @@ export class History {
       where.push("(day,COALESCE(recordedAt,''),key)<(?,?,?)");
       values.push(cursor.day, cursor.time, cursor.key);
     }
+    const latest = options?.latestProjects;
     const rows = this.store.db
       .prepare(
         entriesSql +
+          (latest
+            ? `, ranked AS (
+            SELECT *,row_number() OVER(PARTITION BY scopeProjectId ORDER BY day DESC,COALESCE(recordedAt,'') DESC,key DESC) AS position
+            FROM entries WHERE scopeProjectId IN (SELECT id FROM projects)
+          ) `
+            : '') +
           `SELECT key,kind,event,sourceId,day,recordedAt,dateQuality,projectId,scopeProjectId,projectName,title,
-      substr(COALESCE(body,''),1,600) AS excerpt,length(COALESCE(body,''))>600 AS truncated,href FROM entries
-      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-      ORDER BY day DESC,COALESCE(recordedAt,'') DESC,key DESC LIMIT ?`,
+      substr(COALESCE(body,''),1,600) AS excerpt,length(COALESCE(body,''))>600 AS truncated,href FROM ${latest ? 'ranked' : 'entries'}
+      ${latest ? 'WHERE position=1' : where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY day DESC,COALESCE(recordedAt,'') DESC,key DESC ${latest ? '' : 'LIMIT ?'}`,
       )
-      .all(...values, query.limit + 1) as unknown as (Omit<HistoryEntry, 'truncated'> & {
+      .all(...values, ...(latest ? [] : [query.limit + 1])) as unknown as (Omit<
+      HistoryEntry,
+      'truncated'
+    > & {
       truncated: number;
     })[];
     const items = rows
-      .slice(0, query.limit)
+      .slice(0, latest ? rows.length : query.limit)
       .map((row) => ({ ...row, truncated: Boolean(row.truncated) }));
     const last = items.at(-1);
     return {
       items,
       nextCursor:
-        rows.length > query.limit && last
+        !latest && rows.length > query.limit && last
           ? JSON.stringify({ day: last.day, time: last.recordedAt ?? '', key: last.key })
           : null,
       files: {

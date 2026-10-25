@@ -180,6 +180,7 @@ test('owner journey across active, paused, waiting and completed projects: brows
     await test.step('10,12: exact local packet without provider; core works after analysis read failure', async () => {
       await page.goto(`/period-analysis?review=${weekId}`);
       const form = page.getByRole('form', { name: 'Подготовка ручного анализа' });
+      await form.getByText('Настроить источники', { exact: true }).click();
       await form.getByLabel('Результаты задач', { exact: true }).check();
       await form.getByLabel('Наблюдения', { exact: true }).check();
       await form.getByLabel('Мой сохранённый текст этого обзора', { exact: true }).check();

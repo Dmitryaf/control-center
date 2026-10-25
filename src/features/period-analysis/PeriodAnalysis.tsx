@@ -321,7 +321,12 @@ function AnalysisPage({ reviewId }: { reviewId: string }) {
   const [retryingPrepare, setRetryingPrepare] = useState(false);
   const projectId =
     review.data && review.data.scopeKey !== 'general' ? review.data.scopeKey.slice(8) : null;
-  const chosen = selection ?? emptySelection(projectId);
+  const initial = emptySelection(projectId);
+  if (!projectId)
+    initial.projectIds = [...new Set((params.get('projects') ?? '').split(','))]
+      .filter((id) => w!.projects.some((project) => project.id === id))
+      .slice(0, 10);
+  const chosen = selection ?? initial;
   return (
     <>
       <div className="page-heading">

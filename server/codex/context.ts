@@ -20,7 +20,7 @@ import { within } from '../filesystem/access.js';
 import { projectDirectories } from '../projects/resolve.js';
 import { digest, projectStamp } from '../analysis/privacy.js';
 import { LocalCodex, type CodexTransport, type CodexReader } from './rpc.js';
-import { extractContext } from './extract.js';
+import { extractContext, clipExcerpt } from './extract.js';
 
 export const codexReadPolicy = 'codex-dialog-v1';
 const metadata = z.object({
@@ -375,14 +375,7 @@ export class CodexContext {
               throw new HttpError(503, 'Codex повторил элемент истории.');
             itemIds.add(`${turn.id}:${id}`);
             fingerprints.push([turn.id, id, role, turn.status, at, digest(text)]);
-            let visible = '',
-              size = 0;
-            for (const char of text) {
-              const next = Buffer.byteLength(char);
-              if (size + next > 1000) break;
-              visible += char;
-              size += next;
-            }
+            const visible = clipExcerpt(text, 1000);
             excerpts.push({
               id: `${turn.id}:${id}`,
               turnId: turn.id,
@@ -470,6 +463,12 @@ export class CodexContext {
           .slice(0, 4);
         for (const thread of candidates) {
           if (selected === 2) break;
+          const old = this.store.db
+            .prepare(
+              'SELECT id FROM codex_digests WHERE review_key=? AND scope_project_id=? AND thread_id=?',
+            )
+            .get(review.id, project.projectId, thread.id);
+          const previous = old ? this.read(String(old.id)) : null;
           let preview: CodexPreview;
           try {
             preview = await this.preview(project.projectId, {
@@ -478,40 +477,47 @@ export class CodexContext {
               threadId: thread.id,
             });
           } catch (cause) {
-            if (cause instanceof HttpError && cause.status === 400) continue;
+            if (cause instanceof HttpError && cause.status === 400) {
+              if (previous) {
+                this.markStale(previous);
+                selected++;
+                limitations.push(
+                  `Проект ${project.projectId}: ранее сохранённый диалог больше не содержит доступной выборки. Итог исключён до пересмотра.`,
+                );
+              }
+              continue;
+            }
             throw cause;
           }
-          const extraction = extractContext(preview);
-          if (!extraction) {
-            this.previews.delete(preview.id);
-            continue;
-          }
-          const cached = this.previews.get(preview.id)!;
-          // Only the selected small excerpts are stored. The full bounded projection hash
-          // still detects source edits before saving; source text is never treated as fact.
-          cached.dto.excerpts = cached.dto.excerpts.map(
-            (item) => extraction.excerpts.find((e) => e.id === item.id) ?? item,
-          );
-          const old = this.store.db
-            .prepare(
-              'SELECT id FROM codex_digests WHERE review_key=? AND scope_project_id=? AND thread_id=?',
-            )
-            .get(review.id, project.projectId, thread.id);
-          const previous = old ? this.read(String(old.id)) : null;
           try {
-            if (
-              previous?.eligible &&
-              previous.sourceHash === preview.sourceHash &&
-              digest(previous.excerpts) === digest(extraction.excerpts)
-            ) {
-              items.push(previous);
+            if (previous) {
+              // Legacy summaries have no authorship marker. Never silently pair an
+              // existing (possibly edited) summary with different source evidence.
+              if (
+                previous.eligible &&
+                previous.sourceHash === preview.sourceHash &&
+                previous.thread.updatedAt === preview.thread.updatedAt
+              ) {
+                items.push(previous);
+              } else {
+                this.markStale(previous);
+                limitations.push(
+                  `Проект ${project.projectId}: диалог «${previous.thread.name}» требует пересмотра. Прежний итог и выдержки сохранены, но не включены в анализ.`,
+                );
+              }
               selected++;
               continue;
             }
+            const extraction = extractContext(preview);
+            if (!extraction) continue;
+            const cached = this.previews.get(preview.id)!;
+            cached.dto.excerpts = cached.dto.excerpts.map(
+              (item) => extraction.excerpts.find((e) => e.id === item.id) ?? item,
+            );
             const saved = await this.save(project.projectId, {
               previewId: preview.id,
-              revision: previous?.revision ?? null,
-              summary: previous?.summary ?? extraction.summary,
+              revision: null,
+              summary: extraction.summary,
               excerptIds: extraction.excerpts.map((item) => item.id),
               confirm: true,
             });
@@ -522,7 +528,7 @@ export class CodexContext {
           }
         }
         limitations.push(
-          `Проект ${project.projectId}: выбрано ${selected} диалогов; проверены до четырёх недавних диалогов из первой страницы. Это ограниченный отбор, не полный архив.`,
+          `Проект ${project.projectId}: выбрано ${items.filter((item) => item.scopeProjectId === project.projectId).length} диалогов; проверены до четырёх недавних диалогов из первой страницы. Это ограниченный отбор, не полный архив.`,
         );
       } catch (cause) {
         if (cause instanceof HttpError && [403, 409, 410].includes(cause.status)) throw cause;
@@ -532,6 +538,15 @@ export class CodexContext {
       }
     }
     return { items, limitations };
+  }
+  private markStale(previous: CodexDigest) {
+    const changed = this.store.db
+      .prepare(
+        'UPDATE codex_digests SET stale=1,checked_at=?,revision=revision+1 WHERE id=? AND revision=?',
+      )
+      .run(this.timestamp(), previous.id, previous.revision);
+    if (!changed.changes)
+      throw new HttpError(409, 'Итог изменён во время подготовки. Повторите просмотр.');
   }
   async save(projectId: string, input: unknown) {
     const data = codexSaveSchema.parse(input);
@@ -570,7 +585,6 @@ export class CodexContext {
       reviewId: cached.dto.reviewId,
       threadId: cached.dto.thread.id,
     });
-    this.previews.delete(fresh.id);
     this.previews.delete(fresh.id);
     if (
       fresh.sourceHash !== cached.dto.sourceHash ||

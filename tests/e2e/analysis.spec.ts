@@ -78,6 +78,9 @@ test('selected saved payload → explicit approval → proposals → one edited 
     await page.goto('/');
     await page.getByRole('link', { name: 'Анализ проектов →', exact: true }).click();
     await expect(page).toHaveURL(/\/analysis$/);
+    await page
+      .getByText('Краткий разбор текущего состояния — без сохранения обзора', { exact: true })
+      .click();
     await expect(
       page.getByRole('navigation').getByRole('link', { name: 'Проекты', exact: true }),
     ).toHaveAttribute('aria-current', 'page');
@@ -194,6 +197,9 @@ test('unconfigured provider, preview failure, lost response and expired consent 
     });
   });
   await page.goto('/analysis');
+  await page
+    .getByText('Краткий разбор текущего состояния — без сохранения обзора', { exact: true })
+    .click();
   await expect(page.getByText('OpenAI не настроен', { exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: new RegExp(data.projects[0].metadata.name) }).check();
   await page.getByRole('button', { name: 'Просмотреть данные', exact: true }).click();

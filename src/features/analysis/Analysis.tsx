@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useSearchParams, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import type {
   AnalysisStatus,
@@ -12,11 +12,16 @@ import { api } from '../../shared/http';
 import { priorityLabels } from '../../shared/labels';
 import { useWorkspace, workspaceKey } from '../../shared/workspace';
 import { SavedAnalyses } from './RecentAnalyses';
+import type { Review } from '../../../shared/reviews';
+import { dateInZone, type PeriodKind } from '../../../shared/periods';
 type Draft = AnalysisReport['proposals'][number] & { created: Task | null };
 export default function Analysis() {
   const { data: w } = useWorkspace();
   const client = useQueryClient();
   const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const [kind, setKind] = useState<PeriodKind>('week');
+  const [anchorDate, setAnchorDate] = useState(() => dateInZone(new Date(), w!.settings.timezone));
   const [selection, setSelection] = useState<string[]>(() => {
     const id = params.get('project');
     return id && w!.projects.some((p) => p.id === id) ? [id] : [];
@@ -89,50 +94,12 @@ export default function Analysis() {
         <Link to="/">К обзору →</Link>
       </div>
       <p>
-        Здесь доступны сохранённые обзоры и краткий разбор текущих сводок. Для понимания изменений
-        за неделю или месяц откройте обзор периода: там можно выбрать историю, наблюдения и итоги
-        диалогов.
+        Выберите проекты и неделю или месяц. Обзор поможет осмыслить их развитие и останется в
+        истории. Подготовка данных и чтение сохранённых результатов доступны без OpenAI.
       </p>
       <p>
         <Link to="/reviews">Обзор недели или месяца →</Link>
       </p>
-      <SavedAnalyses projectIds={selection} />
-      <h2>Краткий разбор текущего состояния</h2>
-      <p className="help">
-        Этот запрос использует сводки, открытые задачи и пять последних записей работы каждого
-        выбранного проекта. Результат доступен 15 минут; обзор периода сохраняется в истории.
-      </p>
-      {failure && (
-        <div className="message error" role="alert" aria-label="Анализ проектов">
-          {failure}
-        </div>
-      )}
-      {working && <p role="status">Выполняем запрос…</p>}
-      {status && !status.ready && (
-        <div className="message warning">
-          <strong>OpenAI не настроен</strong>
-          <p>Добавьте API-ключ и модель в окружение сервера. Данные можно просмотреть заранее.</p>
-          <details>
-            <summary>Как подключить</summary>
-            <p>
-              Задайте <code>OPENAI_API_KEY</code> и <code>CONTROL_CENTER_OPENAI_MODEL</code> перед
-              запуском Control Center, затем перезапустите сервер. Ключ не вводится в браузере и не
-              сохраняется в базе.
-            </p>
-            <button
-              disabled={working}
-              onClick={() =>
-                action(async (current) => {
-                  const s = await api<AnalysisStatus>('/analysis/status');
-                  if (current()) setStatus(s);
-                })
-              }
-            >
-              Проверить настройки
-            </button>
-          </details>
-        </div>
-      )}
       <fieldset disabled={working} className="project-selection">
         <legend>Проекты для анализа · до 10</legend>
         {w!.projects.map((p) => (
@@ -152,205 +119,292 @@ export default function Analysis() {
           <p className="empty">Добавьте проекты в настройках и выполните сканирование.</p>
         )}
       </fieldset>
-      <button
-        disabled={working || !selection.length || selection.length > 10}
-        onClick={() =>
-          action(async (current) => {
-            const response = await api<AnalysisPreview>('/analysis/prepare', 'POST', {
-              projectIds: selection,
+      <form
+        className="form panel section-space"
+        aria-label="Обзор выбранных проектов"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void action(async (current) => {
+            const review = await api<Review>('/reviews', 'POST', {
+              projectId: selection.length === 1 ? selection[0] : null,
+              kind,
+              anchorDate,
             });
-            if (current()) {
-              setPreview(response);
-              setStatus(response.config);
-              setResult(null);
-              setDrafts([]);
-              setReviewed(false);
-            }
-          })
-        }
+            if (current())
+              navigate(
+                `/period-analysis?review=${review.id}&projects=${encodeURIComponent(selection.join(','))}`,
+              );
+          });
+        }}
       >
-        Просмотреть данные
-      </button>
-      {preview && (
-        <section className="section-space analysis-preview" aria-labelledby="preview-heading">
-          <h2 id="preview-heading">Данные для отправки</h2>
-          <p>
-            Подготовлены {new Date(preview.payload.preparedAt).toLocaleString('ru')}. Пакет
-            действителен до {new Date(preview.expiresAt).toLocaleString('ru')}.
-          </p>
-          <p>
-            Включены сводки, открытые задачи и по 5 последних записей работы выбранных проектов.
-            Файлы, Git, заметки и приватные решения не включены. Сохранённые сведения могут
-            устареть; пакет ниже останется неизменным при отправке.
-          </p>
-          <p className="help">
-            Сводки и результаты могут содержать личные сведения. Проверьте весь текст; при
-            необходимости исключите проект или исправьте исходную запись. Автоматическая проверка не
-            распознаёт все секреты.
-          </p>
-          <pre tabIndex={0} aria-label="Полный пакет данных">
-            {JSON.stringify(preview.payload, null, 2)}
-          </pre>
-          <p>
-            Получатель: OpenAI · модель {preview.config.model || 'не задана'}. Один платный запрос,
-            до {preview.config.maxOutputTokens} выходных токенов, ожидание до{' '}
-            {preview.config.timeoutSeconds} секунд. Цена зависит от модели и объёма; повтор не
-            выполняется автоматически.
-          </p>
-          <p className="help">
-            Ответ не сохраняется как состояние OpenAI (<code>store: false</code>); это не обещание
-            отсутствия иных сроков хранения у провайдера. Предложения живут на этом экране и
-            исчезнут после его закрытия.
-          </p>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={reviewed}
-              disabled={working || !!result}
-              onChange={(e) => setReviewed(e.target.checked)}
-            />
-            <span>Я просмотрел данные и разрешаю отправить этот пакет в OpenAI</span>
-          </label>
-          <button
-            className="primary"
-            disabled={working || !reviewed || !preview.config.ready || !!result || expired}
-            onClick={() =>
-              action(async (current) => {
-                const response = await api<AnalysisResult>('/analysis/run', 'POST', {
-                  previewId: preview.id,
-                  consent: true,
-                });
-                if (current()) {
-                  setResult(response);
-                  setDrafts(response.report.proposals.map((d) => ({ ...d, created: null })));
-                }
-              })
-            }
-          >
-            Отправить в OpenAI
-          </button>
-          {expired && !result && (
-            <p className="help">Срок пакета истёк. Подготовьте данные заново.</p>
-          )}
-        </section>
+        <label>
+          Период обзора
+          <select value={kind} onChange={(event) => setKind(event.target.value as PeriodKind)}>
+            <option value="week">Неделя</option>
+            <option value="month">Месяц</option>
+          </select>
+        </label>
+        <label>
+          Дата внутри периода
+          <input
+            type="date"
+            min="1900-01-01"
+            max="9998-12-31"
+            required
+            value={anchorDate}
+            onChange={(event) => setAnchorDate(event.target.value)}
+          />
+        </label>
+        <p className="help">
+          Откроется сохранённый обзор этого периода или новый пустой обзор. Источники и отправку вы
+          подтвердите на следующем шаге.
+        </p>
+        <button
+          className="primary"
+          disabled={working || !selection.length || selection.length > 10}
+        >
+          Подготовить обзор периода
+        </button>
+      </form>
+      {failure && (
+        <div className="message error" role="alert" aria-label="Анализ проектов">
+          {failure}
+        </div>
       )}
-      {result && (
-        <section className="section-space analysis-result" aria-labelledby="result-heading">
-          <h2 id="result-heading">Предложения</h2>
-          <p className="preserve">{result.report.summary}</p>
-          <p className="help">
-            {result.model} · {new Date(result.generatedAt).toLocaleString('ru')}
-            {result.usage
-              ? ` · входных токенов ${result.usage.inputTokens}, выходных ${result.usage.outputTokens}`
-              : ''}
-            . Это предложения модели; фактическая работа и проверки не выполнялись.
-          </p>
-          {!drafts.length && <p className="empty">Новых задач модель не предложила.</p>}
-          {drafts.map((d, index) => (
-            <article className="proposal" key={index}>
-              <h3>
-                {preview?.payload.projects.find((p) => p.id === d.projectId)?.name ??
-                  'Неизвестный проект'}
-              </h3>
-              <p className="preserve">{d.reason}</p>
-              <p className="help">Основания:</p>
-              <ul>
-                {d.sources.map((source) => {
-                  const p = preview?.payload.projects.find(
-                    (p) =>
-                      p.source === source ||
-                      p.tasks.some((t) => t.source === source) ||
-                      p.recentWork.some((t) => t.source === source),
-                  );
-                  const t = p?.tasks.find((t) => t.source === source);
-                  const h = p?.recentWork.find((t) => t.source === source);
-                  return (
-                    <li key={source}>
-                      {p?.source === source
-                        ? `Сводка: ${p.name}`
-                        : t
-                          ? `${t.code}: ${t.title}`
-                          : h
-                            ? `${h.taskCode}, запись ${new Date(h.recordedAt).toLocaleString('ru')}`
-                            : source}
-                    </li>
-                  );
-                })}
-              </ul>
-              <fieldset disabled={working || !!d.created} className="form">
-                <legend>Предложение {index + 1}</legend>
-                <label>
-                  Название
-                  <input
-                    value={d.title}
-                    maxLength={240}
-                    onChange={(e) => change(index, 'title', e.target.value)}
-                  />
-                </label>
-                {(
-                  [
-                    ['description', 'Описание'],
-                    ['expectedResult', 'Ожидаемый результат'],
-                    ['acceptance', 'Условия завершения'],
-                  ] as const
-                ).map(([key, label]) => (
-                  <label key={key}>
-                    {label}
-                    <textarea
-                      rows={2}
-                      maxLength={10000}
-                      value={d[key]}
-                      onChange={(e) => change(index, key, e.target.value)}
+      <SavedAnalyses projectIds={selection} />
+      <details className="section-space">
+        <summary>Краткий разбор текущего состояния — без сохранения обзора</summary>
+        <h2>Краткий разбор текущего состояния</h2>
+        <p className="help">
+          Этот запрос использует сводки, открытые задачи и пять последних записей работы каждого
+          выбранного проекта. Результат доступен 15 минут; обзор периода сохраняется в истории.
+        </p>
+        {working && <p role="status">Выполняем запрос…</p>}
+        {status && !status.ready && (
+          <div className="message warning">
+            <strong>OpenAI не настроен</strong>
+            <p>Добавьте API-ключ и модель в окружение сервера. Данные можно просмотреть заранее.</p>
+            <details>
+              <summary>Как подключить</summary>
+              <p>
+                Задайте <code>OPENAI_API_KEY</code> и <code>CONTROL_CENTER_OPENAI_MODEL</code> перед
+                запуском Control Center, затем перезапустите сервер. Ключ не вводится в браузере и
+                не сохраняется в базе.
+              </p>
+              <button
+                disabled={working}
+                onClick={() =>
+                  action(async (current) => {
+                    const s = await api<AnalysisStatus>('/analysis/status');
+                    if (current()) setStatus(s);
+                  })
+                }
+              >
+                Проверить настройки
+              </button>
+            </details>
+          </div>
+        )}
+        <button
+          disabled={working || !selection.length || selection.length > 10}
+          onClick={() =>
+            action(async (current) => {
+              const response = await api<AnalysisPreview>('/analysis/prepare', 'POST', {
+                projectIds: selection,
+              });
+              if (current()) {
+                setPreview(response);
+                setStatus(response.config);
+                setResult(null);
+                setDrafts([]);
+                setReviewed(false);
+              }
+            })
+          }
+        >
+          Просмотреть данные
+        </button>
+        {preview && (
+          <section className="section-space analysis-preview" aria-labelledby="preview-heading">
+            <h2 id="preview-heading">Данные для отправки</h2>
+            <p>
+              Подготовлены {new Date(preview.payload.preparedAt).toLocaleString('ru')}. Пакет
+              действителен до {new Date(preview.expiresAt).toLocaleString('ru')}.
+            </p>
+            <p>
+              Включены сводки, открытые задачи и по 5 последних записей работы выбранных проектов.
+              Файлы, Git, заметки и приватные решения не включены. Сохранённые сведения могут
+              устареть; пакет ниже останется неизменным при отправке.
+            </p>
+            <p className="help">
+              Сводки и результаты могут содержать личные сведения. Проверьте весь текст; при
+              необходимости исключите проект или исправьте исходную запись. Автоматическая проверка
+              не распознаёт все секреты.
+            </p>
+            <pre tabIndex={0} aria-label="Полный пакет данных">
+              {JSON.stringify(preview.payload, null, 2)}
+            </pre>
+            <p>
+              Получатель: OpenAI · модель {preview.config.model || 'не задана'}. Один платный
+              запрос, до {preview.config.maxOutputTokens} выходных токенов, ожидание до{' '}
+              {preview.config.timeoutSeconds} секунд. Цена зависит от модели и объёма; повтор не
+              выполняется автоматически.
+            </p>
+            <p className="help">
+              Ответ не сохраняется как состояние OpenAI (<code>store: false</code>); это не обещание
+              отсутствия иных сроков хранения у провайдера. Предложения живут на этом экране и
+              исчезнут после его закрытия.
+            </p>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={reviewed}
+                disabled={working || !!result}
+                onChange={(e) => setReviewed(e.target.checked)}
+              />
+              <span>Я просмотрел данные и разрешаю отправить этот пакет в OpenAI</span>
+            </label>
+            <button
+              className="primary"
+              disabled={working || !reviewed || !preview.config.ready || !!result || expired}
+              onClick={() =>
+                action(async (current) => {
+                  const response = await api<AnalysisResult>('/analysis/run', 'POST', {
+                    previewId: preview.id,
+                    consent: true,
+                  });
+                  if (current()) {
+                    setResult(response);
+                    setDrafts(response.report.proposals.map((d) => ({ ...d, created: null })));
+                  }
+                })
+              }
+            >
+              Отправить в OpenAI
+            </button>
+            {expired && !result && (
+              <p className="help">Срок пакета истёк. Подготовьте данные заново.</p>
+            )}
+          </section>
+        )}
+        {result && (
+          <section className="section-space analysis-result" aria-labelledby="result-heading">
+            <h2 id="result-heading">Предложения</h2>
+            <p className="preserve">{result.report.summary}</p>
+            <p className="help">
+              {result.model} · {new Date(result.generatedAt).toLocaleString('ru')}
+              {result.usage
+                ? ` · входных токенов ${result.usage.inputTokens}, выходных ${result.usage.outputTokens}`
+                : ''}
+              . Это предложения модели; фактическая работа и проверки не выполнялись.
+            </p>
+            {!drafts.length && <p className="empty">Новых задач модель не предложила.</p>}
+            {drafts.map((d, index) => (
+              <article className="proposal" key={index}>
+                <h3>
+                  {preview?.payload.projects.find((p) => p.id === d.projectId)?.name ??
+                    'Неизвестный проект'}
+                </h3>
+                <p className="preserve">{d.reason}</p>
+                <p className="help">Основания:</p>
+                <ul>
+                  {d.sources.map((source) => {
+                    const p = preview?.payload.projects.find(
+                      (p) =>
+                        p.source === source ||
+                        p.tasks.some((t) => t.source === source) ||
+                        p.recentWork.some((t) => t.source === source),
+                    );
+                    const t = p?.tasks.find((t) => t.source === source);
+                    const h = p?.recentWork.find((t) => t.source === source);
+                    return (
+                      <li key={source}>
+                        {p?.source === source
+                          ? `Сводка: ${p.name}`
+                          : t
+                            ? `${t.code}: ${t.title}`
+                            : h
+                              ? `${h.taskCode}, запись ${new Date(h.recordedAt).toLocaleString('ru')}`
+                              : source}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <fieldset disabled={working || !!d.created} className="form">
+                  <legend>Предложение {index + 1}</legend>
+                  <label>
+                    Название
+                    <input
+                      value={d.title}
+                      maxLength={240}
+                      onChange={(e) => change(index, 'title', e.target.value)}
                     />
                   </label>
-                ))}
-                <label>
-                  Приоритет
-                  <select
-                    value={d.priority}
-                    onChange={(e) => change(index, 'priority', e.target.value)}
+                  {(
+                    [
+                      ['description', 'Описание'],
+                      ['expectedResult', 'Ожидаемый результат'],
+                      ['acceptance', 'Условия завершения'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key}>
+                      {label}
+                      <textarea
+                        rows={2}
+                        maxLength={10000}
+                        value={d[key]}
+                        onChange={(e) => change(index, key, e.target.value)}
+                      />
+                    </label>
+                  ))}
+                  <label>
+                    Приоритет
+                    <select
+                      value={d.priority}
+                      onChange={(e) => change(index, 'priority', e.target.value)}
+                    >
+                      {Object.entries(priorityLabels).map(([k, v]) => (
+                        <option key={k} value={k}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </fieldset>
+                {d.created ? (
+                  <Link to={`/tasks?task=${d.created.code}`}>Открыть {d.created.code} →</Link>
+                ) : (
+                  <button
+                    disabled={working || !d.title.trim()}
+                    onClick={() =>
+                      action(async (current) => {
+                        const task = await api<Task>('/tasks', 'POST', {
+                          projectId: d.projectId,
+                          title: d.title,
+                          description: d.description,
+                          expectedResult: d.expectedResult,
+                          acceptance: d.acceptance,
+                          priority: d.priority,
+                          state: 'next',
+                          requestKey: `analysis:${result.previewId}:${index}`,
+                        });
+                        if (current()) {
+                          setDrafts((v) =>
+                            v.map((item, i) => (i === index ? { ...item, created: task } : item)),
+                          );
+                          await client.invalidateQueries({ queryKey: workspaceKey });
+                        }
+                      })
+                    }
                   >
-                    {Object.entries(priorityLabels).map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </fieldset>
-              {d.created ? (
-                <Link to={`/tasks?task=${d.created.code}`}>Открыть {d.created.code} →</Link>
-              ) : (
-                <button
-                  disabled={working || !d.title.trim()}
-                  onClick={() =>
-                    action(async (current) => {
-                      const task = await api<Task>('/tasks', 'POST', {
-                        projectId: d.projectId,
-                        title: d.title,
-                        description: d.description,
-                        expectedResult: d.expectedResult,
-                        acceptance: d.acceptance,
-                        priority: d.priority,
-                        state: 'next',
-                        requestKey: `analysis:${result.previewId}:${index}`,
-                      });
-                      if (current()) {
-                        setDrafts((v) =>
-                          v.map((item, i) => (i === index ? { ...item, created: task } : item)),
-                        );
-                        await client.invalidateQueries({ queryKey: workspaceKey });
-                      }
-                    })
-                  }
-                >
-                  Создать задачу «Следом»
-                </button>
-              )}
-            </article>
-          ))}
-        </section>
-      )}
+                    Создать задачу «Следом»
+                  </button>
+                )}
+              </article>
+            ))}
+          </section>
+        )}
+      </details>
     </div>
   );
 }

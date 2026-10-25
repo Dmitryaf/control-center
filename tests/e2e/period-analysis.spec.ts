@@ -164,6 +164,10 @@ test('saved period AI flow: actual preview → explicit sending → retained res
     await expect(page.getByRole('button', { name: 'Подготовить точный пакет' })).toBeDisabled();
     await page
       .getByRole('form', { name: 'Подготовка ручного анализа' })
+      .getByText('Настроить источники', { exact: true })
+      .click();
+    await page
+      .getByRole('form', { name: 'Подготовка ручного анализа' })
       .getByLabel('Текущая цель и состояние выбранных проектов', { exact: true })
       .check();
     await page
@@ -203,6 +207,10 @@ test('saved period AI flow: actual preview → explicit sending → retained res
     expect(sends).toBe(1);
     const own = (await (await request.get(`/api/reviews/${review.id}`)).json()) as Review;
     expect(own.userText).toBe('My own report must survive AI');
+    await page
+      .getByRole('form', { name: 'Подготовка ручного анализа' })
+      .getByText('Настроить источники', { exact: true })
+      .click();
     await mkdir('.local/period-analysis-review', { recursive: true });
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1100 });

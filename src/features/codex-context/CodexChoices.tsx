@@ -34,9 +34,11 @@ export function CodexChoices({
   });
   const prepare = useMutation({
     retry: false,
-    mutationFn: async () => {
+    mutationFn: async (projectIds: string[]) => {
       const projects = [];
-      for (const grant of grants.data ?? []) {
+      for (const grant of (grants.data ?? []).filter((grant) =>
+        projectIds.includes(grant.projectId),
+      )) {
         const approved = grant.enabled
           ? grant
           : await api<CodexGrant>(`/projects/${grant.projectId}/codex-context`, 'PUT', {
@@ -52,12 +54,22 @@ export function CodexChoices({
         { reviewId, projects, readConsent: true, saveConsent: true },
       );
     },
-    onSuccess: async (result) => {
+    onSuccess: async (result, preparedProjectIds) => {
       const next = current.current;
       const included = result.items.filter((item) => next.projectIds.includes(item.scopeProjectId));
       onChange({
         ...next,
-        codexDigestIds: [...new Set([...next.codexDigestIds, ...included.map((item) => item.id)])],
+        codexDigestIds: [
+          ...new Set([
+            ...next.codexDigestIds.filter(
+              (id) =>
+                !query.data?.items.some(
+                  (item) => item.id === id && preparedProjectIds.includes(item.scopeProjectId),
+                ),
+            ),
+            ...included.filter((item) => item.eligible).map((item) => item.id),
+          ]),
+        ],
       });
       setConsentFor('');
       await client.invalidateQueries({ queryKey: ['codex-digests'] });
@@ -110,7 +122,7 @@ export function CodexChoices({
         disabled={
           !scope || consentFor !== scope || !grants.data || !!grants.error || prepare.isPending
         }
-        onClick={() => prepare.mutate()}
+        onClick={() => prepare.mutate(value.projectIds)}
       >
         {prepare.isPending ? 'Подготавливаем контекст…' : 'Подготовить контекст выбранных проектов'}
       </button>
@@ -167,7 +179,11 @@ export function CodexChoices({
               }
             />
             {item.projectName} · {item.thread.name}
-            {!available ? ' · проверьте разрешение, свежесть и выбор проекта' : ''}
+            {item.stale
+              ? ' · диалог изменился — пересмотрите сохранённый итог'
+              : !available
+                ? ' · проверьте разрешение и выбор проекта'
+                : ''}
           </label>
         );
       })}

@@ -3,13 +3,15 @@ import { Link } from 'react-router';
 import type { Project } from '../../../shared/contracts';
 import { statusLabels, typeLabels, date, priorityLabels } from '../../shared/labels';
 import { useWorkspace } from '../../shared/workspace';
-import { RecentHistory } from '../history/RecentHistory';
+import { RecentHistoryResult, type RecentHistoryState } from '../history/RecentHistory';
 export function ProjectCard({
   project,
   overview = false,
+  recentHistory,
 }: {
   project: Project;
   overview?: boolean;
+  recentHistory?: RecentHistoryState;
 }) {
   const { data: w } = useWorkspace();
   const tasks = w!.tasks
@@ -76,7 +78,23 @@ export function ProjectCard({
         {overview && (
           <div className="project-latest">
             <p className="section-label">Последняя запись работы</p>
-            <RecentHistory projectId={project.id} compact />
+            {recentHistory && (
+              <RecentHistoryResult
+                query={{
+                  ...recentHistory,
+                  data: recentHistory.data
+                    ? {
+                        ...recentHistory.data,
+                        items: recentHistory.data.items.filter(
+                          (item) => item.scopeProjectId === project.id,
+                        ),
+                      }
+                    : undefined,
+                }}
+                timezone={w!.settings.timezone}
+                compact
+              />
+            )}
           </div>
         )}
         <details open={overview ? undefined : true} className="project-snapshot">

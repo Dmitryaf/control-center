@@ -79,6 +79,7 @@ test('schedule consent is separate from manual preview; saved policy can be insp
     const enable = form.getByRole('button', { name: 'Включить с текущего периода' });
     await expect(enable).toBeDisabled();
     await form.getByLabel('Общие и отвязанные записи без проекта', { exact: true }).check();
+    await form.getByText('Настроить источники', { exact: true }).click();
     await form.getByLabel('Наблюдения', { exact: true }).check();
     await form
       .getByLabel('Разрешаю читать и сохранять выбранные источники для каждого нового периода')

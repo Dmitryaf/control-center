@@ -51,6 +51,12 @@ function Capture({
     <section className="panel section-space period-source-form">
       <UnsavedChanges dirty={isDirty} />
       <h2>{preview.thread.name}</h2>
+      {old && (old.stale || old.sourceHash !== preview.sourceHash) && (
+        <p className="message warning">
+          Диалог изменился. Ниже сохранён ваш прежний итог: сверьте его с новыми выдержками и
+          подтвердите сохранение. До этого он не используется в новых анализах.
+        </p>
+      )}
       {preview.limitations.map((text) => (
         <p className="help" key={text}>
           {text}

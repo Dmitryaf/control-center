@@ -173,6 +173,9 @@ export function createApp(
     observations.delete(req.params.id, req.body);
     res.json({ ok: true });
   });
+  app.get('/api/history/latest-projects', (req, res) =>
+    res.json(history.latestProjects(req.query)),
+  );
   app.get('/api/history', (req, res) => {
     const { projectId, ...query } = req.query;
     res.json(

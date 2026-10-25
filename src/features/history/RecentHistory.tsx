@@ -32,6 +32,24 @@ export function RecentHistory({
     refetchInterval: 5000,
     queryFn: ({ signal }) => api<HistoryPage>(`/history?${params}`, 'GET', undefined, signal),
   });
+  return <RecentHistoryResult query={query} timezone={timezone} compact={compact} />;
+}
+export interface RecentHistoryState {
+  data?: HistoryPage;
+  isPending: boolean;
+  isFetching: boolean;
+  error: Error | null;
+  refetch: () => unknown;
+}
+export function RecentHistoryResult({
+  query,
+  timezone,
+  compact = false,
+}: {
+  query: RecentHistoryState;
+  timezone: string;
+  compact?: boolean;
+}) {
   return (
     <>
       {query.isPending && (

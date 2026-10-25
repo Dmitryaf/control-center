@@ -18,6 +18,18 @@ export const emptySelection = (projectId: string | null): PeriodSelection => ({
   includeRelatedAnalyses: false,
   codexDigestIds: [],
 });
+export const coreSelection = (
+  value: PeriodSelection,
+  projectId: string | null,
+): PeriodSelection => ({
+  ...value,
+  sourceKinds: ['task', 'check', 'decision', 'observation'],
+  includeMetadata: true,
+  includeOpenTasks: true,
+  includeUserText: !!projectId,
+  includeProjectHistory: true,
+  includeRelatedReviews: true,
+});
 export function SourceSelection({
   value,
   onChange,
@@ -85,36 +97,54 @@ export function SourceSelection({
           </label>
         </div>
       )}
-      {flag('includeMetadata', 'Текущая цель и состояние выбранных проектов')}
-      <p className="help">
-        Сводка включает название, тип, цель, этап, текущий фокус и блокировки. Опишите идею и пользу
-        проекта в поле «Зачем существует», если этих сведений пока нет.
+      <p>
+        Основной набор: цели и состояние, задачи и результаты, наблюдения, локальные решения,
+        проверки и прежние обзоры выбранных проектов. Файлы, диалоги и прежние AI-ответы
+        подключаются отдельно.
       </p>
-      {flag(
-        'includeProjectHistory',
-        'Предыстория выбранных проектов: до 3 прежних обзоров и 5 наблюдений каждого',
-      )}
-      {flag('includeOpenTasks', 'Текущие открытые задачи')}
-      {Object.entries(kinds).map(([key, label]) => (
-        <label className="check" key={key}>
-          <input
-            type="checkbox"
-            checked={value.sourceKinds.includes(key as PeriodSelection['sourceKinds'][number])}
-            onChange={(e) =>
-              onChange({
-                ...value,
-                sourceKinds: e.target.checked
-                  ? [...value.sourceKinds, key as PeriodSelection['sourceKinds'][number]]
-                  : value.sourceKinds.filter((kind) => kind !== key),
-              })
-            }
-          />
-          {label}
-        </label>
-      ))}
-      {flag('includeRelatedAnalyses', 'Последние успешные AI-итоги связанных обзоров')}
-      {flag('includeUserText', 'Мой сохранённый текст этого обзора')}
-      {flag('includeRelatedReviews', 'Тексты связанных обзоров выбранных проектов и общих записей')}
+      <button type="button" onClick={() => onChange(coreSelection(value, projectId))}>
+        Выбрать основной набор
+      </button>
+      <p className="help">
+        Выбор не отправляет данные. Ниже можно изменить состав; перед отправкой вы увидите весь
+        пакет.
+      </p>
+      <details>
+        <summary>Настроить источники</summary>
+        {flag('includeMetadata', 'Текущая цель и состояние выбранных проектов')}
+        <p className="help">
+          Сводка включает название, тип, цель, этап, текущий фокус и блокировки. Опишите идею и
+          пользу проекта в поле «Зачем существует», если этих сведений пока нет.
+        </p>
+        {flag(
+          'includeProjectHistory',
+          'Предыстория выбранных проектов: до 3 прежних обзоров и 5 наблюдений каждого',
+        )}
+        {flag('includeOpenTasks', 'Текущие открытые задачи')}
+        {Object.entries(kinds).map(([key, label]) => (
+          <label className="check" key={key}>
+            <input
+              type="checkbox"
+              checked={value.sourceKinds.includes(key as PeriodSelection['sourceKinds'][number])}
+              onChange={(e) =>
+                onChange({
+                  ...value,
+                  sourceKinds: e.target.checked
+                    ? [...value.sourceKinds, key as PeriodSelection['sourceKinds'][number]]
+                    : value.sourceKinds.filter((kind) => kind !== key),
+                })
+              }
+            />
+            {label}
+          </label>
+        ))}
+        {flag('includeRelatedAnalyses', 'Последние успешные AI-итоги связанных обзоров')}
+        {flag('includeUserText', 'Мой сохранённый текст этого обзора')}
+        {flag(
+          'includeRelatedReviews',
+          'Тексты связанных обзоров выбранных проектов и общих записей',
+        )}
+      </details>
       <p className="help">
         Пути, Git, заметки проектов, тела файлов и переписки целиком не включаются. Итоги выбранных
         диалогов подключаются отдельно. События передаются выдержками с отметкой сокращения. Выбор

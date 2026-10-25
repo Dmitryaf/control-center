@@ -154,7 +154,9 @@ test('overview shows project context and exact current tasks once, keeps attenti
     ],
   };
   await page.route('**/api/workspace', (route) => route.fulfill({ json: data }));
-  await page.route('**/api/history?**', (route) => {
+  await page.route('**/api/history**', (route) => {
+    if (new URL(route.request().url()).pathname.endsWith('/latest-projects'))
+      return route.fulfill({ json: projected(recent.items) });
     const project = new URL(route.request().url()).searchParams.get('projectId');
     const items = project
       ? recent.items.filter((entry) => entry.projectId === project)
@@ -279,7 +281,13 @@ test('project card reads persisted history and keeps it visible after a failed r
     taskExists: false,
   };
   await page.route('**/api/workspace', (route) => route.fulfill({ json: data }));
-  await page.route('**/api/history?**', (route) => {
+  await page.route('**/api/history**', (route) => {
+    if (new URL(route.request().url()).pathname.endsWith('/latest-projects'))
+      return route.fulfill(
+        fail
+          ? { status: 503, json: { error: 'History unavailable' } }
+          : { json: projected([entry]) },
+      );
     const project = new URL(route.request().url()).searchParams.get('projectId');
     if (project === data.projects[0].id && fail)
       return route.fulfill({ status: 503, json: { error: 'History unavailable' } });
@@ -331,7 +339,9 @@ test('overview period uses inclusive configured-zone dates and carries them into
     taskExists: true,
   }));
   await page.route('**/api/workspace', (route) => route.fulfill({ json: data }));
-  await page.route('**/api/history?**', (route) => {
+  await page.route('**/api/history**', (route) => {
+    if (new URL(route.request().url()).pathname.endsWith('/latest-projects'))
+      return route.fulfill({ json: projected([]) });
     const params = new URL(route.request().url()).searchParams;
     const items = params.has('projectId')
       ? []
@@ -386,8 +396,11 @@ test('recent work preserves newer reads, exposes a current failure and retries w
   });
   let calls = 0;
   let fail = false;
-  await page.route('**/api/history?**', async (route) => {
-    if (new URL(route.request().url()).searchParams.has('projectId')) {
+  await page.route('**/api/history**', async (route) => {
+    if (
+      new URL(route.request().url()).pathname.endsWith('/latest-projects') ||
+      new URL(route.request().url()).searchParams.has('projectId')
+    ) {
       await route.fulfill({ json: projected([]) });
       return;
     }

@@ -222,6 +222,23 @@ test('project opt-in → selected dialog → protected summary/excerpts → real
     await expect(digest.locator('p.preserve').first()).toHaveText(
       'Поправка владельца: итог обсуждения ещё не проверен.',
     );
+    await page.goto(`/period-analysis?review=${review.id}`);
+    await choice.check();
+    fake.state.text = 'Поздняя поправка: от прежнего решения отказались после проверки.';
+    // Same updatedAt: the content hash, not metadata alone, must invalidate the choice.
+    await page.getByLabel('Разрешаю читать диалоги выбранных проектов', { exact: false }).check();
+    await page
+      .getByRole('button', { name: 'Подготовить контекст выбранных проектов', exact: true })
+      .click();
+    await expect(choice).not.toBeChecked();
+    await expect(choice).toBeDisabled();
+    await expect(
+      page.getByText('диалог изменился — пересмотрите сохранённый итог', { exact: false }),
+    ).toBeVisible();
+    expect(reader.read(automatic.id).summary).toBe(
+      'Поправка владельца: итог обсуждения ещё не проверен.',
+    );
+    expect(reader.read(automatic.id).eligible).toBe(false);
   } finally {
     await context?.stop();
     store?.close();
