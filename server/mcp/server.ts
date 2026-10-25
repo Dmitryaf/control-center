@@ -143,7 +143,6 @@ export function createMcpServer(store: Store) {
             .map((task) => ({
               code: task.code,
               title: task.title,
-              state: task.state,
               priority: task.priority,
               revision: task.revision,
             })),
@@ -166,7 +165,6 @@ export function createMcpServer(store: Store) {
         .object({
           projectId: z.string().uuid().nullable().optional(),
           query: z.string().max(240).default(''),
-          state: taskSchema.shape.state.unwrap().optional(),
           completed: z.enum(['open', 'done', 'all']).default('open'),
           offset: z.number().int().min(0).default(0),
           limit: z.number().int().min(1).max(100).default(50),
@@ -184,7 +182,6 @@ export function createMcpServer(store: Store) {
           .filter(
             (task) =>
               (input.projectId === undefined || task.projectId === input.projectId) &&
-              (!input.state || task.state === input.state) &&
               (input.completed === 'all' ||
                 Boolean(task.completedAt) === (input.completed === 'done')) &&
               `${task.code} ${task.id} ${task.title} ${task.description}`
@@ -198,7 +195,6 @@ export function createMcpServer(store: Store) {
             code: task.code,
             title: task.title,
             projectId: task.projectId,
-            state: task.state,
             priority: task.priority,
             completedAt: task.completedAt,
             revision: task.revision,

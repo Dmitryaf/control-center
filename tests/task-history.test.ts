@@ -52,7 +52,7 @@ test('v4 upgrade backs up committed WAL, preserves records/identity, seeds only 
     upgraded.db.prepare('SELECT * FROM task_identity ORDER BY number').all(),
     identity,
   );
-  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 11);
+  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 12);
   const history = new TaskHistory(upgraded).list();
   assert.equal(history.total, 3);
   assert.ok(history.items.every((item) => item.kind === 'baseline'));
@@ -149,7 +149,7 @@ test('upgrade rechecks a stale schema version after another SQLite connection co
     const late = new Store(file);
     try {
       assert.ok(interleaved);
-      assert.equal(late.db.prepare('PRAGMA user_version').get()?.user_version, 11);
+      assert.equal(late.db.prepare('PRAGMA user_version').get()?.user_version, 12);
       assert.equal(new TaskHistory(late).list().total, 1);
     } finally {
       late.close();
@@ -191,7 +191,7 @@ test('history survives result edits, clearing, reopening, deletion and project r
     initial.id,
   );
   assert.equal(history.list().total, 1);
-  const renamed = a.patch(initial.code, partial.revision, { title: 'New title', state: 'now' });
+  const renamed = a.patch(initial.code, partial.revision, { title: 'New title' });
   assert.equal(history.list().total, 1);
   const done = b.complete(initial.code, renamed.revision, {
     summary: 'First completion',

@@ -74,7 +74,7 @@ test('public audit → allowlist → private context → combined decisions → 
     const privateCard = page
       .locator('article')
       .filter({ has: page.getByRole('heading', { name: 'D-0002 Private choice' }) });
-    await expect(privateCard).toContainText('Проектное решение · private context');
+    await expect(privateCard).toContainText('Проектное решение · Приватный контекст');
     await privateCard.getByText('Читать решение', { exact: true }).click();
     await expect(privateCard.locator('pre')).toContainText('Canonical body of Private choice');
     await page.getByRole('button', { name: 'Создать PROJECT.yaml' }).click();

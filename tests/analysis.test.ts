@@ -280,7 +280,7 @@ test('real HTTP boundary requires same origin/header, valid consent and server p
   assert.equal(calls, 1);
   const before = tasks.list().length;
   const proposal = report.report.proposals[0];
-  const input = { ...proposal, state: 'next', requestKey: `analysis:${preview.id}:0` };
+  const input = { ...proposal, requestKey: `analysis:${preview.id}:0` };
   const created = await (await post('/tasks', input)).json();
   const repeated = await (await post('/tasks', input)).json();
   assert.equal(created.id, repeated.id);

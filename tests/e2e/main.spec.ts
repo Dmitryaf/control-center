@@ -41,6 +41,7 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await expect(page.getByRole('heading', { name: 'local-product', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Изменить сводку' }).click();
     await page.getByRole('combobox', { name: 'Статус', exact: true }).selectOption('active');
+    await page.getByText('Дополнительные поля', { exact: true }).click();
     await page.getByRole('combobox', { name: 'Тип', exact: true }).selectOption('product');
     await page.getByRole('combobox', { name: 'Приоритет', exact: true }).selectOption('high');
     await page

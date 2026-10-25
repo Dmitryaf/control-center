@@ -385,7 +385,6 @@ export default function Analysis() {
                           expectedResult: d.expectedResult,
                           acceptance: d.acceptance,
                           priority: d.priority,
-                          state: 'next',
                           requestKey: `analysis:${result.previewId}:${index}`,
                         });
                         if (current()) {

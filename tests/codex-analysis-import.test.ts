@@ -84,6 +84,22 @@ async function setup(t: { after: (fn: () => Promise<void>) => void }) {
   };
 }
 
+test('project review preview skips empty drafts and other scopes, prefers user text and falls back to a saved analysis', async (t) => {
+  const f = await setup(t);
+  const reviews = new Reviews(f.store());
+  const saved = f.service().importCodex(f.body);
+  reviews.create({ projectId: f.project.id, kind: 'week', anchorDate: '2024-04-01' });
+  const general = reviews.create({ kind: 'week', anchorDate: '2024-04-08' });
+  reviews.patch(general.id, { revision: general.revision, userText: 'Other scope' });
+  assert.equal(reviews.latestProject(f.project.id)?.excerpt, f.review.userText);
+  assert.equal(reviews.latestProject(f.project.id)?.analysisId, null);
+  reviews.patch(f.review.id, { revision: f.review.revision, userText: '' });
+  assert.equal(reviews.latestProject(f.project.id)?.analysisId, saved.id);
+  assert.equal(reviews.latestProject(f.project.id)?.excerpt, f.body.report.narrative);
+  f.reopen();
+  assert.equal(new Reviews(f.store()).latestProject(f.project.id)?.id, f.review.id);
+});
+
 test('manual Codex report persists in the existing analysis owner with honest provenance, no dispatch, safe retry and retained acceptance', async (t) => {
   const f = await setup(t);
   let service = f.service();

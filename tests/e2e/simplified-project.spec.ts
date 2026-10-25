@@ -24,12 +24,11 @@ test('simple project and task list expose useful work without legacy scheduling 
     const workspace = (await (await request.get('/api/workspace')).json()) as Workspace;
     const project = workspace.projects.find((p) => p.path === repo)!;
     const tasks: Task[] = [];
-    for (const [index, state] of ['now', 'next', 'later'].entries()) {
+    for (const index of [0, 1, 2]) {
       const response = await request.post('/api/tasks', {
         headers,
         data: {
           projectId: project.id,
-          state,
           title: [
             'Записать первый полив',
             'Проверить запись без интернета',
@@ -54,7 +53,7 @@ test('simple project and task list expose useful work without legacy scheduling 
       await page.goto(`/projects/${project.id}`);
       await expect(page.getByRole('heading', { level: 1, name: 'Садовый дневник' })).toBeVisible();
       await expect(page.locator('.overview-shortcuts')).toHaveCount(0);
-      await expect(page.locator('.project-settings')).not.toHaveAttribute('open', '');
+      await expect(page.locator('.project-settings')).toBeHidden();
       await expect(page.getByRole('heading', { name: 'Источники контекста' })).toBeHidden();
       await expect(page.getByRole('button', { name: 'Удалить из Control Center' })).toBeHidden();
       await expect(
@@ -98,7 +97,12 @@ test('simple project and task list expose useful work without legacy scheduling 
     await page.getByRole('button', { name: 'Сохранить задачу', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Задача сохранена');
     const after = (await (await request.get('/api/workspace')).json()) as Workspace;
-    expect(after.tasks.find((t) => t.id === later.id)?.state).toBe('later');
+    expect(
+      Object.hasOwn(
+        after.tasks.find((t) => t.id === later.id)!,
+        'state',
+      ),
+    ).toBe(false);
     expect(after.tasks.find((t) => t.id === later.id)?.title).toBe(
       'Обсудить первый опыт использования',
     );

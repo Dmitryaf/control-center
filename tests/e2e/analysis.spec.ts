@@ -145,7 +145,7 @@ test('selected saved payload → explicit approval → proposals → one edited 
     )!;
     expect(after.tasks.length).toBe(before + 1);
     expect(created.projectId).toBe(project.id);
-    expect(created.state).toBe('next');
+    expect(Object.hasOwn(created, 'state')).toBe(false);
     expect(created.priority).toBe('high');
     await expect(draft.getByRole('button')).toHaveCount(0);
     expect(calls).toBe(1);

@@ -9,6 +9,7 @@ import {
   type Review,
   type RelatedReviews,
   type RelatedReview,
+  type LatestProjectReview,
 } from '../shared/reviews.js';
 import { periodBounds } from '../shared/periods.js';
 import type { Store } from './db.js';
@@ -20,6 +21,26 @@ const columns = `id,project_id AS projectId,scope_key AS scopeKey,project_name A
   created_at AS createdAt,updated_at AS updatedAt`;
 export class Reviews {
   constructor(private store: Store) {}
+  latestProject(projectId: string): LatestProjectReview | null {
+    z.string().uuid().parse(projectId);
+    return (
+      (this.store.db
+        .prepare(
+          `
+      SELECT r.id,r.period_kind AS kind,r.period_start AS periodStart,r.period_end AS periodEnd,
+        substr(CASE WHEN trim(r.user_text)<>'' THEN r.user_text ELSE json_extract(a.report_json,'$.narrative') END,1,600) AS excerpt,
+        CASE WHEN trim(r.user_text)<>'' THEN NULL ELSE a.id END AS analysisId
+      FROM reviews r LEFT JOIN analysis_runs a ON a.id=(
+        SELECT id FROM analysis_runs WHERE review_id=r.id AND status='succeeded'
+          AND trim(COALESCE(json_extract(report_json,'$.narrative'),''))<>''
+        ORDER BY created_at DESC,id DESC LIMIT 1)
+      WHERE r.scope_key=? AND (trim(r.user_text)<>'' OR a.id IS NOT NULL)
+      ORDER BY r.period_end DESC,r.period_start DESC,r.updated_at DESC,r.id DESC LIMIT 1
+    `,
+        )
+        .get('project:' + projectId) as unknown as LatestProjectReview | undefined) ?? null
+    );
+  }
   read(id: string): Review {
     z.string().uuid().parse(id);
     const row = this.store.db

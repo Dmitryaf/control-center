@@ -62,7 +62,7 @@ test('real project signals keep current tasks free of legacy warnings and priori
         (
           await request.post('/api/tasks', {
             headers,
-            data: { title: `Signal task ${state}`, projectId: project.id, state },
+            data: { title: `Signal task ${state}`, projectId: project.id },
           })
         ).ok(),
       ).toBe(true);
@@ -116,7 +116,6 @@ test('overview shows project context and exact current tasks once, keeps attenti
     code: 'CC-23',
     number: 23,
     title: 'Потом, не сейчас',
-    state: 'next',
   });
   data.tasks.push({
     ...base,
@@ -478,6 +477,7 @@ test('legacy plans remain readable and importable, editing/export preserve origi
     await page.getByLabel('Зачем существует', { exact: true }).fill('Обновлённая цель');
     await page.getByRole('button', { name: 'Сохранить сводку', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Сводка сохранена');
+    await page.getByText('Настройки проекта', { exact: true }).click();
     await page.locator('.legacy-plan > summary').click();
     await expect(page.locator('.legacy-plan')).toContainText('Прежний фокус');
     await expect(page.locator('.legacy-plan')).toContainText('Прежний фокус из другого клиента');
@@ -491,11 +491,10 @@ test('legacy plans remain readable and importable, editing/export preserve origi
     expect(tasks).toHaveLength(1);
     const changed = await request.put(`/api/tasks/${tasks[0].id}`, {
       headers,
-      data: { ...tasks[0], title: 'Новая текущая задача', state: 'now' },
+      data: { ...tasks[0], title: 'Новая текущая задача' },
     });
     expect(changed.status()).toBe(200);
     const task = (await changed.json()) as Task;
-    await page.getByText('Настройки проекта', { exact: true }).click();
     await page.getByRole('button', { name: 'Обновить PROJECT.yaml', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('PROJECT.yaml записан');
     const content = await readFile(yaml, 'utf8');

@@ -40,6 +40,14 @@ export interface Review {
   createdAt: string;
   updatedAt: string;
 }
+export interface LatestProjectReview {
+  id: string;
+  kind: PeriodKind;
+  periodStart: string;
+  periodEnd: string;
+  excerpt: string;
+  analysisId: string | null;
+}
 export interface RelatedReview {
   id: string;
   projectId: string | null;

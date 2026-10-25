@@ -199,8 +199,6 @@ export class DecisionIndex {
         // Status is shown on the project; attention depends on prior canonical records.
       }
     }
-    for (const source of JSON.parse(project.decision_sources) as string[])
-      await directory(source, 'private');
     const ids = found.map((r) => r.metadata?.id).filter(Boolean);
     for (const record of found)
       if (record.metadata && ids.filter((id) => id === record.metadata!.id).length > 1)

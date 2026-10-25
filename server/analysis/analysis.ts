@@ -90,7 +90,6 @@ export class ProjectAnalysis {
             source: `task:${task.code}`,
             code: task.code,
             title: task.title,
-            state: task.state,
             priority: task.priority,
             description: task.description,
             expectedResult: task.expectedResult,

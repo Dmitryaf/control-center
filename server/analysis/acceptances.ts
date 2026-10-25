@@ -180,7 +180,6 @@ export class ProposalAcceptances {
           expectedResult: approved.expectedResult,
           acceptance: approved.acceptance,
           priority: approved.priority,
-          state: 'next',
           requestKey: `period-proposal:${runId}:${index}`,
           allowDuplicate: approved.allowDuplicate,
         },

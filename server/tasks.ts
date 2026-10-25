@@ -68,6 +68,7 @@ export class Tasks {
   }
 
   private saveInTransaction(input: unknown, id: string, update: boolean): Task {
+    rejectRemovedState(input);
     const options = taskWriteOptions.parse(input);
     const data = taskSchema.parse(input);
     if (data.completedAt && data.result?.remaining)
@@ -149,6 +150,7 @@ export class Tasks {
   }
 
   patch(identifier: string, revision: number, change: unknown): Task {
+    rejectRemovedState(change);
     const patch = taskPatchSchema.parse(change);
     const current = this.read(identifier);
     return this.save({ ...current, ...patch, revision }, current.id, true);
@@ -176,7 +178,15 @@ export class Tasks {
         createHash('sha256')
           .update(`${projectId}\n${normalizeTitle(title)}`)
           .digest('hex');
-      return this.save({ title, projectId, state: 'next', requestKey });
+      return this.save({ title, projectId, requestKey });
     });
   }
+}
+
+function rejectRemovedState(input: unknown) {
+  if (input && typeof input === 'object' && Object.hasOwn(input, 'state'))
+    throw new HttpError(
+      400,
+      'Поле state больше не поддерживается. Удалите его из запроса: задача бывает открытой или завершённой (completedAt).',
+    );
 }

@@ -19,7 +19,6 @@ export interface ProjectRow {
   notes: string;
   available: number;
   yaml_base_hash: string | null;
-  decision_sources: string;
   visibility: 'unknown' | 'private' | 'public';
   private_context_path: string | null;
   private_context_had_records: number;
@@ -35,12 +34,12 @@ export class Store {
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(version.user_version)) {
+    if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(version.user_version)) {
       this.db.close();
       throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
     }
     try {
-      if (existing && version.user_version < 11) {
+      if (existing && version.user_version < 12) {
         const directory = join(dirname(path), 'backups');
         mkdirSync(directory, { recursive: true });
         const prefix =
@@ -58,7 +57,9 @@ export class Store {
                       ? 'before-schedules-v9'
                       : version.user_version < 10
                         ? 'before-proposals-v10'
-                        : 'before-codex-v11';
+                        : version.user_version < 11
+                          ? 'before-codex-v11'
+                          : 'before-simple-tasks-v12';
         snapshotDatabase(this.db, join(directory, `${prefix}-${randomUUID()}.sqlite`));
       }
       this.transaction(() => {
@@ -67,14 +68,14 @@ export class Store {
         const lockedVersion = this.db.prepare('PRAGMA user_version').get() as {
           user_version: number;
         };
-        if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(lockedVersion.user_version))
+        if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(lockedVersion.user_version))
           throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS projects (
         id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, snapshot TEXT NOT NULL,
         metadata TEXT, notes TEXT NOT NULL DEFAULT '', available INTEGER NOT NULL DEFAULT 1,
-        yaml_base_hash TEXT, decision_sources TEXT NOT NULL DEFAULT '[]'
+        yaml_base_hash TEXT
       );
       CREATE TABLE IF NOT EXISTS records (
         id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('tasks','ideas','decisions')),
@@ -213,7 +214,16 @@ export class Store {
             summary TEXT NOT NULL,excerpts_json TEXT NOT NULL,source_hash TEXT NOT NULL,access_stamp TEXT NOT NULL,grant_revision INTEGER NOT NULL,
             captured_at TEXT NOT NULL,checked_at TEXT NOT NULL,stale INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL,
             preview_id TEXT NOT NULL UNIQUE,request_hash TEXT NOT NULL,policy_version TEXT NOT NULL,UNIQUE(review_key,thread_id));
-          PRAGMA user_version = 11;`);
+          `);
+        if (lockedVersion.user_version < 12) {
+          // Historical snapshots and acceptance evidence remain byte-for-byte unchanged.
+          this.db.exec(
+            "UPDATE records SET data=json_remove(data,'$.state') WHERE kind='tasks' AND json_type(data,'$.state') IS NOT NULL;",
+          );
+          if (columns.some((column) => column.name === 'decision_sources'))
+            this.db.exec('ALTER TABLE projects DROP COLUMN decision_sources');
+        }
+        this.db.exec('PRAGMA user_version = 12;');
       });
     } catch (error) {
       this.db.close();

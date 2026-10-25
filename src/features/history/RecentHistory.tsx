@@ -32,7 +32,14 @@ export function RecentHistory({
     refetchInterval: 5000,
     queryFn: ({ signal }) => api<HistoryPage>(`/history?${params}`, 'GET', undefined, signal),
   });
-  return <RecentHistoryResult query={query} timezone={timezone} compact={compact} />;
+  return (
+    <RecentHistoryResult
+      query={query}
+      timezone={timezone}
+      compact={compact}
+      projectView={Boolean(projectId)}
+    />
+  );
 }
 export interface RecentHistoryState {
   data?: HistoryPage;
@@ -45,10 +52,12 @@ export function RecentHistoryResult({
   query,
   timezone,
   compact = false,
+  projectView = false,
 }: {
   query: RecentHistoryState;
   timezone: string;
   compact?: boolean;
+  projectView?: boolean;
 }) {
   return (
     <>
@@ -77,10 +86,20 @@ export function RecentHistoryResult({
             </time>
             <div>
               <Link to={entry.href}>
-                {historyEventLabels[entry.event]} · {entry.title}
+                {projectView && entry.kind === 'observation'
+                  ? 'Наблюдение'
+                  : projectView && entry.kind === 'review'
+                    ? entry.title
+                    : `${historyEventLabels[entry.event]} · ${entry.title}`}
               </Link>
-              {!compact && <p className="help">{entry.projectName ?? 'Без связи с проектом'}</p>}
-              <p className="preserve">{entry.excerpt}</p>
+              {!compact && !projectView && (
+                <p className="help">{entry.projectName ?? 'Без связи с проектом'}</p>
+              )}
+              <p className="preserve">
+                {projectView && entry.excerpt.length > 280
+                  ? entry.excerpt.slice(0, 280) + '…'
+                  : entry.excerpt}
+              </p>
               {entry.truncated && (
                 <p className="help">Показан фрагмент; полный текст — в источнике.</p>
               )}
@@ -89,7 +108,7 @@ export function RecentHistoryResult({
                   Известная запись при переходе; более ранняя история недоступна.
                 </p>
               )}
-              {entry.dateQuality === 'declared' && (
+              {entry.dateQuality === 'declared' && !projectView && (
                 <p className="help">Указана дата, время неизвестно.</p>
               )}
             </div>
@@ -98,9 +117,11 @@ export function RecentHistoryResult({
       </ol>
       {query.data && !query.data.items.length && (
         <p className="empty">
-          {compact
-            ? 'Записей работы пока нет.'
-            : 'В доступных источниках за выбранный период записей нет.'}
+          {projectView
+            ? 'Здесь появятся наблюдения, решения и результаты работы.'
+            : compact
+              ? 'Записей работы пока нет.'
+              : 'В доступных источниках за выбранный период записей нет.'}
         </p>
       )}
     </>

@@ -32,7 +32,6 @@ export default function Tasks() {
     links: [],
     result: null,
     projectId: filter === '__general__' ? null : filter || null,
-    state: 'next',
     priority: 'normal',
     completedAt: null,
     linksText: '',

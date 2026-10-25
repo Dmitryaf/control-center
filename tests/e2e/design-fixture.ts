@@ -53,7 +53,6 @@ export function designFixture(): Workspace {
           ]
         : [],
     yamlConflict: false,
-    decisionSources: [],
     snapshot: {
       path: `/example/projects/project-${index}`,
       directoryName: `project-${index}`,
@@ -174,7 +173,6 @@ export function designFixture(): Workspace {
         links: [],
         result: null,
         projectId: 'project-0',
-        state: 'now',
         priority: 'high',
         completedAt: null,
       },

@@ -5,21 +5,16 @@ import { Store } from '../server/db.js';
 import { Records } from '../server/records.js';
 import type { Task, Idea, Decision } from '../shared/contracts.js';
 
-test('task creation, movement, completion, restore, edit and deletion', (t) => {
+test('task creation, completion, restore, edit and deletion', (t) => {
   const store = new Store(':memory:');
   t.after(() => store.close());
   const records = new Records(store);
   const task = records.save('tasks', { title: 'First' }) as Task;
-  assert.equal(task.state, 'next');
+  assert.equal(Object.hasOwn(task, 'state'), false);
   assert.equal(task.projectId, null);
-  const moved = records.save(
-    'tasks',
-    { ...task, state: 'now', description: 'Details' },
-    task.id,
-    true,
-  ) as Task;
+  const moved = records.save('tasks', { ...task, description: 'Details' }, task.id, true) as Task;
   assert.equal(moved.createdAt, task.createdAt);
-  assert.equal(moved.state, 'now');
+  assert.equal(Object.hasOwn(moved, 'state'), false);
   const done = records.save(
     'tasks',
     { ...moved, completedAt: new Date().toISOString() },

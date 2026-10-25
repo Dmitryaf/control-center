@@ -68,7 +68,6 @@ export const taskSchema = z.object({
   acceptance: text.default(''),
   links: z.array(z.string().trim().min(1).max(2000)).max(50).default([]),
   result: taskResultSchema.nullable().default(null),
-  state: z.enum(['now', 'next', 'later']).default('next'),
   priority: prioritySchema.default('normal'),
   completedAt: z.string().datetime().nullable().default(null),
 });
@@ -82,7 +81,6 @@ export const taskPatchSchema = z
     acceptance: taskSchema.shape.acceptance.unwrap().optional(),
     links: taskSchema.shape.links.unwrap().optional(),
     result: taskSchema.shape.result.unwrap().optional(),
-    state: taskSchema.shape.state.unwrap().optional(),
     priority: taskSchema.shape.priority.unwrap().optional(),
     completedAt: taskSchema.shape.completedAt.unwrap().optional(),
   })
@@ -187,7 +185,6 @@ export interface Project {
   available: boolean;
   signals: Signal[];
   yamlConflict: boolean;
-  decisionSources: string[];
   context: ProjectContext;
 }
 export interface ScanInfo {

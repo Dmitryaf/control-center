@@ -12,11 +12,10 @@ import {
   typeLabels,
   priorityLabels,
   relationLabels,
-  decisionLabels,
 } from '../../shared/labels';
 import { useWorkspace, useActions, workspaceKey } from '../../shared/workspace';
 import { UnsavedChanges } from '../../shared/UnsavedChanges';
-import { CheckCard } from '../checks/Checks';
+import { ProjectReview } from './ProjectReview';
 import { RecentHistory } from '../history/RecentHistory';
 
 function MetadataEditor({ project, onClose }: { project: Project; onClose: () => void }) {
@@ -66,31 +65,19 @@ function MetadataEditor({ project, onClose }: { project: Project; onClose: () =>
           Название
           <input required maxLength={240} {...register('name')} />
         </label>
-        {(
-          [
-            ['type', 'Тип', typeLabels],
-            ['status', 'Статус', statusLabels],
-            ['priority', 'Приоритет', priorityLabels],
-          ] as const
-        ).map(([key, label, options]) => (
-          <label key={key}>
-            {label}
-            <select {...register(key)}>
-              {Object.entries(options).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
+        <label>
+          Статус
+          <select {...register('status')}>
+            {Object.entries(statusLabels).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
         <label>
           Этап
           <input maxLength={120} {...register('stage')} />
-        </label>
-        <label>
-          Дата пересмотра
-          <input type="date" {...register('last_reviewed')} />
         </label>
       </div>
       <label>
@@ -101,27 +88,53 @@ function MetadataEditor({ project, onClose }: { project: Project; onClose: () =>
           {...register('goal')}
         />
       </label>
-      <label>
-        Блокировки, по одной на строку
-        <textarea rows={2} {...register('blocked')} />
-      </label>
-      <label>
-        Связанные имена для PROJECT.yaml
-        <textarea rows={2} {...register('relatedText')} />
-      </label>
-      <label>
-        Заметки
-        <textarea rows={3} {...register('notes')} />
-      </label>
+      <details className="editor-advanced">
+        <summary>Дополнительные поля</summary>
+        <div className="form section-space">
+          {(
+            [
+              ['type', 'Тип', typeLabels],
+              ['priority', 'Приоритет', priorityLabels],
+            ] as const
+          ).map(([key, label, options]) => (
+            <label key={key}>
+              {label}
+              <select {...register(key)}>
+                {Object.entries(options).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+          <label>
+            Дата пересмотра
+            <input type="date" {...register('last_reviewed')} />
+          </label>
+          <label>
+            Блокировки, по одной на строку
+            <textarea rows={2} {...register('blocked')} />
+          </label>
+          <label>
+            Связанные имена для PROJECT.yaml
+            <textarea rows={2} {...register('relatedText')} />
+          </label>
+          <label>
+            Заметки
+            <textarea rows={3} {...register('notes')} />
+          </label>
+          <button
+            type="button"
+            onClick={() => setValue('last_reviewed', today(), { shouldDirty: true })}
+          >
+            Пересмотрено сегодня
+          </button>
+        </div>
+      </details>
       <div className="row">
         <button className="primary" disabled={busy}>
           Сохранить сводку
-        </button>
-        <button
-          type="button"
-          onClick={() => setValue('last_reviewed', today(), { shouldDirty: true })}
-        >
-          Пересмотрено сегодня
         </button>
         <button
           type="button"
@@ -164,11 +177,7 @@ export function DecisionFiles({ projectId }: { projectId?: string }) {
               </h3>
               <span className="badge">
                 Проектное решение ·{' '}
-                {record.source === 'repository'
-                  ? 'repository'
-                  : record.source === 'private_context'
-                    ? 'private context'
-                    : 'приватный каталог решений'}
+                {record.source === 'repository' ? 'Файлы проекта' : 'Приватный контекст'}
               </span>
             </div>
             <p className="source-path">{record.sourcePath}</p>
@@ -561,6 +570,7 @@ export default function ProjectDetail() {
   const { data: w } = useWorkspace();
   const { act, busy } = useActions();
   const [editing, setEditing] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [target, setTarget] = useState('');
   const [relationType, setRelationType] = useState('uses');
   const p = w!.projects.find((p) => p.id === id);
@@ -576,8 +586,13 @@ export default function ProjectDetail() {
     };
   }, [id, client]);
   if (!p) return <p className="empty">Проект не загружен.</p>;
-  const tasks = w!.tasks.filter((t) => t.projectId === p.id && !t.completedAt);
-  const checks = w!.checks.filter((c) => c.projectId === p.id && c.status !== 'completed');
+  const tasks = w!.tasks
+    .filter((t) => t.projectId === p.id && !t.completedAt)
+    .sort(
+      (a, b) =>
+        ({ high: 0, normal: 1, low: 2 })[a.priority] - { high: 0, normal: 1, low: 2 }[b.priority] ||
+        a.number - b.number,
+    );
   const technicalSignals = p.signals.filter(
     (s) => s.code === 'dirty' || s.code === 'review' || s.level === 'info',
   );
@@ -623,48 +638,42 @@ export default function ProjectDetail() {
       {editing && (
         <MetadataEditor key={`metadata:${p.id}`} project={p} onClose={() => setEditing(false)} />
       )}
-      <div className="project-dossier section-space">
+      <div className="project-dossier project-simple section-space">
         <div>
           <section className="project-brief prose">
-            <h2>Зачем существует</h2>
+            <h2>О проекте</h2>
             <p className="preserve">{p.metadata.goal || 'Цель пока не описана.'}</p>
-            {(p.metadata.current_focus || p.metadata.next.length > 0) && (
-              <details className="section-space legacy-plan">
-                <summary>Прежний план из сводки</summary>
-                <p className="preserve">
-                  <strong>Фокус:</strong> {p.metadata.current_focus}
-                </p>
-                <ol>
-                  {p.metadata.next.map((v, i) => (
-                    <li key={i}>{v}</li>
+            {(workSignals.length > 0 || p.metadata.blocked_by.length > 0) && (
+              <section className="panel prose">
+                <h2>Требуют внимания</h2>
+                <ul className="project-signals">
+                  {workSignals.map((s, i) => (
+                    <li key={i} className={`signal ${s.level || 'attention'}`}>
+                      <strong>
+                        {s.level === 'info'
+                          ? 'Информация'
+                          : s.level === 'decision'
+                            ? 'Решение'
+                            : 'Внимание'}
+                        .
+                      </strong>{' '}
+                      <span>{s.message}</span>
+                    </li>
                   ))}
-                </ol>
-                <p>
-                  Текущая работа редактируется в списке задач. Прежний план доступен только для
-                  чтения; экспорт сохраняет его и не заменяет задачами.
-                </p>
-                {p.metadata.next.length > 0 && (
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      request('import-plan', 'Шаги добавлены в задачи. Прежняя сводка сохранена.')
-                    }
-                  >
-                    Добавить шаги в задачи
-                  </button>
+                </ul>
+                {!!p.metadata.blocked_by.length && (
+                  <>
+                    <h3>Что мешает работе</h3>
+                    <ul>
+                      {p.metadata.blocked_by.map((v, i) => (
+                        <li key={i}>{v}</li>
+                      ))}
+                    </ul>
+                  </>
                 )}
-              </details>
+              </section>
             )}
           </section>
-          {!!checks.length && (
-            <section className="section-space">
-              <h2>Проверки проекта</h2>
-              {checks.map((c) => (
-                <CheckCard key={c.id} check={c} compact />
-              ))}
-              <Link to={`/checks?new=1&project=${p.id}`}>Новая проверка →</Link>
-            </section>
-          )}
           <section className="section-space">
             <div className="section-heading">
               <h2>
@@ -673,7 +682,7 @@ export default function ProjectDetail() {
               <Link to={`/tasks?project=${p.id}`}>Добавить задачу →</Link>
             </div>
             <div className="panel compact-list">
-              {tasks.map((t) => (
+              {tasks.slice(0, 5).map((t) => (
                 <div className="row between" key={t.id}>
                   <Link to={`/tasks?project=${p.id}&task=${t.code}`}>
                     {t.code} · {t.title}
@@ -681,117 +690,46 @@ export default function ProjectDetail() {
                   {t.priority === 'high' && <span className="priority">Высокий приоритет</span>}
                 </div>
               ))}
-              {!tasks.length && <p className="muted">Открытых задач нет.</p>}
+              {!tasks.length && (
+                <p className="muted">Открытых задач пока нет. Добавьте первую задачу.</p>
+              )}
             </div>
           </section>
+          {!!tasks.length && (
+            <p>
+              <Link to={`/tasks?project=${p.id}`}>Все задачи · {tasks.length} →</Link>
+            </p>
+          )}
           <section className="section-space" aria-label="Последние записи проекта">
             <h2>Что происходило</h2>
             <Link className="button" to={`/observations?project=${p.id}`}>
               Записать наблюдение
             </Link>
+            {p.notes && (
+              <details className="section-space">
+                <summary>Сохранённые заметки</summary>
+                <p className="preserve">{p.notes}</p>
+              </details>
+            )}
             <RecentHistory projectId={p.id} />
             <Link to={`/timeline?project=${p.id}`}>История проекта →</Link>
-            <details>
-              <summary>История результатов задач</summary>
-              <Link to={`/history?project=${p.id}`}>Открыть прежнюю историю задач →</Link>
-            </details>
           </section>
-          <section className="panel section-space" aria-label="Итоги проекта">
-            <h2>Подвести итоги</h2>
-            <p>
-              Посмотрите, что изменилось за период, сохраните свои выводы или подготовьте анализ.
-            </p>
-            <p className="section-space">
-              <Link className="button primary" to={`/analysis?project=${p.id}`}>
-                Анализы проекта →
-              </Link>
-            </p>
-            <details className="section-space">
-              <summary>Мои обзоры</summary>
-              <div className="row section-space">
-                <Link to={`/reviews?project=${p.id}&kind=week`}>Обзор недели →</Link>
-                <Link to={`/reviews?project=${p.id}&kind=month`}>Обзор месяца →</Link>
-              </div>
-            </details>
-          </section>
-          <details className="section-space">
-            <summary>Изменения в коде</summary>
-            <div className="panel activity-list">
-              {p.snapshot.git.commits.map((c) => (
-                <div className="activity" key={c.hash}>
-                  <code>{c.hash.slice(0, 7)}</code>
-                  <div>
-                    <p>{c.subject}</p>
-                    <small>{date(c.date)}</small>
-                  </div>
-                </div>
-              ))}
-              {!p.snapshot.git.commits.length && (
-                <p className="empty">{p.snapshot.git.error || 'История commits отсутствует.'}</p>
-              )}
-            </div>
-          </details>
-          {!!w!.decisions.some((d) => d.projectId === p.id) && (
-            <section className="section-space">
-              <div className="section-heading">
-                <h2>Решения проекта</h2>
-                <Link to="/decisions">Все решения →</Link>
-              </div>
-              <div className="panel compact-list">
-                {w!.decisions
-                  .filter((d) => d.projectId === p.id)
-                  .map((d) => (
-                    <div key={d.id}>
-                      <strong>{d.title}</strong>
-                      <p>{d.decision}</p>
-                      <small>
-                        {decisionLabels[d.status]} · {date(d.date)}
-                      </small>
-                    </div>
-                  ))}
-              </div>
-            </section>
-          )}
-          {p.notes && (
-            <section className="panel prose section-space">
-              <h2>Заметки</h2>
-              <p className="preserve">{p.notes}</p>
-            </section>
-          )}
+          <ProjectReview projectId={p.id} />
         </div>
         <aside>
-          {(workSignals.length > 0 || p.metadata.blocked_by.length > 0) && (
-            <section className="panel prose">
-              <h2>Требуют внимания</h2>
-              <ul className="project-signals">
-                {workSignals.map((s, i) => (
-                  <li key={i} className={`signal ${s.level || 'attention'}`}>
-                    <strong>
-                      {s.level === 'info'
-                        ? 'Информация'
-                        : s.level === 'decision'
-                          ? 'Решение'
-                          : 'Внимание'}
-                      .
-                    </strong>{' '}
-                    <span>{s.message}</span>
-                  </li>
-                ))}
-              </ul>
-              {!!p.metadata.blocked_by.length && (
-                <>
-                  <h3>Что мешает работе</h3>
-                  <ul>
-                    {p.metadata.blocked_by.map((v, i) => (
-                      <li key={i}>{v}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </section>
-          )}
-          <details className="panel section-space project-settings">
-            <summary>Настройки проекта</summary>
+          <button
+            className="section-space"
+            aria-expanded={settingsOpen}
+            aria-controls="project-settings"
+            onClick={() => setSettingsOpen(!settingsOpen)}
+          >
+            Настройки проекта
+          </button>
+          <div
+            id="project-settings"
+            className="panel section-space project-settings"
+            hidden={!settingsOpen}
+          >
             <p className="help section-space">
               Подключение файлов, связи с другими проектами и сохранение сводки в репозитории.
             </p>
@@ -922,6 +860,58 @@ export default function ProjectDetail() {
               </div>
               <small>Пересмотрено: {date(p.metadata.last_reviewed)}</small>
             </section>
+            {(p.metadata.current_focus || p.metadata.next.length > 0) && (
+              <details className="section-space legacy-plan">
+                <summary>Прежний план из сводки</summary>
+                <p className="preserve">
+                  <strong>Фокус:</strong> {p.metadata.current_focus}
+                </p>
+                <ol>
+                  {p.metadata.next.map((v, i) => (
+                    <li key={i}>{v}</li>
+                  ))}
+                </ol>
+                <p>
+                  Текущая работа редактируется в списке задач. Прежний план доступен только для
+                  чтения; экспорт сохраняет его и не заменяет задачами.
+                </p>
+                {p.metadata.next.length > 0 && (
+                  <button
+                    disabled={busy}
+                    onClick={() =>
+                      request('import-plan', 'Шаги добавлены в задачи. Прежняя сводка сохранена.')
+                    }
+                  >
+                    Добавить шаги в задачи
+                  </button>
+                )}
+              </details>
+            )}
+            <details className="section-space">
+              <summary>Изменения в коде</summary>
+              <div className="panel activity-list">
+                {p.snapshot.git.commits.map((c) => (
+                  <div className="activity" key={c.hash}>
+                    <code>{c.hash.slice(0, 7)}</code>
+                    <div>
+                      <p>{c.subject}</p>
+                      <small>{date(c.date)}</small>
+                    </div>
+                  </div>
+                ))}
+                {!p.snapshot.git.commits.length && (
+                  <p className="empty">{p.snapshot.git.error || 'История commits отсутствует.'}</p>
+                )}
+              </div>
+            </details>
+            <details>
+              <summary>История результатов задач</summary>
+              <Link to={`/history?project=${p.id}`}>Открыть прежнюю историю задач →</Link>
+            </details>
+            <p className="row">
+              <Link to="/checks">Все проверки →</Link>
+              <Link to="/decisions">Все решения →</Link>
+            </p>
             <DecisionFiles projectId={p.id} />
             <button
               className="section-space"
@@ -941,7 +931,7 @@ export default function ProjectDetail() {
             >
               Удалить из Control Center
             </button>
-          </details>
+          </div>
         </aside>
       </div>
       <Maintenance key={`maintenance:${p.id}`} project={p} />

@@ -430,7 +430,7 @@ test('schema 10 upgrades with a verified copy and retained IDs; failed DDL leave
   x.store.db.exec('DROP TABLE codex_digests;DROP TABLE codex_grants;PRAGMA user_version=10;');
   const upgraded = new Store(x.file);
   x.others.push(upgraded);
-  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 11);
+  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 12);
   assert.ok(upgraded.project(x.project.id));
   const name = (await readdir(path.join(x.f.root, 'backups'))).find((name) =>
     name.startsWith('before-codex-v11'),

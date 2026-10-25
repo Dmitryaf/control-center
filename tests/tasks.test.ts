@@ -43,7 +43,19 @@ test('v3 migration backs up WAL, preserves raw records and project links; repeat
   const before = seed.db.prepare('SELECT * FROM records ORDER BY id').all();
   seed.close();
   const migrated = new Store(file);
-  assert.deepEqual(migrated.db.prepare('SELECT * FROM records ORDER BY id').all(), before);
+  const expected = before.map((row) => {
+    if (row.kind !== 'tasks') return row;
+    const data = JSON.parse(String(row.data));
+    delete data.state;
+    return { ...row, data: JSON.stringify(data) };
+  });
+  assert.deepEqual(
+    migrated.db
+      .prepare('SELECT * FROM records ORDER BY id')
+      .all()
+      .map((r) => ({ ...r })),
+    expected.map((r) => ({ ...r })),
+  );
   assert.equal(migrated.project(project.id)?.path, repo);
   const old = new Tasks(migrated).read(task.id);
   assert.equal(old.code, 'CC-1');

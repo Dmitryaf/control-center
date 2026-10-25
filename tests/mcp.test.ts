@@ -66,6 +66,19 @@ test('real stdio clients without UI: project/worktree, bidirectional HTTP tasks,
     await f.cleanup();
   });
   const tools = (await a.client.listTools()).tools;
+  for (const name of ['task_create', 'task_list']) {
+    assert.equal(
+      Object.hasOwn(tools.find((tool) => tool.name === name)!.inputSchema.properties!, 'state'),
+      false,
+    );
+    const rejected = await a.call(name, {
+      title: 'Removed field',
+      projectId: null,
+      requestKey: 'old-client',
+      state: 'next',
+    });
+    assert.equal(rejected.isError, true);
+  }
   assert.match(a.client.getInstructions() ?? '', /Незавершённую работу сохраняйте task_update/);
   assert.equal(tools.length, 8);
   assert.equal(

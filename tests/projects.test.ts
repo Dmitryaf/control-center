@@ -165,8 +165,8 @@ test('project attention keeps Tasks authoritative and gives pending local decisi
   const metadata = metadataSchema.parse({ name: 'Work status', status: 'active' });
   store.saveMetadata(id, metadata, '');
   const tasks = new Tasks(store);
-  const current = tasks.save({ title: 'Current work', projectId: id, state: 'now' });
-  tasks.save({ title: 'Next work', projectId: id, state: 'next' });
+  const current = tasks.save({ title: 'Current work', projectId: id });
+  tasks.save({ title: 'Next work', projectId: id });
   const signals = () => projects.view(projects.require(id)).signals;
   const planSignals = () => signals().filter((s) => ['focus', 'next'].includes(s.code));
   assert.deepEqual(planSignals(), []);

@@ -63,7 +63,7 @@ test('real HTTP Codex import is visible from project analysis, persists on reloa
     expect(run.approvedAt).toBeNull();
     expect(run.usage).toBeNull();
     await page.goto(`/projects/${project.id}`);
-    await page.getByRole('link', { name: 'Анализы проекта →', exact: true }).click();
+    await page.getByRole('link', { name: 'Получить ИИ-анализ →', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Анализ проектов', exact: true })).toBeVisible();
     await expect(
       page.getByRole('checkbox', { name: project.metadata.name, exact: true }),
@@ -89,11 +89,9 @@ test('real HTTP Codex import is visible from project analysis, persists on reloa
     const result = page.getByRole('region', { name: 'Сохранённый анализ' });
     await expect(result).toContainText(run.report!.narrative);
     await expect(result).toContainText('API-запрос не выполнялся');
-    const grounds = result
-      .locator('details')
-      .filter({
-        has: page.locator('summary', { hasText: 'Основания и существенные ограничения' }),
-      });
+    const grounds = result.locator('details').filter({
+      has: page.locator('summary', { hasText: 'Основания и существенные ограничения' }),
+    });
     await expect(grounds).not.toHaveAttribute('open');
     await expect(
       result.getByText('Остаётся неизвестная совместимость.', { exact: true }),

@@ -17,7 +17,7 @@ In PowerShell use `npm.cmd`. Open [Control Center](http://127.0.0.1:4310), add p
 
 The main sections are **Обзор**, **Проекты**, **Задачи** and **История**. Checks, ideas, decisions and settings are under **Ещё**. Project pages link to tasks, observations, history, reviews and saved analyses. History combines task results, checks, decisions, observations, reviews and AI analyses; dates use your chosen timezone. Earlier task results survive later task edits and deletion. Other texts show their current saved edition, not an archive of every edit.
 
-Tasks use one list of open items, with a separate view for completed work. Project pages show the purpose, tasks, recent work and period reviews. File connections, project relations, export and removal are under **Настройки проекта**.
+Tasks use one list of open items, with a separate view for completed work. Project pages have four sections: about the project, up to five open tasks ordered by priority and task number, recent history, and reviews. The latest nonempty review or saved analysis is shown with a link to its full text. Name, purpose, status and stage are editable directly; additional fields remain optional. File connections, project relations, export and removal are under **Настройки проекта**.
 
 Known projects refresh while the HTTP server runs, with a one-minute pause between passes by default. Settings allow 0–60 minutes; 0 disables refresh. Startup or an explicit scan discovers new projects. Failed reads retain saved data. Scanning never runs project code or changes repository files.
 
@@ -75,7 +75,7 @@ Checks record a question, external actions, evidence and an explicit outcome. Gi
 
 Control Center still reads decisions from connected projects' `DECISIONS.md` and `decisions/*.md`, including structured and older Markdown records. It never edits them. Bodies remain in their source files; a disposable metadata index is refreshed. Conflicting IDs remain visible separately, and unavailable sources do not serve cached bodies.
 
-Repository visibility, private-context links and exact-path publication confirmations are local settings. Previously configured additional decision folders remain readable, but their editor is no longer shown. Private-context roots must be outside the repository. These paths never enter YAML. The publication check examines the Git index, including staged files; it does not audit remote visibility, Git history or secrets. It never commits or publishes. Keep private sources backed up separately.
+Repository visibility, private-context links and exact-path publication confirmations are local settings. Private-context roots must be outside the repository. These paths never enter YAML. The publication check examines the Git index, including staged files; it does not audit remote visibility, Git history or secrets. It never commits or publishes. Keep private sources backed up separately.
 
 ## Storage, backup and restore
 
@@ -97,7 +97,7 @@ To restore:
 4. For a raw copy made outside the verified backup flow, first run `npm start -- --restore-recovery` (or `npm run dev -- --restore-recovery`) before starting other processes. Raw replacement is not automatically detectable.
 5. Inspect records/settings, restore external files separately if needed, refresh projects and explicitly renew permissions where desired.
 
-Supported older databases upgrade with a verified pre-upgrade backup and transactional compatibility checks. Stop older writers before upgrade. Current schema is 11; the unused schema-1 prototype is unsupported. Downgrade requires restoring a compatible pre-upgrade copy, never opening a newer database with an older build. Restore replaces state; it does not merge databases.
+Supported older databases upgrade with a verified pre-upgrade backup and transactional compatibility checks. Stop older HTTP and MCP writers before upgrade. Schema 12 removes task `state` from current records and drops additional decision-directory settings. Task numbers, priorities, project links, results, completion dates and historical snapshots are preserved; external files are never deleted or imported. Old HTTP/MCP requests containing task `state` are rejected; update clients to use completion and priority. Existing pending AI packets and schedules must pass the current access guards again. Current schema is 12; the unused schema-1 prototype is unsupported. Downgrade requires restoring a compatible pre-upgrade copy, never opening a newer database with an older build. Restore replaces state; it does not merge databases.
 
 For a moved project, scan the new location and use **Перепривязать** to preserve its ID/history. Removing a project excludes its path from discovery and detaches records; it removes local metadata, project notes and relations, but never repository/private-source files. Clearing the exclusion creates a new project identity. Recover removed local state from an earlier backup.
 

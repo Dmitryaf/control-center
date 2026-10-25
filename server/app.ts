@@ -157,6 +157,10 @@ export function createApp(
   app.get('/api/reviews/:id/history', (req, res) =>
     res.json(history.forReview(reviews.read(req.params.id), req.query)),
   );
+  app.get('/api/projects/:id/latest-review', (req, res) => {
+    projects.require(req.params.id);
+    res.json(reviews.latestProject(req.params.id));
+  });
   app.get('/api/reviews/:id', (req, res) => res.json(reviews.read(req.params.id)));
   app.post('/api/reviews', (req, res) => res.status(201).json(reviews.create(req.body)));
   app.patch('/api/reviews/:id', (req, res) => res.json(reviews.patch(req.params.id, req.body)));
@@ -309,19 +313,6 @@ export function createApp(
   app.delete('/api/projects/:id', async (req, res) => {
     await projects.forget(req.params.id);
     res.json({ ok: true });
-  });
-  app.put('/api/projects/:id/decision-sources', async (req, res) => {
-    const row = projects.require(req.params.id);
-    const body = z
-      .object({ paths: z.array(z.string().trim().min(1).max(2000)).max(20) })
-      .parse(req.body);
-    if (body.paths.some((p) => !path.isAbsolute(p)))
-      throw new HttpError(400, 'Нужны абсолютные пути каталогов.');
-    store.db
-      .prepare('UPDATE projects SET decision_sources=? WHERE id=?')
-      .run(JSON.stringify([...new Set(body.paths.map((p) => path.resolve(p)))]), row.id);
-    await projects.decisions.refresh(row.id);
-    res.json(projects.view(projects.require(row.id)));
   });
   app.put('/api/projects/:id/context', async (req, res) => {
     projects.require(req.params.id);

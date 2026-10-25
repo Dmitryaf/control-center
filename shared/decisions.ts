@@ -18,7 +18,7 @@ export interface FileDecision {
   key: string;
   projectId: string;
   sourcePath: string;
-  source: 'repository' | 'private_context' | 'private';
+  source: 'repository' | 'private_context';
   metadata: FileDecisionMetadata | null;
   title: string;
   body: string;

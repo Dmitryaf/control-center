@@ -12,6 +12,5 @@ export const projectStamp = (row: NonNullable<ReturnType<Store['project']>>) =>
   digest({
     visibility: row.visibility,
     privateContext: row.private_context_path,
-    decisionSources: row.decision_sources,
     allowlist: row.publication_allowlist,
   });

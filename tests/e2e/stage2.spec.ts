@@ -26,23 +26,26 @@ test('idea → check → external action/evidence → archive; canonical sources
     const repo = await f.repo('hypothesis-product');
     const privateDir = path.join(f.root, 'private-decisions');
     await mkdir(path.join(repo, 'decisions'));
-    await mkdir(privateDir);
+    await mkdir(path.join(privateDir, 'decisions'), { recursive: true });
     await writeFile(
       path.join(repo, 'decisions', 'D-0001.md'),
       `---\nschema_version: 1\nid: D-0001\ntitle: File choice\ndate: ${ago(20)}\nstatus: accepted\narea: data\nimplementation: not_implemented\nreview_after: ${ago(1)}\nvisibility: repository\n---\nPublic rationale`,
     );
-    await writeFile(path.join(privateDir, 'legacy.md'), '# Private rationale\nPreserve this text.');
+    await writeFile(
+      path.join(privateDir, 'decisions', 'legacy.md'),
+      '# Private rationale\nPreserve this text.',
+    );
     await page.goto('/settings');
     await page.getByLabel('Полные пути').fill(f.root);
     await page.getByRole('button', { name: 'Сохранить и сканировать' }).click();
     await expect(page.getByRole('status')).toContainText('Настройки сохранены');
     const project = (await state()).projects.find((p) => p.path === repo)!;
-    // Existing source configuration remains compatible after its editor is removed.
+    // The supported private context remains separate from removed additional directories.
     expect(
       (
-        await page.request.put(`/api/projects/${project.id}/decision-sources`, {
+        await page.request.put(`/api/projects/${project.id}/context`, {
           headers: { 'X-Control-Center': '1' },
-          data: { paths: [privateDir] },
+          data: { visibility: 'private', privateContextPath: privateDir },
         })
       ).ok(),
     ).toBe(true);

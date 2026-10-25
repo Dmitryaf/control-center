@@ -127,7 +127,6 @@ export class Projects {
       available: !!row.available,
       signals,
       yamlConflict,
-      decisionSources: JSON.parse(row.decision_sources),
       context,
     };
   }
@@ -303,7 +302,6 @@ export class Projects {
       if (
         target.metadata ||
         target.notes ||
-        JSON.parse(target.decision_sources).length ||
         target.visibility !== 'unknown' ||
         target.private_context_path ||
         JSON.parse(target.publication_allowlist).length ||

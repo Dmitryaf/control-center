@@ -126,7 +126,6 @@ test('owner journey across active, paused, waiting and completed projects: brows
       await expect(page.getByRole('region', { name: 'Последние записи проекта' })).toContainText(
         'Сохранён тестовый экспорт',
       );
-      await page.getByText('Мои обзоры', { exact: true }).click();
       await expect(page.getByRole('link', { name: 'Обзор месяца →', exact: true })).toBeVisible();
       await page.goto(
         `/timeline?project=${project.id}&from=${bounds.periodStart}&to=${bounds.periodEnd}&timezone=UTC`,
@@ -218,7 +217,6 @@ test('owner journey across active, paused, waiting and completed projects: brows
       await expect(page.getByRole('region', { name: 'Последние записи проекта' })).toContainText(
         'Сохранён тестовый экспорт',
       );
-      await page.getByText('Мои обзоры', { exact: true }).click();
       await expect(page.getByRole('link', { name: 'Обзор месяца →', exact: true })).toBeVisible();
       await page.goto(`/reviews?id=${weekId}`);
       await expect(page.getByLabel('Текст обзора')).toHaveValue(weekText);

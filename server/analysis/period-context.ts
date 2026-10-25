@@ -143,7 +143,6 @@ export function buildPeriodContext(
         title: task.title,
         text: JSON.stringify({
           code: task.code,
-          state: task.state,
           description: task.description,
           expectedResult: task.expectedResult,
           acceptance: task.acceptance,

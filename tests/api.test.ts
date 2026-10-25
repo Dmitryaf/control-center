@@ -53,8 +53,7 @@ test('API empty database → scan → metadata → records → relation; validat
     200,
   );
   assert.equal(
-    (await request('/tasks', 'POST', { title: 'Task', projectId: project.id, state: 'now' }))
-      .status,
+    (await request('/tasks', 'POST', { title: 'Task', projectId: project.id })).status,
     201,
   );
   assert.equal((await request('/ideas', 'POST', { title: 'Idea' })).status, 201);
@@ -76,7 +75,7 @@ test('API empty database → scan → metadata → records → relation; validat
   workspace = (await (await request('/workspace')).json()) as Workspace;
   assert.equal(workspace.relations.length, 1);
   assert.ok(workspace.projects[0].signals.some((s) => s.code === 'decision'));
-  assert.equal(workspace.tasks[0].state, 'now');
+  assert.equal(Object.hasOwn(workspace.tasks[0], 'state'), false);
   const payload = {
     title: 'API check',
     projectId: project.id,
@@ -111,8 +110,11 @@ test('API empty database → scan → metadata → records → relation; validat
   assert.equal(
     (await request(`/projects/${project.id}/decision-sources`, 'PUT', { paths: ['relative'] }))
       .status,
-    400,
+    404,
   );
+  const removedState = await request('/tasks', 'POST', { title: 'Old client', state: 'next' });
+  assert.equal(removedState.status, 400);
+  assert.match((await removedState.json()).error, /state больше не поддерживается/);
   const yaml = path.join(project.path, 'PROJECT.yaml');
   await writeFile(yaml, 'name: External\n');
   assert.equal(

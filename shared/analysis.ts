@@ -54,7 +54,6 @@ export interface AnalysisPayload {
       source: string;
       code: string;
       title: string;
-      state: string;
       priority: string;
       description: string;
       expectedResult: string;

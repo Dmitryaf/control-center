@@ -22,13 +22,12 @@ test('project shows paused-only unfinished checks and keeps completed checks in 
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/projects/project-0');
-    const section = page
-      .locator('section')
-      .filter({ has: page.getByRole('heading', { name: 'Проверки проекта', exact: true }) });
-    await expect(section).toBeVisible();
-    await expect(section.locator('.check-card')).toHaveCount(1);
-    await expect(section.getByRole('link', { name: paused.title, exact: true })).toBeVisible();
-    await expect(section.locator('.clock-state')).toHaveText('На паузе');
+    await expect(page.locator('.check-card')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Настройки проекта', exact: true }).click();
+    await page.getByRole('link', { name: 'Все проверки →', exact: true }).click();
+    await page.getByRole('button', { name: /На паузе/ }).click();
+    await expect(page.getByRole('link', { name: paused.title, exact: true })).toBeVisible();
+    await expect(page.locator('.clock-state').first()).toHaveText('На паузе');
     await expect(page.getByRole('link', { name: completed.title, exact: true })).toHaveCount(0);
   }
   await page.goto('/checks');

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, writeFile, readFile, symlink } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { fixture } from './fixtures.js';
 import { Store } from '../server/db.js';
@@ -68,9 +68,10 @@ test('repository and private sources remain read-only, preserve legacy and repor
   });
   const repo = await f.repo('project');
   const publicDir = path.join(repo, 'decisions');
-  const privateDir = path.join(f.root, 'private');
+  const privateRoot = path.join(f.root, 'private');
+  const privateDir = path.join(privateRoot, 'decisions');
   await mkdir(publicDir);
-  await mkdir(privateDir);
+  await mkdir(privateDir, { recursive: true });
   await writeFile(path.join(repo, 'DECISIONS.md'), '# Decisions\nNavigation index');
   await writeFile(path.join(repo, 'PROJECT.yaml'), 'name: Project\n');
   await writeFile(path.join(publicDir, 'D-0001.md'), decisionText());
@@ -83,16 +84,11 @@ test('repository and private sources remain read-only, preserve legacy and repor
   const projects = new Projects(store);
   await projects.scan();
   const id = projects.list()[0].id;
-  const sources = async (paths: string[]) => {
-    store.db
-      .prepare('UPDATE projects SET decision_sources=? WHERE id=?')
-      .run(JSON.stringify(paths), id);
-    await projects.refresh(id);
-  };
-  await sources([privateDir]);
+  await projects.context.save(id, { visibility: 'private', privateContextPath: privateRoot });
+  await projects.refresh(id);
   const records = projects.decisions.list();
   assert.equal(records.length, 3);
-  assert.equal(records.filter((r) => r.source === 'private').length, 1);
+  assert.equal(records.filter((r) => r.source === 'private_context').length, 1);
   assert.equal(records.find((r) => r.title === 'Legacy')?.error, null);
   assert.equal(
     (store.db.prepare('SELECT COUNT(*) AS count FROM records').get() as { count: number }).count,
@@ -111,14 +107,8 @@ test('repository and private sources remain read-only, preserve legacy and repor
   await writeFile(path.join(privateDir, 'duplicate.md'), decisionText());
   await projects.refresh(id);
   assert.equal(projects.decisions.list().filter((r) => r.error?.includes('повторяется')).length, 2);
-  await sources([path.join(f.root, 'missing')]);
-  assert.ok(projects.decisions.list().some((r) => r.error?.includes('недоступен')));
-  const link = path.join(f.root, 'linked');
-  await symlink(privateDir, link, 'junction');
-  await sources([link]);
-  assert.ok(projects.decisions.list().some((r) => r.source === 'private' && r.error));
-  assert.equal(
-    projects.decisions.list().filter((r) => r.source === 'private' && r.metadata).length,
-    0,
-  );
+  await rename(privateRoot, privateRoot + '-moved');
+  await projects.refresh(id);
+  assert.equal(projects.view(projects.require(id)).context.privateStatus, 'unavailable');
+  assert.equal(projects.decisions.list().filter((r) => r.source === 'private_context').length, 0);
 });
