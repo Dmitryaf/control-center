@@ -17,7 +17,7 @@ export { digest, projectStamp } from './privacy.js';
 import { CodexContext } from '../codex/context.js';
 import { maxInputBytes } from './openai.js';
 
-export const periodPolicyVersion = 'period-review-v5';
+export const periodPolicyVersion = 'period-review-v6';
 export interface ContextGuard {
   kind:
     | 'project'
@@ -180,18 +180,37 @@ export function buildPeriodContext(
           if (++total > 200)
             throw new HttpError(
               400,
-              'Больше 200 исходных событий. Выберите меньше проектов или источников; пакет не обрезается.',
+              'Больше 200 исходных событий. Выберите неделю вместо месяца, меньше проектов или источников; пакет не обрезается и не отправлен.',
             );
+          // A decision's rationale is part of the explicitly selected local record.
+          // The compact history projection only contains the decision text.
+          const decision =
+            entry.kind === 'decision'
+              ? JSON.parse(
+                  String(
+                    store.db
+                      .prepare("SELECT data FROM records WHERE kind='decisions' AND id=?")
+                      .get(entry.sourceId)!.data,
+                  ),
+                )
+              : null;
           add({
             id: entry.key,
             kind: entry.kind,
             projectId: entry.scopeProjectId,
             title: entry.title,
-            text: entry.excerpt,
+            text: decision
+              ? JSON.stringify({
+                  context: decision.context,
+                  decision: decision.decision,
+                  reason: decision.reason,
+                  status: decision.status,
+                })
+              : entry.excerpt,
             day: entry.day,
             recordedAt: entry.recordedAt,
             dateQuality: entry.dateQuality,
-            partial: entry.truncated,
+            partial: decision ? false : entry.truncated,
           });
           if (entry.kind === 'observation')
             guards.push({
@@ -224,6 +243,8 @@ export function buildPeriodContext(
     }
   }
   const addReview = (row: Review) => {
+    guards.push({ kind: 'review', id: row.id, stamp: String(row.revision) });
+    if (!row.userText.trim()) return;
     add({
       id: `review:${row.id}`,
       kind: 'review_text',
@@ -235,7 +256,6 @@ export function buildPeriodContext(
       dateQuality: 'current',
       partial: false,
     });
-    guards.push({ kind: 'review', id: row.id, stamp: String(row.revision) });
   };
   if (selection.includeUserText) addReview(review);
   if (selection.includeProjectHistory) {
@@ -427,7 +447,7 @@ export function buildPeriodContext(
   if (Buffer.byteLength(json) > maxInputBytes)
     throw new HttpError(
       400,
-      'Пакет больше 80 000 байт. Выберите меньше источников; пакет не обрезается.',
+      `Пакет больше 80 000 байт (${Buffer.byteLength(json)}). Выберите неделю вместо месяца, меньше проектов или источников; пакет не обрезается и не отправлен.`,
     );
   if (sensitiveText.test(json))
     throw new HttpError(

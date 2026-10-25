@@ -89,7 +89,27 @@ test('primary analysis route keeps selected projects, prepares useful local cont
     await page.getByRole('button', { name: 'Подготовить обзор периода' }).focus();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/period-analysis\?review=/);
+    const reviewId = new URL(page.url()).searchParams.get('review')!;
+    const currentReview = await (await request.get(`/api/reviews/${reviewId}`)).json();
+    expect(
+      (
+        await request.patch(`/api/reviews/${reviewId}`, {
+          headers,
+          data: {
+            revision: currentReview.revision,
+            userText:
+              'Я переключился с журнала на сравнение результатов: сначала хочу проверить, какие наблюдения полезны.',
+          },
+        })
+      ).ok(),
+    ).toBe(true);
     const form = page.getByRole('form', { name: 'Подготовка ручного анализа' });
+    await page
+      .getByRole('link', {
+        name: 'Выбрать отдельный диалог, исправить итог или отключить чтение →',
+      })
+      .click();
+    await page.getByRole('link', { name: 'К ручному AI-анализу →' }).click();
     for (const project of projects.slice(0, 2))
       await expect(
         form.getByRole('checkbox', { name: project.metadata.name, exact: true }),
@@ -107,6 +127,9 @@ test('primary analysis route keeps selected projects, prepares useful local cont
     const response = await prepared;
     expect(response.status()).toBe(201);
     const run = (await response.json()) as PeriodRun;
+    expect(run.payload.sources.find((s) => s.id === `review:${reviewId}`)?.text).toContain(
+      'Я переключился',
+    );
     expect(run.payload.scope.projectIds.sort()).toEqual(
       projects
         .slice(0, 2)
@@ -130,7 +153,12 @@ test('primary analysis route keeps selected projects, prepares useful local cont
     expect(run.selection.includeRelatedAnalyses).toBe(false);
     expect(externalActions).toBe(0);
     expect(run.approvedAt).toBeNull();
-    await page.reload();
+    // Reopening a saved report from history has no explicit projects query parameter.
+    await page.goto(`/period-analysis?review=${reviewId}&run=${run.id}`);
+    for (const project of projects.slice(0, 2))
+      await expect(
+        form.getByRole('checkbox', { name: project.metadata.name, exact: true }),
+      ).toBeChecked();
     await expect(page.getByRole('region', { name: 'Сохранённый анализ' })).toContainText(
       'Ожидает подтверждения',
     );

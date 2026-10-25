@@ -15,6 +15,7 @@ import { Observations } from '../server/observations.js';
 import { PeriodAnalysis } from '../server/analysis/period-analysis.js';
 import { AnalysisSchedules } from '../server/analysis/schedules.js';
 import { snapshotDatabase, revokeRestoredApprovals } from '../server/storage.js';
+import { digest } from '../server/analysis/privacy.js';
 import type { PeriodSelection } from '../shared/period-analysis.js';
 
 const selection: PeriodSelection = {
@@ -108,6 +109,41 @@ async function setup(
     finish: () => finish?.(),
   };
 }
+test('previous context policy cannot send a pending packet or expand a scheduled permission', async (t) => {
+  const x = await setup(t);
+  const grant = x.enable();
+  const pending = x.analysis.prepare({
+    reviewId: x.review.id,
+    requestKey: randomUUID(),
+    readConsent: true,
+    selection,
+  });
+  const payload = { ...pending.payload, policyVersion: 'period-review-v5' };
+  const hash = digest({ payload, model: pending.model, policy: 'period-review-v5' });
+  x.store.db
+    .prepare('UPDATE analysis_runs SET payload_json=?,policy_version=?,packet_hash=? WHERE id=?')
+    .run(JSON.stringify(payload), 'period-review-v5', hash, pending.id);
+  await assert.rejects(
+    () => x.analysis.run(pending.id, { packetHash: hash, consent: true }),
+    /Конфигурация анализа изменилась/,
+  );
+  x.store.db
+    .prepare('UPDATE analysis_schedules SET policy_version=? WHERE id=?')
+    .run('period-review-v5', grant.id);
+  x.setNow('2024-03-11T00:00:01Z');
+  await x.schedules.tick();
+  assert.equal(x.calls(), 0);
+  assert.equal(x.schedules.read(grant.id).enabled, false);
+  assert.throws(
+    () =>
+      x.schedules.resume(grant.id, {
+        revision: x.schedules.read(grant.id).revision,
+        confirm: true,
+      }),
+    /Подтвердите/,
+  );
+  assert.deepEqual(x.analysis.read(pending.id).payload, payload);
+});
 test('schedules are opt-in, bound to revision/model, send only a closed period once and retain provenance in history', async (t) => {
   const x = await setup(t);
   assert.deepEqual(x.schedules.list().items, []);
@@ -344,13 +380,20 @@ test('schema 8 migration keeps old data and a verified backup; related AI needs 
   const ai = preview.payload.sources.find((s) => s.kind === 'ai_analysis');
   assert.ok(ai);
   assert.equal(ai.dateQuality, 'model');
-  const without = x.analysis.prepare({
+  const withoutInput = {
     reviewId: month.id,
     requestKey: randomUUID(),
     selection: { ...chosen, includeRelatedAnalyses: false },
     readConsent: true,
     repeatConsent: true,
+  };
+  // An empty review is no longer counted as evidence when the only real source is excluded.
+  assert.throws(() => x.analysis.prepare(withoutInput), /нет данных/);
+  new Reviews(x.store).patch(month.id, {
+    revision: month.revision,
+    userText: 'My own monthly observation',
   });
+  const without = x.analysis.prepare(withoutInput);
   assert.equal(
     without.payload.sources.some((s) => s.kind === 'ai_analysis'),
     false,

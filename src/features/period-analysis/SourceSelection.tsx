@@ -18,15 +18,12 @@ export const emptySelection = (projectId: string | null): PeriodSelection => ({
   includeRelatedAnalyses: false,
   codexDigestIds: [],
 });
-export const coreSelection = (
-  value: PeriodSelection,
-  projectId: string | null,
-): PeriodSelection => ({
+export const coreSelection = (value: PeriodSelection): PeriodSelection => ({
   ...value,
   sourceKinds: ['task', 'check', 'decision', 'observation'],
   includeMetadata: true,
   includeOpenTasks: true,
-  includeUserText: !!projectId,
+  includeUserText: true,
   includeProjectHistory: true,
   includeRelatedReviews: true,
 });
@@ -99,15 +96,15 @@ export function SourceSelection({
       )}
       <p>
         Основной набор: цели и состояние, задачи и результаты, наблюдения, локальные решения,
-        проверки и прежние обзоры выбранных проектов. Файлы, диалоги и прежние AI-ответы
-        подключаются отдельно.
+        проверки и прежние обзоры выбранных проектов, мой сохранённый текст текущего обзора. Файлы,
+        диалоги и прежние AI-ответы подключаются отдельно.
       </p>
-      <button type="button" onClick={() => onChange(coreSelection(value, projectId))}>
+      <button type="button" onClick={() => onChange(coreSelection(value))}>
         Выбрать основной набор
       </button>
       <p className="help">
         Выбор не отправляет данные. Ниже можно изменить состав; перед отправкой вы увидите весь
-        пакет.
+        пакет. Если большой месячный обзор не помещается, выберите неделю или меньше проектов.
       </p>
       <details>
         <summary>Настроить источники</summary>

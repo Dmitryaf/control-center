@@ -323,7 +323,15 @@ function AnalysisPage({ reviewId }: { reviewId: string }) {
     review.data && review.data.scopeKey !== 'general' ? review.data.scopeKey.slice(8) : null;
   const initial = emptySelection(projectId);
   if (!projectId)
-    initial.projectIds = [...new Set((params.get('projects') ?? '').split(','))]
+    initial.projectIds = [
+      ...new Set(
+        params.has('projects')
+          ? (params.get('projects') ?? '').split(',')
+          : selected.data?.reviewKey === reviewId
+            ? selected.data.selection.projectIds
+            : [],
+      ),
+    ]
       .filter((id) => w!.projects.some((project) => project.id === id))
       .slice(0, 10);
   const chosen = selection ?? initial;
