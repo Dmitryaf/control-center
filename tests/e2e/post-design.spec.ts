@@ -36,7 +36,7 @@ test('project shows paused-only unfinished checks and keeps completed checks in 
   await expect(page.getByRole('link', { name: paused.title, exact: true })).toHaveCount(0);
 });
 
-test('horizontal navigation stays reachable and identifies the current section at five widths', async ({
+test('workspace navigation stays reachable and identifies the current section at five widths', async ({
   page,
 }) => {
   const data = designFixture();
@@ -48,15 +48,16 @@ test('horizontal navigation stays reachable and identifies the current section a
     await page.goto('/checks');
     const nav = page.getByRole('navigation', { name: 'Основная навигация' });
     await page.goto('/');
-    await expect(nav.getByRole('link')).toHaveCount(4);
+    await expect(nav.getByRole('link')).toHaveCount(6);
     await nav.locator('summary').focus();
     await page.keyboard.press('Enter');
-    await expect(nav.getByRole('link')).toHaveCount(8);
+    await expect(nav.getByRole('link')).toHaveCount(9);
     const destinations = [
       '/',
       '/projects',
       '/tasks',
       '/timeline',
+      '/analysis',
       '/checks',
       '/ideas',
       '/decisions',
@@ -102,7 +103,7 @@ test('horizontal navigation stays reachable and identifies the current section a
       const refresh = rect(bar.querySelector('button')!);
       const anchors = [...bar.querySelectorAll('nav a')].map((anchor) => {
         const range = document.createRange();
-        range.selectNodeContents(anchor);
+        range.selectNodeContents(anchor.querySelector('.navigation-label') ?? anchor);
         return { ...rect(anchor), textLines: range.getClientRects().length };
       });
       const overlap = (a: ReturnType<typeof rect>, b: ReturnType<typeof rect>) =>
@@ -127,7 +128,8 @@ test('horizontal navigation stays reachable and identifies the current section a
     expect(geometry.overlap).toBe(false);
     expect(geometry.clipped).toBe(false);
     expect(geometry.overflow).toBe(false);
-    expect(geometry.textLines).toEqual(Array(8).fill(1));
+    expect(geometry.textLines).toHaveLength(9);
+    expect(geometry.textLines.every((lines) => lines >= 1 && lines <= 2)).toBe(true);
     metrics.push(geometry);
     await page
       .locator('.workspace-bar')

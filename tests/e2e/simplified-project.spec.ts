@@ -55,7 +55,7 @@ test('simple project and task list expose useful work without legacy scheduling 
       await expect(page.locator('.overview-shortcuts')).toHaveCount(0);
       await expect(page.locator('.project-settings')).toBeHidden();
       await expect(page.getByRole('heading', { name: 'Источники контекста' })).toBeHidden();
-      await expect(page.getByRole('button', { name: 'Удалить из Control Center' })).toBeHidden();
+      await expect(page.getByRole('button', { name: 'Удалить из Control Center' })).toBeVisible();
       await expect(
         page.getByText('Метаданные ещё не пересматривались', { exact: true }),
       ).toBeHidden();

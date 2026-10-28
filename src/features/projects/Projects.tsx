@@ -4,6 +4,7 @@ import type { Project } from '../../../shared/contracts';
 import { statusLabels, typeLabels, date, priorityLabels } from '../../shared/labels';
 import { useWorkspace } from '../../shared/workspace';
 import { RecentHistoryResult, type RecentHistoryState } from '../history/RecentHistory';
+import { RemoveProject } from './RemoveProject';
 export function ProjectCard({
   project,
   overview = false,
@@ -41,8 +42,16 @@ export function ProjectCard({
         {project.metadata.priority === 'high' && <p className="priority">↑ Высокий приоритет</p>}
         {project.metadata.stage && <p className="help">Этап · {project.metadata.stage}</p>}
         <p className="project-goal preserve">{project.metadata.goal || 'Цель пока не записана.'}</p>
-        {overview && !project.available && (
+        {!project.available && (
           <p className="warning-text">Каталог недоступен · сохранённый снимок</p>
+        )}
+        {!project.available && (
+          <p className="help">
+            Последний доступный снимок:{' '}
+            <time dateTime={project.snapshot.scannedAt}>
+              {new Date(project.snapshot.scannedAt).toLocaleString('ru')}
+            </time>
+          </p>
         )}
       </div>
       <div className="project-focus">
@@ -86,14 +95,16 @@ export function ProjectCard({
             )}
           </div>
         )}
-        <details open={overview ? undefined : true} className="project-snapshot">
+        <details className="project-snapshot">
           <summary>Файлы и проверки</summary>
-          <p className="help">
-            {project.available ? 'Снимок файлов:' : 'Последний доступный снимок:'}{' '}
-            <time dateTime={project.snapshot.scannedAt}>
-              {new Date(project.snapshot.scannedAt).toLocaleString('ru')}
-            </time>
-          </p>
+          {project.available && (
+            <p className="help">
+              Снимок файлов:{' '}
+              <time dateTime={project.snapshot.scannedAt}>
+                {new Date(project.snapshot.scannedAt).toLocaleString('ru')}
+              </time>
+            </p>
+          )}
           <p>{checks.length} активных проверок</p>
           <p className="help">
             Внешний шаг: {action ? date(action) : 'нет записи в активных проверках'}
@@ -103,13 +114,22 @@ export function ProjectCard({
               ? `Git: ${date(project.snapshot.git.commits[0]?.date)}`
               : 'Без Git'}
           </p>
-          {!project.available ? (
-            <p className="warning-text">Каталог недоступен · сохранённый снимок</p>
-          ) : (
-            project.snapshot.git.dirty && <p className="help">Есть незакоммиченные изменения</p>
+          {project.available && project.snapshot.git.dirty && (
+            <p className="help">Есть незакоммиченные изменения</p>
           )}
         </details>
       </div>
+      {!overview && (
+        <div className="project-card-actions">
+          <Link className="button primary" to={`/projects/${project.id}`}>
+            Открыть проект →
+          </Link>
+          <Link className="button" to={`/tasks?project=${project.id}`}>
+            Добавить задачу
+          </Link>
+          <RemoveProject id={project.id} name={project.metadata.name} />
+        </div>
+      )}
     </article>
   );
 }
@@ -143,7 +163,9 @@ export default function Projects() {
           <h1>
             Проекты <span className="count">{w!.projects.length}</span>
           </h1>
-          <p className="subtitle">Продукты, инструменты и эксперименты рядом.</p>
+          <p className="subtitle">
+            Откройте проект, чтобы продолжить работу. Все действия — рядом.
+          </p>
         </div>
         <Link className="button" to="/settings">
           Каталоги проектов

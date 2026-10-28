@@ -17,6 +17,8 @@ import { useWorkspace, useActions, workspaceKey } from '../../shared/workspace';
 import { UnsavedChanges } from '../../shared/UnsavedChanges';
 import { ProjectReview } from './ProjectReview';
 import { RecentHistory } from '../history/RecentHistory';
+import { RemoveProject } from './RemoveProject';
+import { Plus, NotebookPen, Settings2 } from 'lucide-react';
 
 function MetadataEditor({ project, onClose }: { project: Project; onClose: () => void }) {
   const { act, busy } = useActions();
@@ -628,8 +630,45 @@ export default function ProjectDetail() {
               Изменить сводку
             </button>
           )}
+          <RemoveProject
+            id={p.id}
+            name={p.metadata.name}
+            onRemoved={() => void navigate('/projects')}
+          />
         </div>
       </div>
+      <div className="project-action-bar" aria-label="Действия проекта">
+        <Link className="button primary" to={`/tasks?project=${p.id}`}>
+          <Plus size={17} aria-hidden="true" />
+          Добавить задачу
+        </Link>
+        <Link className="button" to={`/observations?project=${p.id}`}>
+          <NotebookPen size={17} aria-hidden="true" />
+          Записать наблюдение
+        </Link>
+        <button
+          aria-expanded={settingsOpen}
+          aria-controls="project-settings"
+          onClick={() => {
+            setSettingsOpen(!settingsOpen);
+            if (!settingsOpen)
+              requestAnimationFrame(() =>
+                document.getElementById('project-settings')?.scrollIntoView({ block: 'start' }),
+              );
+          }}
+        >
+          <Settings2 size={17} aria-hidden="true" />
+          Настройки проекта
+        </button>
+      </div>
+      <nav className="project-section-nav" aria-label="Разделы проекта">
+        <a href="#project-about">О проекте</a>
+        <a href="#project-tasks">
+          Задачи <span className="count">{tasks.length}</span>
+        </a>
+        <a href="#project-history">История</a>
+        <a href="#project-review">Итоги и развитие</a>
+      </nav>
       {!p.available && (
         <div className="message warning">
           Каталог недоступен или вне настроек. Показан сохранённый снимок.
@@ -640,7 +679,7 @@ export default function ProjectDetail() {
       )}
       <div className="project-dossier project-simple section-space">
         <div>
-          <section className="project-brief prose">
+          <section id="project-about" className="project-brief prose">
             <h2>О проекте</h2>
             <p className="preserve">{p.metadata.goal || 'Цель пока не описана.'}</p>
             {(workSignals.length > 0 || p.metadata.blocked_by.length > 0) && (
@@ -674,12 +713,12 @@ export default function ProjectDetail() {
               </section>
             )}
           </section>
-          <section className="section-space">
+          <section id="project-tasks" className="section-space">
             <div className="section-heading">
               <h2>
                 Задачи <span className="count">{tasks.length}</span>
               </h2>
-              <Link to={`/tasks?project=${p.id}`}>Добавить задачу →</Link>
+              <Link to={`/tasks?project=${p.id}`}>Все задачи →</Link>
             </div>
             <div className="panel compact-list">
               {tasks.slice(0, 5).map((t) => (
@@ -700,11 +739,12 @@ export default function ProjectDetail() {
               <Link to={`/tasks?project=${p.id}`}>Все задачи · {tasks.length} →</Link>
             </p>
           )}
-          <section className="section-space" aria-label="Последние записи проекта">
+          <section
+            id="project-history"
+            className="section-space"
+            aria-label="Последние записи проекта"
+          >
             <h2>Что происходило</h2>
-            <Link className="button" to={`/observations?project=${p.id}`}>
-              Записать наблюдение
-            </Link>
             {p.notes && (
               <details className="section-space">
                 <summary>Сохранённые заметки</summary>
@@ -717,14 +757,6 @@ export default function ProjectDetail() {
           <ProjectReview projectId={p.id} />
         </div>
         <aside>
-          <button
-            className="section-space"
-            aria-expanded={settingsOpen}
-            aria-controls="project-settings"
-            onClick={() => setSettingsOpen(!settingsOpen)}
-          >
-            Настройки проекта
-          </button>
           <div
             id="project-settings"
             className="panel section-space project-settings"
@@ -913,24 +945,6 @@ export default function ProjectDetail() {
               <Link to="/decisions">Все решения →</Link>
             </p>
             <DecisionFiles projectId={p.id} />
-            <button
-              className="section-space"
-              disabled={busy}
-              onClick={async () => {
-                if (
-                  confirm(
-                    `Удалить «${p.metadata.name}» из Control Center? Каталог и файлы останутся на диске. Записи будут отвязаны, локальная сводка и связи удалены, путь исключён из сканирования.`,
-                  ) &&
-                  (await act(
-                    () => api(`/projects/${p.id}`, 'DELETE'),
-                    'Проект удалён из Control Center',
-                  ))
-                )
-                  void navigate('/projects');
-              }}
-            >
-              Удалить из Control Center
-            </button>
           </div>
         </aside>
       </div>

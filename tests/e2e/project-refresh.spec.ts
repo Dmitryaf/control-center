@@ -43,6 +43,7 @@ test('failed automatic reads identify saved snapshots and recover on wide and na
   data.refresh.errors = [];
   await page.getByRole('button', { name: 'Повторить загрузку' }).click();
   await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.locator('.project-row').first().getByText('Файлы и проверки', { exact: true }).click();
   await expect(
     page.locator('.project-row').first().getByText('Снимок файлов:', { exact: false }),
   ).toBeVisible();

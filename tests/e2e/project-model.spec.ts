@@ -114,7 +114,7 @@ test('new, active, busy and paused projects explain work with bounded lists and 
     await mkdir('.local/product-model-review', { recursive: true });
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });
-      for (const [index, project] of projects.entries()) {
+      for (const index of projects.keys()) {
         await page.goto('/projects');
         await page.getByRole('searchbox', { name: 'Поиск проектов' }).fill(names[index]);
         await page.getByRole('link', { name: names[index], exact: true }).click();
@@ -164,7 +164,7 @@ test('new, active, busy and paused projects explain work with bounded lists and 
     await expect(
       page.getByText('Сравнивать результаты ухода без сложных таблиц.', { exact: true }),
     ).toBeVisible();
-    await page.getByRole('link', { name: 'Добавить задачу →' }).focus();
+    await page.getByRole('link', { name: 'Добавить задачу', exact: true }).focus();
     await page.keyboard.press('Enter');
     await page.getByLabel('Название задачи', { exact: true }).fill('Записать полив');
     await page.getByLabel('Название задачи', { exact: true }).press('Enter');

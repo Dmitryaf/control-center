@@ -63,7 +63,7 @@ test('complete personal workspace workflow from an empty database', async ({ pag
       .selectOption({ label: 'local-tool' });
     await page.getByRole('button', { name: 'Добавить связь' }).click();
     await expect(page.getByRole('status')).toContainText('Связь добавлена');
-    await page.getByRole('link', { name: 'Добавить задачу →' }).click();
+    await page.getByRole('link', { name: 'Добавить задачу', exact: true }).click();
     await page.getByLabel('Название задачи').fill('Проверить выпуск');
     await expect(page.getByRole('combobox', { name: 'Когда', exact: true })).toHaveCount(0);
     await page.getByLabel('Название задачи').press('Enter');

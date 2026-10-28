@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { DraftProvider } from './shared/UnsavedChanges';
 import { useWorkspace, useActions } from './shared/workspace';
 import { api } from './shared/http';
+import { LayoutDashboard, FolderOpen, ListTodo, History, Sparkles, Settings } from 'lucide-react';
 
 export default function App() {
   const query = useWorkspace();
@@ -63,8 +64,7 @@ export default function App() {
             '/period-proposal',
             '/proposal-acceptances',
             '/codex-context',
-          ].includes(location.pathname)) ||
-        (path === '/projects' && location.pathname === '/analysis');
+          ].includes(location.pathname));
   return (
     <div className="shell">
       <a className="skip-link" href="#content">
@@ -81,18 +81,21 @@ export default function App() {
         </Link>
         <nav aria-label="Основная навигация">
           {[
-            ['/', 'Обзор'],
-            ['/projects', 'Проекты'],
-            ['/tasks', 'Задачи'],
-            ['/timeline', 'История'],
-          ].map(([path, label]) => (
+            { path: '/', label: 'Обзор', icon: LayoutDashboard },
+            { path: '/projects', label: 'Проекты', icon: FolderOpen },
+            { path: '/tasks', label: 'Задачи', icon: ListTodo },
+            { path: '/timeline', label: 'История', icon: History },
+            { path: '/analysis', label: 'Анализ проектов', icon: Sparkles },
+            { path: '/settings', label: 'Настройки', icon: Settings },
+          ].map(({ path, label, icon: Icon }) => (
             <Link
               key={path}
               to={path}
               aria-current={selected(path) ? 'page' : undefined}
               className={selected(path) ? 'selected' : ''}
             >
-              {label}
+              <Icon size={18} aria-hidden="true" />
+              <span className="navigation-label">{label}</span>
             </Link>
           ))}
           <details
@@ -106,7 +109,6 @@ export default function App() {
                 ['/checks', 'Проверки'],
                 ['/ideas', 'Идеи'],
                 ['/decisions', 'Решения'],
-                ['/settings', 'Настройки'],
               ].map(([path, label]) => (
                 <Link
                   key={path}

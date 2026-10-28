@@ -19,7 +19,11 @@ export function ProjectReview({ projectId }: { projectId: string }) {
   });
   const review = query.data;
   return (
-    <section className="panel section-space project-development" aria-label="Итоги проекта">
+    <section
+      id="project-review"
+      className="panel section-space project-development"
+      aria-label="Итоги проекта"
+    >
       <h2>Итоги и развитие</h2>
       {query.isPending && <p role="status">Загружаем последний обзор…</p>}
       {query.error && (

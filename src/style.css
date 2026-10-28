@@ -1,4 +1,5 @@
 @import './styles/workspace.css';
+@import './styles/workspace-ui.css';
 @import './features/checks/checks.css';
 :root {
   font-family:
@@ -7,15 +8,15 @@
     BlinkMacSystemFont,
     sans-serif;
   color: #282e32;
-  background: #f6f4ee;
+  background: #f4f6f5;
   font-synthesis: none;
   font-size: 14px;
   line-height: 1.55;
   --muted: #646a6a;
-  --line: #d5d4cb;
-  --ink: #242f36;
-  --accent: #28566b;
-  --paper: #fffefa;
+  --line: #dce3df;
+  --ink: #233d35;
+  --accent: #226650;
+  --paper: #ffffff;
   --attention: #785713;
   --decision: #8a421e;
 }

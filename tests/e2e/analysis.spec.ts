@@ -82,7 +82,7 @@ test('selected saved payload → explicit approval → proposals → one edited 
       .getByText('Краткий разбор текущего состояния — без сохранения обзора', { exact: true })
       .click();
     await expect(
-      page.getByRole('navigation').getByRole('link', { name: 'Проекты', exact: true }),
+      page.getByRole('navigation').getByRole('link', { name: 'Анализ проектов', exact: true }),
     ).toHaveAttribute('aria-current', 'page');
     await expect(
       page.getByRole('button', { name: 'Просмотреть данные', exact: true }),
