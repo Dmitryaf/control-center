@@ -29,6 +29,8 @@ In PowerShell, use `npm.cmd` instead of `npm`.
 
 Open [Control Center](http://127.0.0.1:4310). Add the folders containing your projects in settings, then scan them. Open a project, describe its purpose and add your first task or note. Both repositories and ordinary project folders are supported.
 
+On Windows, you can also [create a desktop shortcut](SETUP.md#windows-desktop-shortcut) to open the app with a double-click.
+
 ## Your data
 
 Tasks, notes and reviews are stored on your computer. There are no accounts or cloud sync. You can create a backup in settings; project files need their own backup.

@@ -1,7 +1,7 @@
 import express, { type ErrorRequestHandler } from 'express';
 import path from 'node:path';
-import { mkdirSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { mkdirSync, realpathSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
 import { z, ZodError } from 'zod';
 import {
   metadataSchema,
@@ -69,6 +69,13 @@ export function createApp(
     next();
   });
   app.use(express.json({ limit: '256kb' }));
+  const instancePaths = `${realpathSync(process.cwd())}\n${path.resolve(store.path)}`;
+  const instance = createHash('sha256')
+    .update(process.platform === 'win32' ? instancePaths.toLowerCase() : instancePaths)
+    .digest('hex');
+  app.get('/api/health', (_req, res) =>
+    res.json({ application: 'control-center', instance, pid: process.pid }),
+  );
   app.get('/api/codex-context/digests', (req, res) => res.json(codex.list(req.query)));
   app.post('/api/codex-context/prepare', async (req, res) =>
     res.json(await codex.prepare(req.body)),

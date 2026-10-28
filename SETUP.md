@@ -2,6 +2,18 @@
 
 Optional integrations, backups and other details for running Control Center. For a short introduction and first launch, see the [README](README.md).
 
+## Windows desktop shortcut
+
+After installing Node.js and running `npm ci`, run this once from the project folder:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-shortcut.ps1
+```
+
+Double-click **Control Center** on your desktop. It starts the app without a terminal window and opens your default browser. Further clicks reopen the running app. Keep the project folder in place; the shortcut points to it.
+
+The launcher uses the current source files. The server stays running when you close the browser, so refresh and any enabled review schedules can continue. It does not start automatically when Windows starts. Restart the server after updating backend code. A busy port is reported without stopping another program. Startup logs are stored in `.local/launcher/`.
+
 ## Reviews and analysis
 
 Open project analysis, select one or more projects and a week or month, then prepare a period review. You can also open reviews from a project page. Your own text is saved independently of AI results. A period retains its original timezone and calendar boundaries.
