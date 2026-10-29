@@ -31,7 +31,16 @@ try {
     $data = if ($env:CONTROL_CENTER_DATA_DIR) {
         if ([IO.Path]::IsPathRooted($env:CONTROL_CENTER_DATA_DIR)) { $env:CONTROL_CENTER_DATA_DIR }
         else { Join-Path $root $env:CONTROL_CENTER_DATA_DIR }
-    } else { Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'ControlCenter' }
+    } else {
+        $profileDirectory = if ($env:USERPROFILE) { $env:USERPROFILE } else { [Environment]::GetFolderPath('UserProfile') }
+        $stableData = Join-Path $profileDirectory '.control-center'
+        $localData = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $profileDirectory 'AppData\Local' }
+        $legacyDatabase = Join-Path $localData 'ControlCenter\control-center.sqlite'
+        if (-not (Test-Path -LiteralPath (Join-Path $stableData 'control-center.sqlite')) -and (Test-Path -LiteralPath $legacyDatabase)) {
+            throw 'Найдена прежняя база Control Center в AppData. Перенесите её в %USERPROFILE%\.control-center по инструкции Storage, backup and restore в SETUP.md. Пустая база не создана. Для явного выбора прежнего каталога используйте CONTROL_CENTER_DATA_DIR.'
+        }
+        $stableData
+    }
     $database = [IO.Path]::GetFullPath((Join-Path $data 'control-center.sqlite'))
     $sha = [Security.Cryptography.SHA256]::Create()
     try {

@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { Store } from '../server/db.js';
+import { Records } from '../server/records.js';
 
 test(
   'Windows desktop launcher: cold start, repeated/concurrent clicks, foreign port and recovery',
@@ -21,7 +23,11 @@ test(
     const port = address.port;
     const base = `http://127.0.0.1:${port}`;
     let serverPid: number | undefined;
-    const launch = (dataDirectory = data) =>
+    const launch = (
+      dataDirectory: string | null = data,
+      profile = process.env.USERPROFILE,
+      localData = process.env.LOCALAPPDATA,
+    ) =>
       new Promise<{ code: number | null; output: string }>((resolve, reject) => {
         const child = spawn(
           'powershell.exe',
@@ -40,7 +46,9 @@ test(
             env: {
               ...process.env,
               PORT: String(port),
-              CONTROL_CENTER_DATA_DIR: dataDirectory,
+              CONTROL_CENTER_DATA_DIR: dataDirectory ?? '',
+              USERPROFILE: profile,
+              LOCALAPPDATA: localData,
               OPENAI_API_KEY: '',
               CONTROL_CENTER_OPENAI_MODEL: '',
             },
@@ -97,6 +105,55 @@ test(
       assert.equal(restarted.code, 0, restarted.output);
       const workspace = await (await fetch(`${base}/api/workspace`)).json();
       assert.ok(workspace.tasks.some((saved: { id: string }) => saved.id === task.id));
+
+      process.kill(serverPid!);
+      serverPid = undefined;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const profile = path.join(data, 'profile');
+      const localData = path.join(data, 'desktop-local');
+      const legacy = path.join(localData, 'ControlCenter');
+      const stable = path.join(profile, '.control-center', 'control-center.sqlite');
+      await mkdir(legacy, { recursive: true });
+      await writeFile(path.join(legacy, 'control-center.sqlite'), 'legacy database sentinel');
+      const needsMigration = await launch(null, profile, localData);
+      assert.equal(needsMigration.code, 1);
+      assert.match(needsMigration.output, /SETUP\.md/);
+      await assert.rejects(
+        access(stable),
+        'Legacy data must not be hidden by a new empty database',
+      );
+      const selected = new Store(stable);
+      const selectedTask = new Records(selected).save('tasks', { title: 'Selected profile task' });
+      selected.close();
+      const defaultLaunch = await launch(null, profile, localData);
+      assert.equal(defaultLaunch.code, 0, defaultLaunch.output);
+      serverPid = (await (await fetch(`${base}/api/health`)).json()).pid;
+      const selectedWorkspace = await (await fetch(`${base}/api/workspace`)).json();
+      assert.equal(selectedWorkspace.storage.databasePath, stable);
+      assert.equal(selectedWorkspace.tasks[0].id, selectedTask.id);
+      const packagedLocal = path.join(data, 'packaged-local');
+      const sameProfile = await launch(null, profile, packagedLocal);
+      assert.equal(sameProfile.code, 0, sameProfile.output);
+      assert.equal((await (await fetch(`${base}/api/health`)).json()).pid, serverPid);
+      const profileTask = await fetch(`${base}/api/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Control-Center': '1' },
+        body: JSON.stringify({ title: 'Shared profile restart check' }),
+      });
+      assert.equal(profileTask.status, 201);
+      const savedProfileTask = await profileTask.json();
+      process.kill(serverPid!);
+      serverPid = undefined;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const defaultRestart = await launch(null, profile, packagedLocal);
+      assert.equal(defaultRestart.code, 0, defaultRestart.output);
+      serverPid = (await (await fetch(`${base}/api/health`)).json()).pid;
+      const defaultWorkspace = await (await fetch(`${base}/api/workspace`)).json();
+      assert.equal(defaultWorkspace.storage.databasePath, stable);
+      assert.deepEqual(
+        defaultWorkspace.tasks.map((saved: { id: string }) => saved.id).sort(),
+        [selectedTask.id, savedProfileTask.id].sort(),
+      );
     } finally {
       foreign.closeAllConnections();
       foreign.close();

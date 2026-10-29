@@ -306,7 +306,7 @@ test('stable data paths and verified backups include WAL data', async (t) => {
   copy.close();
   assert.equal(
     dataDirectory({ LOCALAPPDATA: f.root }, 'win32', f.root),
-    path.join(f.root, 'ControlCenter'),
+    path.join(f.root, '.control-center'),
   );
   assert.equal(
     dataDirectory({ XDG_DATA_HOME: f.root }, 'linux', f.root),

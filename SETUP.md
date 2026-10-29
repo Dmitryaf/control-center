@@ -74,11 +74,15 @@ Repository visibility, private-context links and exact-path publication confirma
 
 SQLite stores settings, project snapshots, manual data, history, reviews, analysis packets/results, permissions and accepted proposals. The default `control-center.sqlite` location is:
 
-- Windows: `%LOCALAPPDATA%/ControlCenter`
+- Windows: `%USERPROFILE%/.control-center`
 - macOS: `~/Library/Application Support/ControlCenter`
 - Linux: `$XDG_DATA_HOME/control-center` or `~/.local/share/control-center`
 
 `CONTROL_CENTER_DATA_DIR` overrides the directory. Creating a backup in settings captures committed WAL data and verifies the copy. Backups contain private data; store them privately. Repository files, dialog archives and private-context documents are not included.
+
+Windows previously used `%LOCALAPPDATA%/ControlCenter`. Packaged apps can redirect that location to their own `LocalCache/Local/ControlCenter`, so a desktop shortcut and a terminal inside a packaged app could open separate databases. The profile directory above avoids that redirection for HTTP, MCP and the desktop launcher. When the new database is absent and an old one is found, startup stops instead of creating an empty database.
+
+For an existing Windows installation, inspect the database path in Settings in each previous launch environment and create a verified backup of the copy containing your records. If copies differ, keep both; do not overwrite or merge them blindly. Stop all HTTP and MCP writers, create `%USERPROFILE%/.control-center` and restore the chosen verified backup there using the steps below. Keep the original files and backups until records have been checked after launching from both the desktop shortcut and the terminal. A temporary explicit `CONTROL_CENTER_DATA_DIR` can still select a previous directory; an AppData override remains subject to Windows redirection.
 
 Verified backups disable schedule/Codex grants and cancel pending analysis approvals in the copy; running attempts become unknown. Completed reports and accepted evidence remain intact. Ordinary restart retains current permissions and is not restoration.
 
