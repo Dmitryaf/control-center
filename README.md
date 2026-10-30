@@ -14,6 +14,16 @@ The app runs on your computer and opens in your browser. The interface is in Rus
 
 Each project page shows its description, current tasks, recent history and latest review.
 
+## Screenshots
+
+### Overview
+
+![Project overview with current tasks and recent results](assets/screenshots/overview.png)
+
+### Ideas
+
+![Idea editor and ideas linked to projects](assets/screenshots/ideas.png)
+
 ## Get started
 
 Install **Node.js 22.17+** and **Git**, then run:
