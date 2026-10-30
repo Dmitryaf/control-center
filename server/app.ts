@@ -27,6 +27,7 @@ import { CodexContext } from './codex/context.js';
 import { ProposalAcceptances } from './analysis/acceptances.js';
 import { AnalysisSchedules } from './analysis/schedules.js';
 import { PeriodAnalysis } from './analysis/period-analysis.js';
+import { CodexAnalysis } from './codex/analysis.js';
 
 export function createApp(
   store: Store,
@@ -34,6 +35,7 @@ export function createApp(
   analysis = new ProjectAnalysis(store),
   suppliedPeriodAnalysis?: PeriodAnalysis,
   suppliedCodex?: CodexContext,
+  suppliedCodexAnalysis?: CodexAnalysis,
 ) {
   const app = express();
   const projects = new Projects(store);
@@ -47,6 +49,7 @@ export function createApp(
   const reviews = new Reviews(store);
   const acceptances = new ProposalAcceptances(store, periodAnalysis);
   const codex = suppliedCodex ?? new CodexContext(store);
+  const codexAnalysis = suppliedCodexAnalysis ?? new CodexAnalysis(store, history, periodAnalysis);
   const schedules = new AnalysisSchedules(store, periodAnalysis, Date.now, codex);
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   app.disable('x-powered-by');
@@ -148,8 +151,38 @@ export function createApp(
   app.post('/api/period-analysis/:id/run', async (req, res) =>
     res.json(await periodAnalysis.run(req.params.id, req.body)),
   );
-  app.post('/api/period-analysis/:id/cancel', (req, res) =>
-    res.json(periodAnalysis.cancel(req.params.id)),
+  app.post('/api/period-analysis/:id/cancel', (req, res) => {
+    const run = periodAnalysis.cancel(req.params.id);
+    codexAnalysis.abort(req.params.id);
+    res.json(run);
+  });
+  app.get('/api/codex-analysis/status', async (_req, res) =>
+    res.json(await codexAnalysis.status()),
+  );
+  app.post('/api/codex-analysis/login', async (req, res) => {
+    z.object({ confirm: z.literal(true) })
+      .strict()
+      .parse(req.body);
+    res.json(await codexAnalysis.login());
+  });
+  app.post('/api/codex-analysis/login/cancel', async (req, res) => {
+    z.object({ confirm: z.literal(true) })
+      .strict()
+      .parse(req.body);
+    res.json(await codexAnalysis.cancelLogin());
+  });
+  app.post('/api/codex-analysis/files', async (req, res) =>
+    res.json(await codexAnalysis.files(req.body)),
+  );
+  app.get('/api/codex-analysis/conversation', (req, res) =>
+    res.json(codexAnalysis.conversation(req.query)),
+  );
+  app.post('/api/codex-analysis/prepare', async (req, res) =>
+    res.status(201).json(await codexAnalysis.prepare(req.body)),
+  );
+  app.get('/api/codex-analysis/:id', (req, res) => res.json(codexAnalysis.read(req.params.id)));
+  app.post('/api/codex-analysis/:id/start', async (req, res) =>
+    res.status(202).json(await codexAnalysis.start(req.params.id, req.body)),
   );
   app.delete('/api/period-analysis/:id', (req, res) => {
     z.object({ confirm: z.literal(true) })
@@ -429,5 +462,5 @@ export function createApp(
         .json({ error: 'Операция не выполнена. Проверьте доступ к файлам и повторите.' });
   };
   app.use(onError);
-  return { app, projects, refresh, analysis, periodAnalysis, schedules, codex };
+  return { app, projects, refresh, analysis, periodAnalysis, schedules, codex, codexAnalysis };
 }

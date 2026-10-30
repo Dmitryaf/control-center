@@ -284,6 +284,11 @@ time {
     overflow-y: auto;
     font-size: 0.9rem;
   }
+  .codex-file-picker {
+    max-height: 18rem;
+    overflow: auto;
+    overflow-wrap: anywhere;
+  }
   .proposal {
     border-top: 1px solid var(--line);
     padding: 18px 0;

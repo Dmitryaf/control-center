@@ -24,19 +24,22 @@ const stateLabel: Record<PeriodRunState, string> = {
   unknown: 'Результат неизвестен',
   cancelled: 'Пакет отменён',
 };
-function RunDetail({
+export function RunDetail({
   run,
   status,
   onDeleted,
+  embedded = false,
 }: {
   run: PeriodRun;
   status: AnalysisStatus | undefined;
   onDeleted: () => void;
+  embedded?: boolean;
 }) {
   const client = useQueryClient();
   const { act, busy } = useActions();
   const [approved, setApproved] = useState(false);
   const manual = run.origin === 'codex_manual';
+  const runtime = run.origin === 'codex_runtime';
   useEffect(() => setApproved(false), [run.id, run.packetHash]);
   const refresh = async () => {
     await client.invalidateQueries({ queryKey: ['period-runs', run.reviewKey] });
@@ -60,9 +63,11 @@ function RunDetail({
         <span className="signal-label">{stateLabel[run.status]}</span>
       </div>
       <p className="help">
-        {manual
-          ? 'Источник: Codex · внесён вручную; API-запрос не выполнялся'
-          : `Модель: ${run.model || 'Не настроена'}`}{' '}
+        {runtime
+          ? `Источник: Codex · запущен из Control Center · ${run.model === 'codex-default' ? 'модель по умолчанию CLI' : run.model}`
+          : manual
+            ? 'Источник: Codex · внесён вручную; API-запрос не выполнялся'
+            : `Модель: ${run.model || 'Не настроена'}`}{' '}
         · {date(run.payload.period.from)} — {date(run.payload.period.to)} ·{' '}
         {run.payload.period.timezone}
       </p>
@@ -95,7 +100,7 @@ function RunDetail({
       )}
       {run.report && (
         <div className="section-space prose">
-          <h3>{manual ? 'Анализ Codex' : 'AI-обзор'}</h3>
+          <h3>{manual || runtime ? 'Анализ Codex' : 'AI-обзор'}</h3>
           <p className="preserve">{run.report.narrative}</p>
           {(run.report.findings.length > 0 || run.report.uncertainties.length > 0) && (
             <details>
@@ -156,9 +161,11 @@ function RunDetail({
             </>
           )}
           <p className="help">
-            {manual
-              ? 'Это готовый анализ, внесённый из Codex вместе с основаниями; приложение не проверяло исходный сеанс.'
-              : 'Это вывод модели по сохранённому пакету.'}{' '}
+            {runtime
+              ? 'Это ответ Codex по сохранённому пакету. Обсуждение и каждый вариант ответа хранятся в Control Center.'
+              : manual
+                ? 'Это готовый анализ, внесённый из Codex вместе с основаниями; приложение не проверяло исходный сеанс.'
+                : 'Это вывод модели по сохранённому пакету.'}{' '}
             Он не доказывает правильность текста и не заменяет ваш итог. Задачи и идеи автоматически
             не создаются.
           </p>
@@ -166,14 +173,16 @@ function RunDetail({
       )}
       <details open={run.status === 'pending'}>
         <summary>
-          {manual ? 'Сохранённые основания и ограничения' : 'Точный пакет и ограничения'}
+          {manual || runtime ? 'Сохранённые основания и ограничения' : 'Точный пакет и ограничения'}
         </summary>
         <p className="help">
           Пакет сохранён: {new Date(run.createdAt).toLocaleString('ru')}. Источников:{' '}
           {run.payload.sources.length}.
-          {manual
-            ? ' Модель и токены внешнего сеанса не зафиксированы.'
-            : ` Лимит: ${status?.maxInputBytes ?? 80000} байт / ${status?.maxOutputTokens ?? 3000} выходных токенов.`}
+          {runtime
+            ? ' Файлы и предыдущие ответы входят только явным выбором; внешние инструменты отключены.'
+            : manual
+              ? ' Модель и токены внешнего сеанса не зафиксированы.'
+              : ` Лимит: ${status?.maxInputBytes ?? 80000} байт / ${status?.maxOutputTokens ?? 3000} выходных токенов.`}
         </p>
         <p className="help">
           Проверьте личные сведения и секреты: автоматический фильтр не гарантирует их отсутствия.
@@ -182,7 +191,14 @@ function RunDetail({
         <pre className="analysis-packet">{JSON.stringify(run.payload, null, 2)}</pre>
         <p className="source-path">Hash: {run.packetHash}</p>
       </details>
-      {run.status === 'pending' && (
+      {runtime && !embedded && (
+        <p>
+          <Link to={`/codex-analysis?review=${run.reviewKey}&run=${run.id}`}>
+            Открыть обсуждение с Codex →
+          </Link>
+        </p>
+      )}
+      {run.status === 'pending' && !runtime && (
         <div className="form section-space">
           <label className="check">
             <input
@@ -235,16 +251,26 @@ function RunDetail({
           Отменить этот запуск
         </button>
       )}
-      {run.usage && (
+      {run.usage && !runtime && (
         <p className="help section-space">
           Фактические токены: вход {run.usage.inputTokens}, выход {run.usage.outputTokens}. Денежная
           стоимость не рассчитывается.
         </p>
       )}
-      {run.responseId && <p className="source-path">Response ID: {run.responseId}</p>}
+      {run.responseId && !runtime && <p className="source-path">Response ID: {run.responseId}</p>}
       {run.rawOutput && (
         <details className="section-space">
-          <summary>Исходный текст ответа</summary>
+          <summary>
+            {runtime ? 'Сведения о запуске и исходный ответ' : 'Исходный текст ответа'}
+          </summary>
+          {runtime && run.usage && (
+            <p className="help">
+              Токены: вход {run.usage.inputTokens}, выход {run.usage.outputTokens}.
+            </p>
+          )}
+          {runtime && run.responseId && (
+            <p className="source-path">Codex execution ID: {run.responseId}</p>
+          )}
           <pre className="analysis-packet">{run.rawOutput}</pre>
         </details>
       )}

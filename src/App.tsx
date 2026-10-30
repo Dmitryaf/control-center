@@ -54,6 +54,7 @@ export default function App() {
     path === '/'
       ? location.pathname === '/'
       : location.pathname.startsWith(path) ||
+        (path === '/analysis' && location.pathname === '/codex-analysis') ||
         (path === '/tasks' && location.pathname === '/history') ||
         (path === '/timeline' &&
           [

@@ -168,10 +168,7 @@ export class PeriodAnalysis {
   }
   private summary(row: RunRow): PeriodRunSummary {
     return {
-      origin:
-        (JSON.parse(row.payload_json) as PeriodPayload).origin?.kind === 'codex_manual'
-          ? 'codex_manual'
-          : 'openai',
+      origin: (JSON.parse(row.payload_json) as PeriodPayload).origin?.kind ?? 'openai',
       id: row.id,
       reviewId: row.review_id,
       reviewKey: row.review_key,
@@ -414,7 +411,7 @@ export class PeriodAnalysis {
       if (previous) {
         if (
           previous.request_hash !== requestHash &&
-          ((JSON.parse(previous.payload_json) as PeriodPayload).origin?.kind === 'codex_manual' ||
+          ((JSON.parse(previous.payload_json) as PeriodPayload).origin !== undefined ||
             digest({
               reviewId: previous.review_key,
               selection: normalizeSelection(JSON.parse(previous.selection_json)),
@@ -493,6 +490,8 @@ export class PeriodAnalysis {
   }
   async run(id: string, input: unknown): Promise<PeriodRun> {
     const data = periodRunSchema.parse(input);
+    if ((JSON.parse(this.row(id).payload_json) as PeriodPayload).origin?.kind === 'codex_runtime')
+      throw new HttpError(403, 'Этот пакет запускается только через встроенный Codex.');
     this.recover();
     let claimed = false;
     this.store.transaction(() => {

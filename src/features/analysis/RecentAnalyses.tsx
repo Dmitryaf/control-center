@@ -36,10 +36,16 @@ export function SavedAnalyses({ projectIds }: { projectIds: string[] }) {
         <article key={run.id}>
           <h3>{run.projectName}</h3>
           <p>
-            {run.origin === 'codex_manual' ? 'Codex · внесён вручную' : `OpenAI · ${run.model}`} ·{' '}
-            {new Date(run.createdAt).toLocaleString('ru')} · Вариант {run.generation}
+            {run.origin === 'codex_runtime'
+              ? 'Codex · Control Center'
+              : run.origin === 'codex_manual'
+                ? 'Codex · внесён вручную'
+                : `OpenAI · ${run.model}`}{' '}
+            · {new Date(run.createdAt).toLocaleString('ru')} · Вариант {run.generation}
           </p>
-          <Link to={`/period-analysis?review=${run.reviewKey}&run=${run.id}`}>
+          <Link
+            to={`/${run.origin === 'codex_runtime' ? 'codex-analysis' : 'period-analysis'}?review=${run.reviewKey}&run=${run.id}`}
+          >
             Открыть анализ →
           </Link>
         </article>

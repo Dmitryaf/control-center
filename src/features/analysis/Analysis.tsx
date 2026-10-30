@@ -161,8 +161,29 @@ export default function Analysis() {
         </p>
         <button
           className="primary"
+          type="button"
           disabled={working || !selection.length || selection.length > 10}
+          onClick={() =>
+            void action(async (current) => {
+              const review = await api<Review>('/reviews', 'POST', {
+                projectId: selection.length === 1 ? selection[0] : null,
+                kind,
+                anchorDate,
+              });
+              if (current())
+                navigate(
+                  `/codex-analysis?review=${review.id}&projects=${encodeURIComponent(selection.join(','))}`,
+                );
+            })
+          }
         >
+          Анализировать через Codex
+        </button>
+        <p className="help">
+          Запрос и уточнения — в Control Center через установленный Codex CLI. Ниже доступен прежний
+          анализ через OpenAI API.
+        </p>
+        <button disabled={working || !selection.length || selection.length > 10}>
           Подготовить обзор периода
         </button>
       </form>

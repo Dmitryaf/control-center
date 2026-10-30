@@ -18,6 +18,7 @@ import CodexContext from './features/codex-context/CodexContext';
 import Acceptances, { Proposal } from './features/period-analysis/Proposals';
 import Schedules from './features/period-analysis/Schedules';
 import PeriodAnalysis from './features/period-analysis/PeriodAnalysis';
+import CodexAnalysis from './features/codex-analysis/CodexAnalysis';
 import './style.css';
 import './styles/components.css';
 const router = createBrowserRouter([
@@ -42,6 +43,7 @@ const router = createBrowserRouter([
       { path: '/ideas', element: <Ideas /> },
       { path: '/decisions', element: <Decisions /> },
       { path: '/analysis', element: <Analysis /> },
+      { path: '/codex-analysis', element: <CodexAnalysis /> },
       { path: '/settings', element: <Settings /> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],

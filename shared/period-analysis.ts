@@ -103,8 +103,17 @@ export interface PeriodSource {
   dateQuality: string;
   partial: boolean;
 }
+export interface CodexRunOrigin {
+  kind: 'codex_runtime';
+  purpose: 'project_review';
+  sessionId: string;
+  parentRunId: string | null;
+  question: string;
+  policy: string;
+  files: { projectId: string; path: string }[];
+}
 export interface PeriodPayload {
-  origin?: { kind: 'codex_manual'; purpose?: 'project_review' };
+  origin?: { kind: 'codex_manual'; purpose?: 'project_review' } | CodexRunOrigin;
   policyVersion: string;
   preparedAt: string;
   period: {
@@ -129,7 +138,7 @@ export interface PeriodPayload {
 export type PeriodRunState =
   'pending' | 'running' | 'succeeded' | 'failed' | 'unknown' | 'cancelled';
 export interface PeriodRunSummary {
-  origin?: 'openai' | 'codex_manual';
+  origin?: 'openai' | 'codex_manual' | 'codex_runtime';
   id: string;
   reviewId: string | null;
   reviewKey: string;
