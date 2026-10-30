@@ -12,18 +12,21 @@ const Drafts = createContext<((id: string, dirty: boolean) => void) | null>(null
 /** One router blocker aggregates independently edited forms. */
 export function DraftProvider({ children }: { children: ReactNode }) {
   const [drafts, setDrafts] = useState<Record<string, boolean>>({});
+  const currentDrafts = useRef<Record<string, boolean>>({});
   const dirty = Object.values(drafts).some(Boolean);
-  const blocker = useBlocker(dirty);
+  // Router callbacks can run in the same tick as a completed save. Read the
+  // current registration rather than a blocker boolean from the previous render.
+  const blocker = useBlocker(() => Object.values(currentDrafts.current).some(Boolean));
   const dialog = useRef<HTMLDialogElement>(null);
-  const update = useRef((id: string, value: boolean) =>
-    setDrafts((current) => {
-      if (current[id] === value || (!value && !(id in current))) return current;
-      const next = { ...current };
-      if (value) next[id] = true;
-      else delete next[id];
-      return next;
-    }),
-  ).current;
+  const update = useRef((id: string, value: boolean) => {
+    const current = currentDrafts.current;
+    if (current[id] === value || (!value && !(id in current))) return current;
+    const next = { ...current };
+    if (value) next[id] = true;
+    else delete next[id];
+    currentDrafts.current = next;
+    setDrafts(next);
+  }).current;
   useEffect(() => {
     if (blocker.state === 'blocked') dialog.current?.showModal();
   }, [blocker.state]);
