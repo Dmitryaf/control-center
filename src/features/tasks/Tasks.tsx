@@ -2,19 +2,76 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import type { Task, TaskInput, TaskHistoryPage } from '../../../shared/contracts';
-import { priorityLabels, lines, date } from '../../shared/labels';
+import { priorityLabels, date } from '../../shared/labels';
 import { api } from '../../shared/http';
 import { useActions, useWorkspace } from '../../shared/workspace';
 import { UnsavedChanges } from '../../shared/UnsavedChanges';
 import { useQuery } from '@tanstack/react-query';
 
-type Draft = TaskInput & {
-  linksText: string;
-  summary: string;
-  verified: string;
-  unverified: string;
-  remaining: string;
-};
+type Draft = Pick<TaskInput, 'title' | 'projectId' | 'priority' | 'description'>;
+const taskDraft = (t: Task): Draft => ({
+  title: t.title,
+  projectId: t.projectId,
+  priority: t.priority,
+  description: t.description,
+});
+function ResultEditor({ task, onClose }: { task: Task; onClose: () => void }) {
+  const { act, busy } = useActions();
+  const {
+    register,
+    handleSubmit,
+    getValues,
+    formState: { isDirty },
+  } = useForm({
+    defaultValues: { summary: task.result?.summary ?? '' },
+  });
+  return (
+    <form
+      className="panel form section-space"
+      aria-label={`Итог ${task.code}`}
+      onSubmit={handleSubmit(async ({ summary }) => {
+        const ok = await act(
+          () =>
+            api(`/tasks/${task.id}`, 'PUT', {
+              ...task,
+              result: { ...task.result, summary: summary.trim() },
+            }),
+          'Итог сохранён',
+        );
+        if (ok && getValues('summary') === summary) onClose();
+      })}
+    >
+      <UnsavedChanges dirty={isDirty} />
+      <h2>
+        Итог {task.code} · {task.title}
+      </h2>
+      <label>
+        Итог работы
+        <textarea
+          autoFocus
+          required
+          maxLength={10000}
+          rows={3}
+          placeholder="Что получилось? При необходимости добавьте проверки и оставшиеся вопросы."
+          {...register('summary')}
+        />
+      </label>
+      <div className="row">
+        <button className="primary" disabled={busy}>
+          Сохранить итог
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (!isDirty || confirm('Закрыть без сохранения итога?')) onClose();
+          }}
+        >
+          Отмена
+        </button>
+      </div>
+    </form>
+  );
+}
 export default function Tasks() {
   const { data: w } = useWorkspace();
   const { act, busy } = useActions();
@@ -22,23 +79,14 @@ export default function Tasks() {
   const [filter, setFilter] = useState(params.get('project') || '');
   const [done, setDone] = useState(false);
   const [search, setSearch] = useState('');
-  const [editing, setEditing] = useState<{ id: string; revision: number } | null>(null);
+  const [editing, setEditing] = useState<Task | null>(null);
+  const [resultTask, setResultTask] = useState<Task | null>(null);
   const requestKey = useRef(crypto.randomUUID());
   const empty = (): Draft => ({
     title: '',
     description: '',
-    expectedResult: '',
-    acceptance: '',
-    links: [],
-    result: null,
     projectId: filter === '__general__' ? null : filter || null,
     priority: 'normal',
-    completedAt: null,
-    linksText: '',
-    summary: '',
-    verified: '',
-    unverified: '',
-    remaining: '',
   });
   const {
     register,
@@ -50,15 +98,8 @@ export default function Tasks() {
   } = useForm<Draft>({ defaultValues: empty() });
   const loadedIdentifier = useRef<string | null>(null);
   function edit(t: Task) {
-    setEditing({ id: t.id, revision: t.revision });
-    reset({
-      ...t,
-      linksText: t.links.join('\n'),
-      summary: t.result?.summary ?? '',
-      verified: t.result?.verified ?? '',
-      unverified: t.result?.unverified ?? '',
-      remaining: t.result?.remaining ?? '',
-    });
+    setEditing(t);
+    reset(taskDraft(t));
     requestAnimationFrame(() => setFocus('title'));
     window.scrollTo({ top: 0 });
   }
@@ -78,14 +119,12 @@ export default function Tasks() {
     requestKey.current = crypto.randomUUID();
   }
   async function save(v: Draft) {
-    const { linksText, summary, verified, unverified, remaining, ...task } = v;
     const ok = await act(
       () =>
         api(editing ? `/tasks/${editing.id}` : '/tasks', editing ? 'PUT' : 'POST', {
-          ...task,
-          projectId: task.projectId || null,
-          links: lines(linksText),
-          result: summary.trim() ? { summary, verified, unverified, remaining } : null,
+          ...editing,
+          ...v,
+          projectId: v.projectId || null,
           ...(editing ? { revision: editing.revision } : { requestKey: requestKey.current }),
         }),
       'Задача сохранена',
@@ -96,18 +135,28 @@ export default function Tasks() {
     return act(() => api(`/tasks/${t.id}`, 'PUT', { ...t, ...change }), 'Задача обновлена');
   }
   function finish(t: Task) {
+    if (
+      !t.completedAt &&
+      t.result?.remaining &&
+      !confirm(
+        `В последнем итоге оставалось:\n\n${t.result.remaining}\n\nВы выполнили эту работу и хотите завершить задачу? Прежний итог останется в истории.`,
+      )
+    )
+      return;
     return t.completedAt
       ? update(t, { completedAt: null })
       : act(
           () =>
             api(`/tasks/${t.id}/complete`, 'POST', {
               revision: t.revision,
-              result: t.result ?? {
-                summary: 'Владелец отметил задачу выполненной.',
-                verified: '',
-                unverified: 'Сведения о проверках не указаны.',
-                remaining: '',
-              },
+              result: t.result
+                ? { ...t.result, remaining: '' }
+                : {
+                    summary: 'Владелец отметил задачу выполненной.',
+                    verified: '',
+                    unverified: 'Сведения о проверках не указаны.',
+                    remaining: '',
+                  },
             }),
           'Задача обновлена',
         );
@@ -182,18 +231,10 @@ export default function Tasks() {
           </label>
           {textarea('description', 'Описание')}
         </div>
-        <details className="task-details">
-          <summary>Условия и результат работы</summary>
-          <div className="form-grid">
-            {textarea('expectedResult', 'Ожидаемый результат')}
-            {textarea('acceptance', 'Условия завершения')}
-            {textarea('linksText', 'Ссылки и номера решений, по одной в строке')}
-            {textarea('summary', 'Что сделано')}
-            {textarea('verified', 'Что проверено')}
-            {textarea('unverified', 'Что не удалось проверить')}
-            {textarea('remaining', 'Что осталось')}
-          </div>
-        </details>
+        <p className="help">
+          Достаточно названия. Условия готовности и ссылки можно добавить в описание. Итог —
+          отдельно, по ходу работы.
+        </p>
         <div className="row">
           <button className="primary" disabled={busy}>
             {editing ? 'Сохранить задачу' : 'Создать задачу'}
@@ -205,6 +246,13 @@ export default function Tasks() {
           )}
         </div>
       </form>
+      {resultTask && (
+        <ResultEditor
+          key={`${resultTask.id}:${resultTask.revision}`}
+          task={resultTask}
+          onClose={() => setResultTask(null)}
+        />
+      )}
       <div className="toolbar section-space">
         <label>
           Показать проект
@@ -307,6 +355,9 @@ export default function Tasks() {
                 {t.completedAt ? 'Вернуть' : 'Завершить'}
               </button>
               <button onClick={() => edit(t)}>Изменить</button>
+              <button onClick={() => setResultTask(t)}>
+                {t.result ? 'Изменить итог' : 'Добавить итог'}
+              </button>
               <Link to={`/history?task=${t.code}`}>История</Link>
               <button
                 disabled={busy}

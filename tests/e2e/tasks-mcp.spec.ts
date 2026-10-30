@@ -100,15 +100,16 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
       await card.getByRole('button', { name: 'Изменить', exact: true }).focus();
       await page.keyboard.press('Enter');
       await expect(page.getByLabel('Название задачи')).toBeFocused();
-      await page.locator('form').getByText('Условия и результат работы', { exact: true }).click();
-      await expect(page.getByLabel('Что сделано', { exact: true })).toHaveValue(
-        'Добавлен поиск обращений',
-      );
+      await expect(page.locator('form').first().getByRole('textbox')).toHaveCount(2);
+      await page.getByRole('button', { name: 'Отмена', exact: true }).click();
+      await card.getByRole('button', { name: 'Изменить итог', exact: true }).click();
+      await expect(
+        page
+          .getByRole('form', { name: `Итог ${found.code}`, exact: true })
+          .getByLabel('Итог работы', { exact: true }),
+      ).toHaveValue('Добавлен поиск обращений');
       await page.screenshot({ path: `.local/tasks-mcp-review/board-${width}.png`, fullPage: true });
       await page.getByRole('button', { name: 'Отмена', exact: true }).click();
-      await page
-        .locator('form details')
-        .evaluate((element) => ((element as HTMLDetailsElement).open = false));
     }
     // Explicit migration leaves metadata intact and does not duplicate tasks on repeat.
     await request.put(`/api/projects/${project.id}`, {

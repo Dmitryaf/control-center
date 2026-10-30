@@ -48,6 +48,8 @@ Synthetic evaluation belongs only in the offline developer workflow below. Do no
 
 Tasks have stable `CC-N` identifiers, revisions and saved results. A local stdio MCP server uses the same database without requiring the browser. Build the application, register projects in Settings, then configure an MCP client to launch Node with the absolute path to `dist/server/server/mcp/index.js`.
 
+The manual task form asks for a title; project, priority and description are optional. Put conditions and links in the description when needed. Add or edit a single work summary separately using **Добавить итог**; completion does not require filling a report. Existing expected results, acceptance conditions, links and structured evidence from MCP remain readable and are preserved by title/description/result edits. MCP continues to store `summary`, `verified`, `unverified` and `remaining` separately. If earlier results contain remaining work, the UI shows it and asks for confirmation before completion; confirming clears the current remaining steps while preserving the earlier result in immutable history. The MCP completion contract still requires an empty `remaining` value.
+
 For Codex CLI, replace the example installation path:
 
 ```sh
