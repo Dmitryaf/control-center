@@ -215,7 +215,8 @@ form.panel,
 .badge.paused {
   color: var(--attention);
 }
-.badge.completed {
+.badge.completed,
+.badge.stopped {
   color: #405e77;
 }
 .next-step {

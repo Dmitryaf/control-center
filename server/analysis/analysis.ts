@@ -1,3 +1,4 @@
+import { isTaskOpen } from '../../shared/task-status.js';
 import { randomUUID } from 'node:crypto';
 import {
   analysisSelectionSchema,
@@ -66,7 +67,7 @@ export class ProjectAnalysis {
         const metadata = row.metadata
           ? metadataSchema.parse(JSON.parse(row.metadata))
           : (snapshot.yaml.metadata ?? metadataSchema.parse({ name: snapshot.directoryName }));
-        const tasks = allTasks.filter((task) => task.projectId === id && !task.completedAt);
+        const tasks = allTasks.filter((task) => task.projectId === id && isTaskOpen(task));
         if (tasks.length > 200)
           throw new HttpError(
             400,

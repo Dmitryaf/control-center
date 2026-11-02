@@ -30,11 +30,19 @@ To restore:
 4. For a raw copy made outside the verified backup flow, first run `npm start -- --restore-recovery` (or `npm run dev -- --restore-recovery`) before starting other processes. Raw replacement is not automatically detectable.
 5. Inspect records/settings, restore external files separately if needed, refresh projects and explicitly renew permissions where desired.
 
-Supported older databases upgrade with a verified pre-upgrade backup and transactional compatibility checks. Stop older HTTP and MCP writers before upgrade. Schema 12 removes task `state` from current records and drops additional decision-directory settings. Task numbers, priorities, project links, results, completion dates and historical snapshots are preserved; external files are never deleted or imported. Old HTTP/MCP requests containing task `state` are rejected; update clients to use completion and priority. Existing pending AI packets and schedules must pass the current access guards again. Current schema is 12; the unused schema-1 prototype is unsupported. Downgrade requires restoring a compatible pre-upgrade copy, never opening a newer database with an older build. Restore replaces state; it does not merge databases.
+Supported older databases upgrade with a verified pre-upgrade backup and transactional compatibility checks. Stop older HTTP and MCP writers before upgrade. Schema 12 removes task `state` from current records and drops additional decision-directory settings. Task numbers, priorities, project links, results, completion dates and historical snapshots are preserved; external files are never deleted or imported. Old HTTP/MCP requests containing task `state` are rejected; update clients to use completion and priority. Existing pending AI packets and schedules must pass the current access guards again. Schema 13 adds project closure and reopening history without inventing dates or reasons for projects that were already completed. Schema 14 adds task cancellation history, preserving previous snapshots and task numbers. Existing closed projects are not changed retroactively. Current schema is 14; the unused schema-1 prototype is unsupported. Downgrade requires restoring a compatible pre-upgrade copy, never opening a newer database with an older build. Restore replaces state; it does not merge databases.
 
 For a moved project, scan the new location and relink the existing project to preserve its ID/history. Removing a project excludes its path from discovery and detaches records; it removes local metadata, project notes and relations, but never repository/private-source files. Clearing the exclusion creates a new project identity. Recover removed local state from an earlier backup.
 
 ## Checks and project files
+
+### Closing a project
+
+Open a project and choose to close it. Select whether it is completed or you no longer plan to develop it, optionally add an explanation, then confirm. The closing date is recorded automatically. Open tasks are shown before confirmation and are automatically cancelled for either closing outcome. Completed tasks and saved results stay unchanged.
+
+Closed projects remain available through the closed-project filter. Their pages show the latest outcome, date and explanation. Cancelled tasks have their own filter and a link to the closing explanation. Returning a project to active work does not reopen tasks automatically; return individual tasks when needed. Each closure and reopening remains in its history, where you can read earlier explanations in full. Projects completed before this feature keep their status without an invented closing date.
+
+### Checks and files
 
 Checks record a question, external actions, evidence and an explicit outcome. Git activity does not reset their external-action clock. Default in-app reminders are 3/7/14 days; settings can change them. Paused checks suppress reminders. No activity alone proves neither failure nor success.
 

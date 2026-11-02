@@ -13,6 +13,7 @@ import { Projects } from '../projects/projects.js';
 import { resolveProject } from '../projects/resolve.js';
 import { Records } from '../records.js';
 import { HttpError } from '../errors.js';
+import { isTaskOpen, taskOutcome } from '../../shared/task-status.js';
 
 export const workflow = `Control Center — необязательная общая доска задач.
 Для CC-N прочитайте task_read, затем project_context с рабочим каталогом пользователя; проверьте совпадение projectId. Общая задача имеет projectId=null.
@@ -139,7 +140,7 @@ export function createMcpServer(store: Store) {
           },
           tasks: tasks
             .list()
-            .filter((task) => task.projectId === row.id && !task.completedAt)
+            .filter((task) => task.projectId === row.id && isTaskOpen(task))
             .map((task) => ({
               code: task.code,
               title: task.title,
@@ -165,7 +166,7 @@ export function createMcpServer(store: Store) {
         .object({
           projectId: z.string().uuid().nullable().optional(),
           query: z.string().max(240).default(''),
-          completed: z.enum(['open', 'done', 'all']).default('open'),
+          completed: z.enum(['open', 'done', 'cancelled', 'all']).default('open'),
           offset: z.number().int().min(0).default(0),
           limit: z.number().int().min(1).max(100).default(50),
         })
@@ -182,8 +183,7 @@ export function createMcpServer(store: Store) {
           .filter(
             (task) =>
               (input.projectId === undefined || task.projectId === input.projectId) &&
-              (input.completed === 'all' ||
-                Boolean(task.completedAt) === (input.completed === 'done')) &&
+              (input.completed === 'all' || taskOutcome(task) === input.completed) &&
               `${task.code} ${task.id} ${task.title} ${task.description}`
                 .toLocaleLowerCase('ru')
                 .includes(query),
@@ -197,6 +197,7 @@ export function createMcpServer(store: Store) {
             projectId: task.projectId,
             priority: task.priority,
             completedAt: task.completedAt,
+            cancellation: task.cancellation,
             revision: task.revision,
           })),
         };
@@ -218,7 +219,7 @@ export function createMcpServer(store: Store) {
       description:
         'Создать самостоятельную задачу. Передайте projectId явно (null для общей), сначала проверьте похожие. Повтор с тем же requestKey безопасен; allowDuplicate требует согласованной отдельной задачи.',
       inputSchema: taskSchema
-        .omit({ completedAt: true, result: true })
+        .omit({ completedAt: true, result: true, cancellation: true })
         .extend({
           projectId: z.string().uuid().nullable(),
           requestKey: z.string().trim().min(1).max(200),

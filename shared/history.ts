@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { timezoneSchema } from './periods.js';
 
 export const historyKindSchema = z.enum([
+  'project',
   'task',
   'check',
   'decision',
@@ -34,9 +35,12 @@ export const historyCursorSchema = z
   })
   .strict();
 export type HistoryEvent =
+  | 'project_closed'
+  | 'project_reopened'
   | 'task_baseline'
   | 'task_result'
   | 'task_completed'
+  | 'task_cancelled'
   | 'task_reopened'
   | 'check_started'
   | 'check_completed'

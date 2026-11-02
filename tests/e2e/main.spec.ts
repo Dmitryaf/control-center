@@ -75,9 +75,9 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await expect(page.getByRole('heading', { name: 'Проверить выпуск', exact: true })).toHaveCount(
       0,
     );
-    await page.getByLabel('Завершённые', { exact: true }).check();
+    await page.getByRole('combobox', { name: 'Состояние задач', exact: true }).selectOption('done');
     await page.getByRole('button', { name: 'Вернуть', exact: true }).click();
-    await page.getByLabel('Завершённые', { exact: true }).uncheck();
+    await page.getByRole('combobox', { name: 'Состояние задач', exact: true }).selectOption('open');
     await expect(
       page.getByRole('heading', { name: 'Проверить выпуск', exact: true }),
     ).toBeVisible();

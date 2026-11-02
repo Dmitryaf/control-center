@@ -240,6 +240,21 @@ time {
   gap: 12px;
   margin-bottom: 12px;
 }
+.project-lifecycle-form fieldset {
+  min-width: 0;
+  border: 1px solid var(--line);
+  padding: 12px;
+}
+.project-lifecycle-form .checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+.project-lifecycle-form input[type='radio'] {
+  width: auto;
+  margin: 0;
+}
 .overview-period select {
   width: auto;
   max-width: 100%;

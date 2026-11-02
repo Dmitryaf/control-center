@@ -4,6 +4,7 @@ import { taskSchema, taskPatchSchema, taskResultSchema, type Task } from '../sha
 import { Store } from './db.js';
 import { HttpError } from './errors.js';
 import { TaskHistory } from './task-history.js';
+import { isTaskOpen } from '../shared/task-status.js';
 
 interface TaskRow {
   id: string;
@@ -67,13 +68,50 @@ export class Tasks {
     });
   }
 
-  private saveInTransaction(input: unknown, id: string, update: boolean): Task {
+  // Caller owns the same write transaction as the project event/status.
+  cancelProjectInTransaction(projectId: string, projectEventId: string, at: string) {
+    for (const task of this.list().filter(
+      (task) => task.projectId === projectId && isTaskOpen(task),
+    ))
+      this.saveInTransaction({ ...task, revision: task.revision }, task.id, true, {
+        at,
+        projectEventId,
+      });
+  }
+
+  private saveInTransaction(
+    input: unknown,
+    id: string,
+    update: boolean,
+    cancellation?: Task['cancellation'],
+  ): Task {
     rejectRemovedState(input);
     const options = taskWriteOptions.parse(input);
     const data = taskSchema.parse(input);
+    const existing = update ? this.read(id) : null;
+    if (existing && !Object.hasOwn(input as object, 'cancellation'))
+      data.cancellation = existing.cancellation;
+    if (cancellation) data.cancellation = cancellation;
+    else if (
+      data.cancellation &&
+      JSON.stringify(data.cancellation) !== JSON.stringify(existing?.cancellation)
+    )
+      throw new HttpError(
+        400,
+        'Отмена записывается при закрытии проекта; для возврата очистите cancellation.',
+      );
+    if (data.completedAt && data.cancellation)
+      throw new HttpError(
+        400,
+        'Отменённую задачу нельзя одновременно считать выполненной. Сначала верните её в работу.',
+      );
     if (data.completedAt && data.result?.remaining)
       throw new HttpError(400, 'Осталась работа: сохраните результат без завершения задачи.');
-    const hash = createHash('sha256').update(JSON.stringify(data)).digest('hex');
+    // Preserve durable create keys recorded before cancellation was introduced.
+    const { cancellation: cancellationValue, ...originalFields } = data;
+    const hash = createHash('sha256')
+      .update(JSON.stringify(cancellationValue ? data : originalFields))
+      .digest('hex');
     if (!update && options.requestKey) {
       const repeated = this.store.db
         .prepare('SELECT record_id, request_hash FROM task_identity WHERE request_key=?')
@@ -87,7 +125,6 @@ export class Tasks {
         return this.read(repeated.record_id);
       }
     }
-    const existing = update ? this.read(id) : null;
     if (existing && options.revision === undefined)
       throw new HttpError(
         409,
@@ -103,7 +140,7 @@ export class Tasks {
     if (!update && !options.allowDuplicate) {
       const duplicate = this.list().find(
         (task) =>
-          !task.completedAt &&
+          isTaskOpen(task) &&
           task.projectId === data.projectId &&
           normalizeTitle(task.title) === normalizeTitle(data.title),
       );
@@ -113,7 +150,7 @@ export class Tasks {
           `Похожая задача уже есть: ${duplicate.code}. Прочитайте её; для отдельной задачи подтвердите allowDuplicate.`,
         );
     }
-    const now = new Date().toISOString();
+    const now = cancellation?.at ?? new Date().toISOString();
     if (existing) {
       this.store.db
         .prepare(
@@ -125,13 +162,16 @@ export class Tasks {
         .run(existing.id);
       const saved = this.read(existing.id);
       const kind =
-        saved.completedAt && saved.completedAt !== existing.completedAt
-          ? 'completed'
-          : existing.completedAt && !saved.completedAt
+        saved.cancellation && !existing.cancellation
+          ? 'cancelled'
+          : (existing.cancellation && !saved.cancellation) ||
+              (existing.completedAt && !saved.completedAt)
             ? 'reopened'
-            : JSON.stringify(saved.result) !== JSON.stringify(existing.result)
-              ? 'result'
-              : null;
+            : saved.completedAt && saved.completedAt !== existing.completedAt
+              ? 'completed'
+              : JSON.stringify(saved.result) !== JSON.stringify(existing.result)
+                ? 'result'
+                : null;
       if (kind) new TaskHistory(this.store).append(saved, kind);
       return saved;
     }
@@ -157,6 +197,8 @@ export class Tasks {
   }
 
   complete(identifier: string, revision: number, input: unknown): Task {
+    if (this.read(identifier).cancellation)
+      throw new HttpError(409, 'Сначала верните отменённую задачу в работу.');
     const result = taskResultSchema.parse(input);
     if (result.remaining)
       throw new HttpError(
@@ -187,6 +229,6 @@ function rejectRemovedState(input: unknown) {
   if (input && typeof input === 'object' && Object.hasOwn(input, 'state'))
     throw new HttpError(
       400,
-      'Поле state больше не поддерживается. Удалите его из запроса: задача бывает открытой или завершённой (completedAt).',
+      'Поле state больше не поддерживается. Используйте completedAt для завершения; отмена при закрытии проекта хранится отдельно в cancellation.',
     );
 }

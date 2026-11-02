@@ -1,3 +1,4 @@
+import { isTaskOpen } from '../../../shared/task-status';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { Project } from '../../../shared/contracts';
@@ -5,6 +6,7 @@ import { statusLabels, typeLabels, date, priorityLabels } from '../../shared/lab
 import { useWorkspace } from '../../shared/workspace';
 import { RecentHistoryResult, type RecentHistoryState } from '../history/RecentHistory';
 import { RemoveProject } from './RemoveProject';
+import { isClosedProject } from '../../../shared/project-lifecycle';
 export function ProjectCard({
   project,
   overview = false,
@@ -16,7 +18,7 @@ export function ProjectCard({
 }) {
   const { data: w } = useWorkspace();
   const tasks = w!.tasks
-    .filter((t) => t.projectId === project.id && !t.completedAt)
+    .filter((t) => t.projectId === project.id && isTaskOpen(t))
     .sort(
       (a, b) =>
         ({ high: 0, normal: 1, low: 2 })[a.priority] - { high: 0, normal: 1, low: 2 }[b.priority] ||
@@ -141,7 +143,7 @@ export default function Projects() {
     all: 'Все',
     active: 'Активные',
     paused: 'Отложенные',
-    completed: 'Завершённые',
+    closed: 'Закрытые',
     tool: 'Инструменты',
     product: 'Продукты',
     experiment: 'Эксперименты',
@@ -150,6 +152,7 @@ export default function Projects() {
   const projects = w!.projects.filter(
     (p) =>
       (filter === 'all' ||
+        (filter === 'closed' && isClosedProject(p.metadata.status)) ||
         [p.metadata.status, p.metadata.type, p.metadata.priority].some((v) => v === filter)) &&
       `${p.metadata.name} ${p.path}`
         .toLocaleLowerCase('ru')

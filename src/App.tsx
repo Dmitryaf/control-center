@@ -57,15 +57,16 @@ export default function App() {
         (path === '/analysis' && location.pathname === '/codex-analysis') ||
         (path === '/tasks' && location.pathname === '/history') ||
         (path === '/timeline' &&
-          [
-            '/observations',
-            '/reviews',
-            '/period-analysis',
-            '/analysis-schedules',
-            '/period-proposal',
-            '/proposal-acceptances',
-            '/codex-context',
-          ].includes(location.pathname));
+          (location.pathname.startsWith('/project-lifecycle/') ||
+            [
+              '/observations',
+              '/reviews',
+              '/period-analysis',
+              '/analysis-schedules',
+              '/period-proposal',
+              '/proposal-acceptances',
+              '/codex-context',
+            ].includes(location.pathname)));
   return (
     <div className="shell">
       <a className="skip-link" href="#content">

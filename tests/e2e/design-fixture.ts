@@ -175,6 +175,7 @@ export function designFixture(): Workspace {
         projectId: 'project-0',
         priority: 'high',
         completedAt: null,
+        cancellation: null,
       },
     ],
     ideas: [

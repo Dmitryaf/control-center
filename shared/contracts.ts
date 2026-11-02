@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { CheckView, CheckEntry } from './checks.js';
 import type { FileDecision } from './decisions.js';
 import type { ProjectContext } from './context.js';
+import type { ProjectLifecycleState } from './project-lifecycle.js';
 import { timezoneSchema } from './periods.js';
 
 const text = z.string().trim().max(10000);
@@ -11,7 +12,7 @@ export const prioritySchema = z.enum(['low', 'normal', 'high']);
 export const metadataSchema = z.object({
   name: title.default('Проект'),
   type: z.enum(['product', 'tool', 'experiment', 'other']).default('other'),
-  status: z.enum(['active', 'paused', 'completed', 'unknown']).default('unknown'),
+  status: z.enum(['active', 'paused', 'completed', 'stopped', 'unknown']).default('unknown'),
   stage: z.string().trim().max(120).default(''),
   priority: prioritySchema.default('normal'),
   goal: text.default(''),
@@ -70,6 +71,13 @@ export const taskSchema = z.object({
   result: taskResultSchema.nullable().default(null),
   priority: prioritySchema.default('normal'),
   completedAt: z.string().datetime().nullable().default(null),
+  cancellation: z
+    .object({
+      at: z.string().datetime(),
+      projectEventId: z.string().uuid(),
+    })
+    .nullable()
+    .default(null),
 });
 // PATCH fields must not apply create defaults: omission means preserve current data.
 export const taskPatchSchema = z
@@ -83,6 +91,7 @@ export const taskPatchSchema = z
     result: taskSchema.shape.result.unwrap().optional(),
     priority: taskSchema.shape.priority.unwrap().optional(),
     completedAt: taskSchema.shape.completedAt.unwrap().optional(),
+    cancellation: z.null().optional(),
   })
   .strict();
 export const ideaSchema = z.object({
@@ -109,7 +118,7 @@ export interface RecordStamp {
 export type Task = TaskInput & RecordStamp & { number: number; code: string; revision: number };
 export interface TaskHistoryEntry {
   id: number;
-  kind: 'baseline' | 'result' | 'completed' | 'reopened';
+  kind: 'baseline' | 'result' | 'completed' | 'cancelled' | 'reopened';
   recordedAt: string;
   projectId: string | null;
   projectName: string | null;
@@ -186,6 +195,7 @@ export interface Project {
   signals: Signal[];
   yamlConflict: boolean;
   context: ProjectContext;
+  lifecycle?: ProjectLifecycleState;
 }
 export interface ScanInfo {
   scannedAt: string | null;

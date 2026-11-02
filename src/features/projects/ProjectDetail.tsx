@@ -1,3 +1,4 @@
+import { isTaskOpen } from '../../../shared/task-status';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useForm } from 'react-hook-form';
@@ -18,11 +19,14 @@ import { UnsavedChanges } from '../../shared/UnsavedChanges';
 import { ProjectReview } from './ProjectReview';
 import { RecentHistory } from '../history/RecentHistory';
 import { RemoveProject } from './RemoveProject';
+import { ProjectLifecycle, type LifecycleAction } from './ProjectLifecycle';
+import { isClosedProject } from '../../../shared/project-lifecycle';
 import { Plus, NotebookPen, Settings2 } from 'lucide-react';
 
 function MetadataEditor({ project, onClose }: { project: Project; onClose: () => void }) {
   const { act, busy } = useActions();
   const [expectedHash] = useState(project.snapshot.yaml.hash);
+  const [expectedLifecycleRevision] = useState(project.lifecycle?.revision ?? 0);
   const {
     register,
     handleSubmit,
@@ -54,6 +58,7 @@ function MetadataEditor({ project, onClose }: { project: Project; onClose: () =>
               },
               notes,
               expectedHash,
+              expectedLifecycleRevision,
             }),
           'Сводка сохранена в Control Center',
         );
@@ -573,6 +578,7 @@ export default function ProjectDetail() {
   const { act, busy } = useActions();
   const [editing, setEditing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [lifecycleAction, setLifecycleAction] = useState<LifecycleAction>(null);
   const [target, setTarget] = useState('');
   const [relationType, setRelationType] = useState('uses');
   const p = w!.projects.find((p) => p.id === id);
@@ -589,7 +595,7 @@ export default function ProjectDetail() {
   }, [id, client]);
   if (!p) return <p className="empty">Проект не загружен.</p>;
   const tasks = w!.tasks
-    .filter((t) => t.projectId === p.id && !t.completedAt)
+    .filter((t) => t.projectId === p.id && isTaskOpen(t))
     .sort(
       (a, b) =>
         ({ high: 0, normal: 1, low: 2 })[a.priority] - { high: 0, normal: 1, low: 2 }[b.priority] ||
@@ -601,7 +607,11 @@ export default function ProjectDetail() {
   const workSignals = p.signals.filter((s) => !technicalSignals.includes(s));
   const request = (suffix: string, message: string) =>
     act(
-      () => api(`/projects/${p.id}/${suffix}`, 'POST', { expectedHash: p.snapshot.yaml.hash }),
+      () =>
+        api(`/projects/${p.id}/${suffix}`, 'POST', {
+          expectedHash: p.snapshot.yaml.hash,
+          expectedLifecycleRevision: p.lifecycle?.revision ?? 0,
+        }),
       message,
     );
   return (
@@ -626,10 +636,18 @@ export default function ProjectDetail() {
         </div>
         <div className="row">
           {!editing && (
-            <button disabled={busy} onClick={() => setEditing(true)}>
+            <button disabled={busy || lifecycleAction !== null} onClick={() => setEditing(true)}>
               Изменить сводку
             </button>
           )}
+          <button
+            disabled={busy || editing || lifecycleAction !== null}
+            onClick={() =>
+              setLifecycleAction(isClosedProject(p.metadata.status) ? 'reopen' : 'close')
+            }
+          >
+            {isClosedProject(p.metadata.status) ? 'Вернуть в работу' : 'Закрыть проект'}
+          </button>
           <RemoveProject
             id={p.id}
             name={p.metadata.name}
@@ -677,6 +695,11 @@ export default function ProjectDetail() {
       {editing && (
         <MetadataEditor key={`metadata:${p.id}`} project={p} onClose={() => setEditing(false)} />
       )}
+      <ProjectLifecycle
+        project={p}
+        action={lifecycleAction}
+        onClose={() => setLifecycleAction(null)}
+      />
       <div className="project-dossier project-simple section-space">
         <div>
           <section id="project-about" className="project-brief prose">

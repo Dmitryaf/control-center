@@ -1,3 +1,4 @@
+import { isTaskOpen } from '../../../shared/task-status';
 import { Link } from 'react-router';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -38,8 +39,8 @@ export default function Overview() {
     );
   const projects = [...w!.projects].sort(
     (a, b) =>
-      ({ active: 0, paused: 1, unknown: 2, completed: 3 })[a.metadata.status] -
-        { active: 0, paused: 1, unknown: 2, completed: 3 }[b.metadata.status] ||
+      ({ active: 0, paused: 1, unknown: 2, completed: 3, stopped: 3 })[a.metadata.status] -
+        { active: 0, paused: 1, unknown: 2, completed: 3, stopped: 3 }[b.metadata.status] ||
       Number(b.metadata.priority === 'high') - Number(a.metadata.priority === 'high') ||
       a.metadata.name.localeCompare(b.metadata.name, 'ru'),
   );
@@ -91,7 +92,7 @@ export default function Overview() {
     .filter((v) => v.signals.length)
     .sort((a, b) => Number(b.level === 'decision') - Number(a.level === 'decision'));
   const openTasks = w!.tasks
-    .filter((t) => !t.completedAt)
+    .filter((t) => isTaskOpen(t))
     .sort(
       (a, b) =>
         ({ high: 0, normal: 1, low: 2 })[a.priority] - { high: 0, normal: 1, low: 2 }[b.priority] ||

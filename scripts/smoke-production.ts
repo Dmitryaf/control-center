@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { fixture } from '../tests/fixtures.js';
-import type { Workspace, Task, TaskHistoryPage } from '../shared/contracts.js';
+import type { Workspace, Task, TaskHistoryPage, Project } from '../shared/contracts.js';
 import type { Observation } from '../shared/observations.js';
 import type { Review } from '../shared/reviews.js';
 import type { PeriodRun } from '../shared/period-analysis.js';
@@ -374,9 +374,85 @@ try {
     key: privateDecision.key,
   });
   assert.match((await content.json()).body, /Canonical private body/);
+  const beforeClosure = (await (await request('/api/workspace')).json()) as Workspace;
+  const completedBefore = beforeClosure.tasks.find((item) => item.completedAt)!;
+  assert.ok(completedBefore);
+  const openResponse = await request('/api/tasks', 'POST', {
+    title: 'Partial work before closure',
+    projectId: id,
+    result: { summary: 'Saved partial work', remaining: 'One more check' },
+  });
+  assert.equal(openResponse.status, 201);
+  const openTask = (await openResponse.json()) as Task;
+  const closing = {
+    outcome: 'stopped',
+    reason: 'Production closure explanation',
+    revision: beforeClosure.projects[0].lifecycle!.revision,
+    requestKey: randomUUID(),
+  };
+  const closeResponse = await request(`/api/projects/${id}/close`, 'POST', closing);
+  assert.equal(closeResponse.status, 200);
+  const closedProject = (await closeResponse.json()) as Project;
+  const closedWorkspace = (await (await request('/api/workspace')).json()) as Workspace;
+  const cancelled = closedWorkspace.tasks.find((item) => item.id === openTask.id)!;
+  assert.equal(cancelled.completedAt, null);
+  assert.equal(cancelled.cancellation?.projectEventId, closedProject.lifecycle!.currentClosure!.id);
+  assert.deepEqual(cancelled.result, openTask.result);
+  assert.deepEqual(
+    closedWorkspace.tasks.find((item) => item.id === completedBefore.id),
+    completedBefore,
+  );
+  const closureBackupResponse = await request('/api/backup', 'POST', {});
+  assert.equal(closureBackupResponse.status, 200);
+  const closureBackupPath = (await closureBackupResponse.json()) as { path: string };
+  const closureBackup = new DatabaseSync(closureBackupPath.path, { readOnly: true });
+  assert.equal(closureBackup.prepare('PRAGMA quick_check').get()?.quick_check, 'ok');
+  assert.equal(
+    closureBackup
+      .prepare(
+        "SELECT json_extract(data,'$.cancellation.projectEventId') AS event FROM records WHERE id=?",
+      )
+      .get(openTask.id)?.event,
+    cancelled.cancellation!.projectEventId,
+  );
+  closureBackup.close();
+  await stop();
+  await start();
+  const afterClosureRestart = (await (await request('/api/workspace')).json()) as Workspace;
+  assert.deepEqual(
+    afterClosureRestart.tasks.find((item) => item.id === openTask.id),
+    cancelled,
+  );
+  assert.equal((await request(`/api/projects/${id}/close`, 'POST', closing)).status, 200);
+  assert.equal(
+    (
+      await request(`/api/projects/${id}/reopen`, 'POST', {
+        revision: closedProject.lifecycle!.revision,
+        requestKey: randomUUID(),
+      })
+    ).status,
+    200,
+  );
+  const afterReopen = (await (await request('/api/workspace')).json()) as Workspace;
+  assert.deepEqual(
+    afterReopen.tasks.find((item) => item.id === openTask.id),
+    cancelled,
+  );
+  assert.equal(
+    (await request(`/api/tasks/${openTask.id}`, 'PUT', { ...cancelled, cancellation: null }))
+      .status,
+    200,
+  );
+  const cancellationHistory = (await (
+    await request(`/api/task-history?identifier=${openTask.code}`)
+  ).json()) as TaskHistoryPage;
+  assert.deepEqual(
+    cancellationHistory.items.map((entry) => entry.kind),
+    ['reopened', 'cancelled', 'result'],
+  );
   await stop();
   console.log(
-    'Production smoke passed: assets, scan, tasks, work history, optional analysis configuration/expiry, checks, private context, audit allowlist, canonical text, safe export, backup, restart, deep links.',
+    'Production smoke passed: assets, scan, tasks, work history, optional analysis configuration/expiry, checks, private context, audit allowlist, canonical text, safe export, backup, restart, deep links, project closure, task cancellation and explicit reopening.',
   );
 } finally {
   await stop();

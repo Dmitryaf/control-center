@@ -7,6 +7,7 @@ import { api } from '../../shared/http';
 import { useActions, useWorkspace } from '../../shared/workspace';
 import { UnsavedChanges } from '../../shared/UnsavedChanges';
 import { useQuery } from '@tanstack/react-query';
+import { isTaskOpen, taskOutcome } from '../../../shared/task-status';
 
 type Draft = Pick<TaskInput, 'title' | 'projectId' | 'priority' | 'description'>;
 const taskDraft = (t: Task): Draft => ({
@@ -77,7 +78,7 @@ export default function Tasks() {
   const { act, busy } = useActions();
   const [params] = useSearchParams();
   const [filter, setFilter] = useState(params.get('project') || '');
-  const [done, setDone] = useState(false);
+  const [outcome, setOutcome] = useState<'open' | 'done' | 'cancelled'>('open');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Task | null>(null);
   const [resultTask, setResultTask] = useState<Task | null>(null);
@@ -108,7 +109,7 @@ export default function Tasks() {
     if (identifier === loadedIdentifier.current) return;
     const t = w!.tasks.find((t) => t.code === identifier || t.id === identifier);
     if (t) {
-      setDone(!!t.completedAt);
+      setOutcome(taskOutcome(t));
       edit(t);
       loadedIdentifier.current = identifier;
     }
@@ -136,15 +137,15 @@ export default function Tasks() {
   }
   function finish(t: Task) {
     if (
-      !t.completedAt &&
+      isTaskOpen(t) &&
       t.result?.remaining &&
       !confirm(
         `В последнем итоге оставалось:\n\n${t.result.remaining}\n\nВы выполнили эту работу и хотите завершить задачу? Прежний итог останется в истории.`,
       )
     )
       return;
-    return t.completedAt
-      ? update(t, { completedAt: null })
+    return !isTaskOpen(t)
+      ? update(t, { completedAt: null, cancellation: null })
       : act(
           () =>
             api(`/tasks/${t.id}/complete`, 'POST', {
@@ -165,7 +166,7 @@ export default function Tasks() {
     .filter(
       (t) =>
         (!filter || (filter === '__general__' ? !t.projectId : t.projectId === filter)) &&
-        !!t.completedAt === done &&
+        taskOutcome(t) === outcome &&
         `${t.code} ${t.title} ${t.description}`
           .toLocaleLowerCase('ru')
           .includes(search.toLocaleLowerCase('ru')),
@@ -270,23 +271,33 @@ export default function Tasks() {
           Поиск задач
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} />
         </label>
-        <label className="checkbox">
-          <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} />{' '}
-          Завершённые
+        <label>
+          Состояние задач
+          <select value={outcome} onChange={(e) => setOutcome(e.target.value as typeof outcome)}>
+            <option value="open">Открытые</option>
+            <option value="done">Завершённые</option>
+            <option value="cancelled">Отменённые</option>
+          </select>
         </label>
       </div>
       <section className="task-list section-space" aria-label="Список задач">
         <h2>
-          {done ? 'Завершённые задачи' : 'Открытые задачи'}{' '}
+          {
+            { open: 'Открытые задачи', done: 'Завершённые задачи', cancelled: 'Отменённые задачи' }[
+              outcome
+            ]
+          }{' '}
           <span className="count">{items.length}</span>
         </h2>
         {!items.length && (
           <p className="empty">
             {search
               ? 'По запросу задач не найдено.'
-              : done
-                ? 'Завершённых задач пока нет.'
-                : 'Открытых задач нет.'}
+              : outcome === 'cancelled'
+                ? 'Отменённых задач пока нет.'
+                : outcome === 'done'
+                  ? 'Завершённых задач пока нет.'
+                  : 'Открытых задач нет.'}
           </p>
         )}
         {items.map((t) => (
@@ -350,9 +361,17 @@ export default function Tasks() {
               </details>
             )}
             {t.completedAt && <small>Завершена: {date(t.completedAt)}</small>}
+            {t.cancellation && (
+              <p>
+                Отменена при закрытии проекта · {date(t.cancellation.at)}{' '}
+                <Link to={`/project-lifecycle/${t.cancellation.projectEventId}`}>
+                  Причина закрытия →
+                </Link>
+              </p>
+            )}
             <div className="row">
               <button disabled={busy} onClick={() => finish(t)}>
-                {t.completedAt ? 'Вернуть' : 'Завершить'}
+                {isTaskOpen(t) ? 'Завершить' : 'Вернуть'}
               </button>
               <button onClick={() => edit(t)}>Изменить</button>
               <button onClick={() => setResultTask(t)}>
@@ -400,6 +419,7 @@ export function TaskHistory() {
     baseline: 'Сохранённая запись при переходе',
     result: 'Результат сохранён',
     completed: 'Задача завершена',
+    cancelled: 'Задача отменена',
     reopened: 'Возвращена в работу',
   };
   return (
@@ -486,6 +506,14 @@ export function TaskHistory() {
               <p className="help">
                 Это известное состояние при переходе. Более ранняя история недоступна; время записи
                 взято из последнего сохранения задачи.
+              </p>
+            )}
+            {e.task.cancellation && (
+              <p>
+                Отменена при закрытии проекта.{' '}
+                <Link to={`/project-lifecycle/${e.task.cancellation.projectEventId}`}>
+                  Причина закрытия →
+                </Link>
               </p>
             )}
             {e.task.result ? (

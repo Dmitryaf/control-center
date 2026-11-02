@@ -28,6 +28,7 @@ import { ProposalAcceptances } from './analysis/acceptances.js';
 import { AnalysisSchedules } from './analysis/schedules.js';
 import { PeriodAnalysis } from './analysis/period-analysis.js';
 import { CodexAnalysis } from './codex/analysis.js';
+import { ProjectLifecycle } from './projects/lifecycle.js';
 
 export function createApp(
   store: Store,
@@ -39,6 +40,7 @@ export function createApp(
 ) {
   const app = express();
   const projects = new Projects(store);
+  const lifecycle = new ProjectLifecycle(store);
   const refresh = new ProjectRefresh(projects);
   const records = new Records(store);
   const checks = new Checks(store);
@@ -277,6 +279,15 @@ export function createApp(
     res.json(settings);
   });
   app.get('/api/projects/:id', async (req, res) => res.json(await projects.refresh(req.params.id)));
+  app.get('/api/project-lifecycle/:id', (req, res) => res.json(lifecycle.event(req.params.id)));
+  app.post('/api/projects/:id/close', (req, res) => {
+    lifecycle.close(req.params.id, req.body);
+    res.json(projects.view(projects.require(req.params.id)));
+  });
+  app.post('/api/projects/:id/reopen', (req, res) => {
+    lifecycle.reopen(req.params.id, req.body);
+    res.json(projects.view(projects.require(req.params.id)));
+  });
   app.put('/api/projects/:id', async (req, res) => {
     const row = projects.require(req.params.id);
     const data = z
@@ -287,28 +298,29 @@ export function createApp(
         }),
         notes: z.string().max(20000),
         expectedHash: z.string().nullable().optional(),
+        expectedLifecycleRevision: z.number().int().nonnegative().optional(),
       })
       .parse(req.body);
     const current = await projects.refresh(row.id);
     if (data.expectedHash !== undefined && data.expectedHash !== current.snapshot.yaml.hash)
       throw new HttpError(409, 'PROJECT.yaml изменился. Обновите страницу и сравните версии.');
-    store.transaction(() => {
-      const latest = projects.view(projects.require(row.id)).metadata;
-      store.saveMetadata(
-        row.id,
-        {
-          ...data.metadata,
-          current_focus: data.metadata.current_focus ?? latest.current_focus,
-          next: data.metadata.next ?? latest.next,
-        },
-        data.notes,
-      );
-    });
+    lifecycle.saveMetadata(
+      row.id,
+      data.metadata,
+      data.notes,
+      undefined,
+      data.expectedLifecycleRevision,
+    );
     res.json(projects.view(projects.require(row.id)));
   });
   app.post('/api/projects/:id/use-yaml', async (req, res) => {
     const row = projects.require(req.params.id);
-    const body = z.object({ expectedHash: z.string().nullable() }).parse(req.body);
+    const body = z
+      .object({
+        expectedHash: z.string().nullable(),
+        expectedLifecycleRevision: z.number().int().nonnegative().optional(),
+      })
+      .parse(req.body);
     const current = await projects.refresh(row.id);
     if (
       !current.available ||
@@ -319,7 +331,7 @@ export function createApp(
         409,
         'PROJECT.yaml изменился или недоступен. Обновите страницу и сравните версии. Локальная версия сохранена.',
       );
-    store.saveMetadata(row.id, null, row.notes);
+    lifecycle.saveMetadata(row.id, null, row.notes, undefined, body.expectedLifecycleRevision);
     res.json(await projects.refresh(row.id));
   });
   app.post('/api/projects/:id/export', async (req, res) => {
@@ -331,7 +343,7 @@ export function createApp(
     await exportMetadata(row.path, projects.view(row).metadata, body.expectedHash);
     const updated = await projects.refresh(row.id);
     if (row.metadata)
-      store.saveMetadata(row.id, updated.metadata, row.notes, updated.snapshot.yaml.hash);
+      lifecycle.saveMetadata(row.id, updated.metadata, row.notes, updated.snapshot.yaml.hash);
     res.json(projects.view(projects.require(row.id)));
   });
   app.post('/api/projects/:id/keep-local', async (req, res) => {
@@ -343,7 +355,7 @@ export function createApp(
       data.expectedHash !== current.snapshot.yaml.hash
     )
       throw new HttpError(409, 'Файл изменился или недоступен. Обновите страницу.');
-    store.saveMetadata(current.id, current.metadata, current.notes, data.expectedHash);
+    lifecycle.saveMetadata(current.id, current.metadata, current.notes, data.expectedHash);
     res.json(projects.view(projects.require(current.id)));
   });
   app.post('/api/projects/:id/rebind', async (req, res) => {

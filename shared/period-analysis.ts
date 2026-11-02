@@ -6,7 +6,7 @@ export const periodSelectionSchema = z
   .object({
     projectIds: z.array(z.string().uuid()).max(10),
     includeGeneral: z.boolean(),
-    sourceKinds: z.array(historyKindSchema.exclude(['review', 'ai_analysis'])).max(5),
+    sourceKinds: z.array(historyKindSchema.exclude(['project', 'review', 'ai_analysis'])).max(5),
     includeMetadata: z.boolean(),
     includeOpenTasks: z.boolean(),
     includeUserText: z.boolean(),

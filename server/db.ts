@@ -34,12 +34,12 @@ export class Store {
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(version.user_version)) {
+    if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].includes(version.user_version)) {
       this.db.close();
       throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
     }
     try {
-      if (existing && version.user_version < 12) {
+      if (existing && version.user_version < 14) {
         const directory = join(dirname(path), 'backups');
         mkdirSync(directory, { recursive: true });
         const prefix =
@@ -59,7 +59,11 @@ export class Store {
                         ? 'before-proposals-v10'
                         : version.user_version < 11
                           ? 'before-codex-v11'
-                          : 'before-simple-tasks-v12';
+                          : version.user_version < 12
+                            ? 'before-simple-tasks-v12'
+                            : version.user_version < 13
+                              ? 'before-project-lifecycle-v13'
+                              : 'before-task-cancellation-v14';
         snapshotDatabase(this.db, join(directory, `${prefix}-${randomUUID()}.sqlite`));
       }
       this.transaction(() => {
@@ -68,7 +72,7 @@ export class Store {
         const lockedVersion = this.db.prepare('PRAGMA user_version').get() as {
           user_version: number;
         };
-        if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(lockedVersion.user_version))
+        if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].includes(lockedVersion.user_version))
           throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
@@ -223,7 +227,44 @@ export class Store {
           if (columns.some((column) => column.name === 'decision_sources'))
             this.db.exec('ALTER TABLE projects DROP COLUMN decision_sources');
         }
-        this.db.exec('PRAGMA user_version = 12;');
+        this.db.exec(`CREATE TABLE IF NOT EXISTS project_lifecycle_events (
+          id TEXT PRIMARY KEY,
+          project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+          scope_project_id TEXT NOT NULL,project_name TEXT NOT NULL,
+          revision INTEGER NOT NULL CHECK(revision>0),
+          action TEXT NOT NULL CHECK(action IN ('closed','reopened')),
+          outcome TEXT CHECK(outcome IN ('completed','stopped')),
+          reason TEXT NOT NULL,recorded_at TEXT NOT NULL,
+          request_key TEXT UNIQUE,request_hash TEXT,
+          UNIQUE(scope_project_id,revision)
+        );
+        CREATE INDEX IF NOT EXISTS project_lifecycle_time ON project_lifecycle_events(recorded_at,scope_project_id);
+        `);
+        if (lockedVersion.user_version < 14) {
+          const sequence = Number(
+            this.db.prepare("SELECT seq FROM sqlite_sequence WHERE name='task_history'").get()
+              ?.seq ?? 0,
+          );
+          this.db.exec(`ALTER TABLE task_history RENAME TO task_history_before_cancel;
+            CREATE TABLE task_history (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,task_id TEXT NOT NULL,revision INTEGER NOT NULL,
+              kind TEXT NOT NULL CHECK(kind IN ('baseline','result','completed','cancelled','reopened')),
+              recorded_at TEXT NOT NULL,project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+              project_name TEXT,snapshot TEXT NOT NULL,UNIQUE(task_id,revision)
+            );
+            INSERT INTO task_history SELECT * FROM task_history_before_cancel;
+            DROP TABLE task_history_before_cancel;
+            CREATE INDEX task_history_project_time ON task_history(project_id,recorded_at);`);
+          this.db
+            .prepare(
+              "INSERT INTO sqlite_sequence(name,seq) SELECT 'task_history',? WHERE NOT EXISTS(SELECT 1 FROM sqlite_sequence WHERE name='task_history')",
+            )
+            .run(sequence);
+          this.db
+            .prepare("UPDATE sqlite_sequence SET seq=MAX(seq,?) WHERE name='task_history'")
+            .run(sequence);
+        }
+        this.db.exec('PRAGMA user_version = 14;');
       });
     } catch (error) {
       this.db.close();

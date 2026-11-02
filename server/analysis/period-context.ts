@@ -1,3 +1,4 @@
+import { isTaskOpen } from '../../shared/task-status.js';
 import {
   periodSelectionSchema,
   type PeriodSelection,
@@ -127,7 +128,7 @@ export function buildPeriodContext(
       .list()
       .filter(
         (task) =>
-          !task.completedAt &&
+          isTaskOpen(task) &&
           (task.projectId ? scopeSet.has(task.projectId) : selection.includeGeneral),
       );
     if (tasks.length > 100)

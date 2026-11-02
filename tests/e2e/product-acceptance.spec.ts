@@ -107,7 +107,9 @@ test('owner journey across active, paused, waiting and completed projects: brows
       });
       expect(completed.isError).toBe(false);
       await page.reload();
-      await page.getByLabel('Завершённые', { exact: true }).check();
+      await page
+        .getByRole('combobox', { name: 'Состояние задач', exact: true })
+        .selectOption('done');
       const card = page.locator('.task-card').filter({ hasText: taskTitle });
       await card.locator('summary').click();
       await expect(card).toContainText('Сохранён тестовый экспорт');

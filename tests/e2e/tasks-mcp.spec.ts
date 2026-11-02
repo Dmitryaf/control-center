@@ -62,14 +62,14 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
     });
     expect(completed.isError).toBe(false);
     await expect(card).toHaveCount(0);
-    await page.getByLabel('Завершённые', { exact: true }).check();
+    await page.getByRole('combobox', { name: 'Состояние задач', exact: true }).selectOption('done');
     await expect(card).toBeVisible();
     await card.locator('summary').click();
     await expect(card.getByText(/Добавлен поиск обращений/)).toBeVisible();
     await expect(card.getByText(/Рабочая база владельца/)).toBeVisible();
     await expect(card.getByText(/Завершена:/)).toBeVisible();
     await card.getByRole('button', { name: 'Вернуть', exact: true }).click();
-    await page.getByLabel('Завершённые', { exact: true }).uncheck();
+    await page.getByRole('combobox', { name: 'Состояние задач', exact: true }).selectOption('open');
     await page.getByLabel('Поиск задач', { exact: true }).fill(found.code);
     await expect(card).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Состояние', exact: true })).toHaveCount(0);

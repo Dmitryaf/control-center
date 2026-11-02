@@ -15,10 +15,16 @@ import { timezoneSchema } from '../shared/periods.js';
 
 // A read projection over existing owners, never an event journal or a copy of their bodies.
 const entriesSql = `WITH options(zone) AS (VALUES(?)), entries(key,kind,event,sourceId,day,recordedAt,dateQuality,projectId,scopeProjectId,projectName,title,body,href) AS (
+  SELECT 'project:'||e.scope_project_id||':'||printf('%010d',e.revision),'project','project_'||e.action,e.id,
+    history_day(e.recorded_at,(SELECT zone FROM options)),e.recorded_at,'recorded',e.project_id,e.scope_project_id,e.project_name,
+    CASE WHEN e.action='reopened' THEN 'Проект возвращён в работу' WHEN e.outcome='stopped' THEN 'Больше не развиваю' ELSE 'Проект завершён' END,
+    e.reason,'/project-lifecycle/'||e.id
+    FROM project_lifecycle_events e
+  UNION ALL
   SELECT 'task:'||h.id,'task','task_'||h.kind,CAST(h.id AS TEXT),history_day(h.recorded_at,(SELECT zone FROM options)),h.recorded_at,
     CASE WHEN h.kind='baseline' THEN 'baseline' ELSE 'recorded' END,h.project_id,COALESCE(h.project_id,json_extract(h.snapshot,'$.projectId')),h.project_name,
     json_extract(h.snapshot,'$.code')||' · '||json_extract(h.snapshot,'$.title'),
-    CASE WHEN h.kind='reopened' THEN '' ELSE COALESCE(json_extract(h.snapshot,'$.result.summary'),'') END,
+    CASE WHEN h.kind='reopened' THEN '' WHEN h.kind='cancelled' THEN 'Задача отменена при закрытии проекта.' ELSE COALESCE(json_extract(h.snapshot,'$.result.summary'),'') END,
     '/history?task='||json_extract(h.snapshot,'$.code') FROM task_history h
   UNION ALL
   SELECT 'check:start:'||c.id,'check','check_started',c.id,json_extract(c.data,'$.startedAt'),NULL,'declared',c.project_id,COALESCE(c.project_id,json_extract(c.data,'$.projectId')),

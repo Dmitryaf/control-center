@@ -2,6 +2,7 @@ export const statusLabels = {
   active: 'Активный',
   paused: 'Отложен',
   completed: 'Завершён',
+  stopped: 'Больше не развиваю',
   unknown: 'Не задан',
 };
 export const typeLabels = {
@@ -15,6 +16,7 @@ export const workKindLabels = {
   baseline: 'Запись при переходе',
   result: 'Результат сохранён',
   completed: 'Задача завершена',
+  cancelled: 'Задача отменена',
   reopened: 'Возвращена в работу',
 };
 export const ideaLabels = {

@@ -6,6 +6,7 @@ import App from './App';
 import Settings from './features/settings/Settings';
 import Projects from './features/projects/Projects';
 import ProjectDetail from './features/projects/ProjectDetail';
+import ProjectLifecycleHistory from './features/projects/ProjectLifecycleHistory';
 import Overview from './features/overview/Overview';
 import Tasks, { TaskHistory } from './features/tasks/Tasks';
 import Checks, { CheckDetail } from './features/checks/Checks';
@@ -28,6 +29,7 @@ const router = createBrowserRouter([
       { path: '/', element: <Overview /> },
       { path: '/projects', element: <Projects /> },
       { path: '/projects/:id', element: <ProjectDetail /> },
+      { path: '/project-lifecycle/:id', element: <ProjectLifecycleHistory /> },
       { path: '/tasks', element: <Tasks /> },
       { path: '/history', element: <TaskHistory /> },
       { path: '/timeline', element: <History /> },

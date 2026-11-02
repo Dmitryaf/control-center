@@ -12,6 +12,7 @@ import { attention } from './attention.js';
 import { discover, inspectProject } from './scan.js';
 import { DecisionIndex } from '../decisions/index.js';
 import { ContextIndex } from './context.js';
+import { ProjectLifecycle } from './lifecycle.js';
 
 export class Projects {
   scanInfo: ScanInfo = { scannedAt: null, errors: [], running: false };
@@ -128,6 +129,7 @@ export class Projects {
       signals,
       yamlConflict,
       context,
+      lifecycle: new ProjectLifecycle(this.store).state(row.id, metadata.status),
     };
   }
   list() {
@@ -278,9 +280,11 @@ export class Projects {
       + (SELECT count(*) FROM analysis_schedules WHERE scope_key='project:'||? OR EXISTS(SELECT 1 FROM json_each(json_extract(selection_json,'$.projectIds')) WHERE value=?))
       + (SELECT count(*) FROM analysis_acceptances WHERE json_extract(approved_json,'$.projectId')=? OR EXISTS(SELECT 1 FROM json_each(json_extract(original_json,'$.proposal.projectIds')) WHERE value=?))
       + (SELECT count(*) FROM codex_digests WHERE scope_project_id=?) + (SELECT count(*) FROM codex_grants WHERE project_id=?)
+      + (SELECT count(*) FROM project_lifecycle_events WHERE scope_project_id=?)
     ) AS total`,
         )
         .get(
+          targetId,
           targetId,
           targetId,
           targetId,
