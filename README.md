@@ -19,9 +19,17 @@ Each project page shows its purpose, open tasks, recent work and latest review. 
 
 ![Project overview with current tasks and recent results](assets/screenshots/overview.png)
 
+### Tasks
+
+![Compact task list grouped by project](assets/screenshots/tasks.png)
+
 ### Ideas
 
 ![Idea editor and ideas linked to projects](assets/screenshots/ideas.png)
+
+### Project analysis
+
+![Saved project analysis with per-project conclusions and a follow-up question](assets/screenshots/analysis.png)
 
 ## Get started
 
