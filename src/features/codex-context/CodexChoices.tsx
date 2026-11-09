@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import type { CodexDigest, CodexGrant } from '../../../shared/codex-context';
 import type { PeriodSelection } from '../../../shared/period-analysis';
@@ -10,10 +10,14 @@ export function CodexChoices({
   reviewId,
   value,
   onChange,
+  disabled = false,
+  onBusyChange,
 }: {
   reviewId: string;
   value: PeriodSelection;
   onChange: (value: PeriodSelection) => void;
+  disabled?: boolean;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const client = useQueryClient();
   const { data: workspace } = useWorkspace();
@@ -100,8 +104,12 @@ export function CodexChoices({
     },
     refetchInterval: 5000,
   });
+  useEffect(() => {
+    onBusyChange?.(prepare.isPending);
+    return () => onBusyChange?.(false);
+  }, [prepare.isPending, onBusyChange]);
   return (
-    <fieldset>
+    <fieldset disabled={disabled}>
       <legend>Контекст Codex — по желанию</legend>
       <p>
         До двух содержательных диалогов на каждый выбранный проект. Приложение выделит короткие
@@ -112,7 +120,7 @@ export function CodexChoices({
         {workspace!.projects
           .filter((project) => value.projectIds.includes(project.id))
           .map((project) => project.metadata.name)
-          .join(', ') || 'Сначала выберите проекты.'}
+          .join(', ') || 'Проекты не выбраны.'}
       </p>
       <label className="check">
         <input

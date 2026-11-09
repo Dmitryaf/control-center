@@ -1,13 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import type { Task, TaskInput, TaskHistoryPage } from '../../../shared/contracts';
-import { priorityLabels, date } from '../../shared/labels';
+import { priorityLabels } from '../../shared/labels';
 import { api } from '../../shared/http';
 import { useActions, useWorkspace } from '../../shared/workspace';
 import { UnsavedChanges } from '../../shared/UnsavedChanges';
 import { useQuery } from '@tanstack/react-query';
 import { isTaskOpen, taskOutcome } from '../../../shared/task-status';
+
+import { CornerDownLeft, ListFilter, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { NotebookHeading } from '../../shared/NotebookHeading';
+import { TaskRow } from './TaskRow';
+import './tasks.css';
 
 type Draft = Pick<TaskInput, 'title' | 'projectId' | 'priority' | 'description'>;
 const taskDraft = (t: Task): Draft => ({
@@ -48,14 +53,7 @@ function ResultEditor({ task, onClose }: { task: Task; onClose: () => void }) {
       </h2>
       <label>
         Итог работы
-        <textarea
-          autoFocus
-          required
-          maxLength={10000}
-          rows={3}
-          placeholder="Что получилось? При необходимости добавьте проверки и оставшиеся вопросы."
-          {...register('summary')}
-        />
+        <textarea autoFocus required maxLength={10000} rows={3} {...register('summary')} />
       </label>
       <div className="row">
         <button className="primary" disabled={busy}>
@@ -74,19 +72,24 @@ function ResultEditor({ task, onClose }: { task: Task; onClose: () => void }) {
   );
 }
 export default function Tasks() {
-  const { data: w } = useWorkspace();
-  const { act, busy } = useActions();
   const [params] = useSearchParams();
+  return <TaskWorkspace key={params.toString()} params={params} />;
+}
+function TaskWorkspace({ params }: { params: URLSearchParams }) {
+  const { data: w, refetch } = useWorkspace();
+  const { act, busy } = useActions();
+  const [details, setDetails] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [filter, setFilter] = useState(params.get('project') || '');
   const [outcome, setOutcome] = useState<'open' | 'done' | 'cancelled'>('open');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Task | null>(null);
   const [resultTask, setResultTask] = useState<Task | null>(null);
   const requestKey = useRef(crypto.randomUUID());
-  const empty = (): Draft => ({
+  const empty = (project = filter): Draft => ({
     title: '',
     description: '',
-    projectId: filter === '__general__' ? null : filter || null,
+    projectId: project === '__general__' ? null : project || null,
     priority: 'normal',
   });
   const {
@@ -98,11 +101,18 @@ export default function Tasks() {
     formState: { isDirty },
   } = useForm<Draft>({ defaultValues: empty() });
   const loadedIdentifier = useRef<string | null>(null);
+  const currentTask = editing && w!.tasks.find((task) => task.id === editing.id);
+  useEffect(() => {
+    if (!isDirty && currentTask && currentTask.revision !== editing?.revision) {
+      setEditing(currentTask);
+      reset(taskDraft(currentTask));
+    }
+  }, [currentTask, editing?.revision, isDirty, reset]);
   function edit(t: Task) {
     setEditing(t);
+    setDetails(true);
     reset(taskDraft(t));
     requestAnimationFrame(() => setFocus('title'));
-    window.scrollTo({ top: 0 });
   }
   useEffect(() => {
     const identifier = params.get('task');
@@ -114,23 +124,37 @@ export default function Tasks() {
       loadedIdentifier.current = identifier;
     }
   });
-  function clear() {
-    reset(empty());
+  function clear(project = filter) {
+    reset(empty(project));
+    if (editing)
+      requestAnimationFrame(() => document.getElementById(`task-open-${editing.id}`)?.focus());
     setEditing(null);
+    setDetails(false);
     requestKey.current = crypto.randomUUID();
   }
   async function save(v: Draft) {
-    const ok = await act(
-      () =>
-        api(editing ? `/tasks/${editing.id}` : '/tasks', editing ? 'PUT' : 'POST', {
-          ...editing,
-          ...v,
-          projectId: v.projectId || null,
-          ...(editing ? { revision: editing.revision } : { requestKey: requestKey.current }),
-        }),
-      'Задача сохранена',
-    );
-    if (ok && JSON.stringify(getValues()) === JSON.stringify(v)) clear();
+    const ok = await act(async () => {
+      const input = { ...editing, ...v, projectId: v.projectId || null };
+      if (!editing) return api('/tasks', 'POST', { ...input, requestKey: requestKey.current });
+      try {
+        return await api(`/tasks/${editing.id}`, 'PUT', input);
+      } catch (error) {
+        await refetch();
+        throw error;
+      }
+    }, 'Задача сохранена');
+    if (!ok) return;
+    if (!editing) requestKey.current = crypto.randomUUID();
+    if (JSON.stringify(getValues()) !== JSON.stringify(v)) return;
+    if (editing) {
+      clear();
+      return;
+    }
+    const nextFilter = filter ? v.projectId || '__general__' : '';
+    setFilter(nextFilter);
+    setOutcome('open');
+    setSearch('');
+    clear(nextFilter);
   }
   function update(t: Task, change: Partial<TaskInput>) {
     return act(() => api(`/tasks/${t.id}`, 'PUT', { ...t, ...change }), 'Задача обновлена');
@@ -176,48 +200,84 @@ export default function Tasks() {
         ({ high: 0, normal: 1, low: 2 })[a.priority] - { high: 0, normal: 1, low: 2 }[b.priority] ||
         b.number - a.number,
     );
-  const textarea = (key: keyof Draft, label: string) => (
-    <label className="wide" key={key}>
-      {label}
-      <textarea rows={2} maxLength={10000} {...register(key)} />
-    </label>
-  );
-  return (
-    <>
-      <UnsavedChanges dirty={isDirty} />
-      <div className="page-heading">
-        <div>
-          <p className="section-label">План работы</p>
-          <h1>Задачи</h1>
-          <p className="subtitle">
-            Все задачи в одном месте. Передайте Codex номер CC-N, чтобы начать работу.
-          </p>
-        </div>
-        <Link className="button" to={filter ? `/history?project=${filter}` : '/history'}>
-          История работы →
-        </Link>
+  const projects = w!.projects;
+  const names = new Map(projects.map((p) => [p.id, p.metadata.name]));
+  const groups = new Map<string | null, Task[]>();
+  for (const task of items) {
+    const group = groups.get(task.projectId);
+    if (group) group.push(task);
+    else groups.set(task.projectId, [task]);
+  }
+  // An open editor keeps its place and its draft even if the task leaves the current filter.
+  const visible = new Set(items);
+  for (const draft of [editing, resultTask]) {
+    if (!draft) continue;
+    const group = groups.get(draft.projectId) ?? [];
+    if (!group.some((task) => task.id === draft.id)) {
+      group.push(draft);
+      groups.set(draft.projectId, group);
+    }
+  }
+  const sortedGroups = [...groups].sort(([a], [b]) => {
+    if (!a || !b) return a ? -1 : b ? 1 : 0;
+    return (names.get(a) ?? '').localeCompare(names.get(b) ?? '', 'ru');
+  });
+  function changeFilter(value: string) {
+    setFilter(value);
+    if (!editing && !isDirty) reset(empty(value));
+  }
+  const options = projects.map((p) => (
+    <option key={p.id} value={p.id}>
+      {p.metadata.name}
+    </option>
+  ));
+  const draftProjectId = getValues('projectId');
+  const composer = (
+    <form
+      className={editing ? 'task-composer inline-task-editor' : 'task-composer'}
+      aria-label={editing ? 'Изменить задачу' : 'Новая задача'}
+      onSubmit={handleSubmit(save)}
+    >
+      {editing && <h2>Изменить {editing.code}</h2>}
+      <div className="task-entry">
+        <Plus size={17} aria-hidden="true" />
+        <input
+          aria-label="Название задачи"
+          required
+          maxLength={240}
+          autoFocus={params.get('new') === '1'}
+          placeholder="Что нужно сделать?"
+          {...register('title')}
+        />
+        {!editing && (
+          <button
+            type="button"
+            className="task-icon"
+            aria-label="Параметры задачи"
+            title="Проект, приоритет и описание"
+            aria-expanded={details}
+            aria-controls="task-fields"
+            onClick={() => setDetails(!details)}
+          >
+            <SlidersHorizontal size={16} aria-hidden="true" />
+          </button>
+        )}
+        <button
+          className="task-submit"
+          disabled={busy}
+          aria-label={editing ? 'Сохранить задачу' : 'Создать задачу'}
+          title={editing ? 'Сохранить задачу' : 'Создать задачу'}
+        >
+          <CornerDownLeft size={15} aria-hidden="true" />
+        </button>
       </div>
-      <form className="panel form" onSubmit={handleSubmit(save)}>
-        <h2>{editing ? 'Изменить задачу' : 'Новая задача'}</h2>
-        <div className="form-grid">
-          <label className="wide">
-            Название задачи
-            <input
-              required
-              maxLength={240}
-              placeholder="Что нужно сделать?"
-              {...register('title')}
-            />
-          </label>
+      {details ? (
+        <div className="form-grid task-fields" id="task-fields">
           <label>
             Проект
             <select {...register('projectId')}>
               <option value="">Без проекта</option>
-              {w!.projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.metadata.name}
-                </option>
-              ))}
+              {options}
             </select>
           </label>
           <label>
@@ -230,168 +290,144 @@ export default function Tasks() {
               ))}
             </select>
           </label>
-          {textarea('description', 'Описание')}
-        </div>
-        <p className="help">
-          Достаточно названия. Условия готовности и ссылки можно добавить в описание. Итог —
-          отдельно, по ходу работы.
-        </p>
-        <div className="row">
-          <button className="primary" disabled={busy}>
-            {editing ? 'Сохранить задачу' : 'Создать задачу'}
-          </button>
+          <label className="wide">
+            Описание
+            <textarea rows={3} maxLength={10000} {...register('description')} />
+          </label>
           {editing && (
-            <button type="button" onClick={clear}>
+            <button type="button" onClick={() => clear()}>
               Отмена
             </button>
           )}
         </div>
-      </form>
-      {resultTask && (
-        <ResultEditor
-          key={`${resultTask.id}:${resultTask.revision}`}
-          task={resultTask}
-          onClose={() => setResultTask(null)}
+      ) : (
+        (isDirty || (filter && filter !== '__general__')) && (
+          <small className="task-destination">
+            Новая задача · {draftProjectId ? names.get(draftProjectId) : 'Без проекта'}
+          </small>
+        )
+      )}
+    </form>
+  );
+  return (
+    <div className="task-desk">
+      <UnsavedChanges dirty={isDirty} />
+      <NotebookHeading title="Задачи" />
+      {!editing && composer}
+      <div className="task-filters">
+        <select
+          aria-label="Состояние задач"
+          value={outcome}
+          onChange={(e) => setOutcome(e.target.value as typeof outcome)}
+        >
+          <option value="open">Открытые</option>
+          <option value="done">Завершённые</option>
+          <option value="cancelled">Отменённые</option>
+        </select>
+        <div>
+          <button
+            className="task-icon"
+            type="button"
+            aria-label="Поиск по задачам"
+            title="Поиск по задачам"
+            aria-expanded={searchOpen}
+            onClick={() => {
+              setSearchOpen(!searchOpen);
+              if (searchOpen) setSearch('');
+            }}
+          >
+            <Search size={16} aria-hidden="true" />
+          </button>
+          <label className="task-project-filter">
+            <ListFilter size={16} aria-hidden="true" />
+            <select
+              aria-label="Показать проект"
+              value={filter}
+              onChange={(e) => changeFilter(e.target.value)}
+            >
+              <option value="">Все проекты</option>
+              <option value="__general__">Без проекта</option>
+              {options}
+            </select>
+          </label>
+        </div>
+      </div>
+      {searchOpen && (
+        <input
+          autoFocus
+          className="task-search-input"
+          type="search"
+          aria-label="Поиск задач"
+          placeholder="Номер, название или описание"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
       )}
-      <div className="toolbar section-space">
-        <label>
-          Показать проект
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="">Все проекты и общие задачи</option>
-            <option value="__general__">Только общие задачи</option>
-            {w!.projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.metadata.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Поиск задач
-          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </label>
-        <label>
-          Состояние задач
-          <select value={outcome} onChange={(e) => setOutcome(e.target.value as typeof outcome)}>
-            <option value="open">Открытые</option>
-            <option value="done">Завершённые</option>
-            <option value="cancelled">Отменённые</option>
-          </select>
-        </label>
-      </div>
-      <section className="task-list section-space" aria-label="Список задач">
-        <h2>
-          {
-            { open: 'Открытые задачи', done: 'Завершённые задачи', cancelled: 'Отменённые задачи' }[
-              outcome
-            ]
-          }{' '}
-          <span className="count">{items.length}</span>
-        </h2>
+      <section aria-label="Список задач">
         {!items.length && (
           <p className="empty">
             {search
               ? 'По запросу задач не найдено.'
-              : outcome === 'cancelled'
-                ? 'Отменённых задач пока нет.'
-                : outcome === 'done'
-                  ? 'Завершённых задач пока нет.'
-                  : 'Открытых задач нет.'}
+              : {
+                  open: 'Открытых задач нет.',
+                  done: 'Завершённых задач пока нет.',
+                  cancelled: 'Отменённых задач пока нет.',
+                }[outcome]}
           </p>
         )}
-        {items.map((t) => (
-          <article className="panel task-card" key={t.id}>
-            <div className="row between">
-              <code>{t.code}</code>
-              {t.projectId ? (
-                <Link to={`/projects/${t.projectId}`}>
-                  {w!.projects.find((p) => p.id === t.projectId)?.metadata.name}
-                </Link>
+        {sortedGroups.map(([projectId, tasks]) => (
+          <div className="task-group" key={projectId ?? 'general'}>
+            <h2>
+              {projectId ? (
+                <Link to={`/projects/${projectId}`}>{names.get(projectId) ?? 'Проект'}</Link>
               ) : (
-                <span>Вся экосистема</span>
+                'Без проекта'
               )}
-              <span className="priority">{priorityLabels[t.priority]}</span>
-            </div>
-            <h3>{t.title}</h3>
-            {w!.proposalLinks?.[t.id] && (
-              <p>
-                <Link to={`/proposal-acceptances?id=${w!.proposalLinks[t.id]}`}>
-                  Основания принятого предложения →
-                </Link>
-              </p>
-            )}
-            <p className="preserve">{t.description}</p>
-            {(t.expectedResult || t.acceptance || t.links.length > 0 || t.result) && (
-              <details className="task-details">
-                <summary>Условия и результат</summary>
-                {t.expectedResult && (
-                  <p className="preserve">
-                    <strong>Ожидаемый результат:</strong> {t.expectedResult}
-                  </p>
+            </h2>
+            {tasks.map((t) => (
+              <Fragment key={t.id}>
+                {visible.has(t) && (
+                  <TaskRow
+                    task={t}
+                    proposalId={w!.proposalLinks?.[t.id]}
+                    busy={busy}
+                    resultOpen={!!resultTask}
+                    onEdit={() => {
+                      if (
+                        !isDirty ||
+                        confirm('Открыть задачу и отбросить несохранённые изменения?')
+                      )
+                        edit(t);
+                    }}
+                    onResult={() => setResultTask(t)}
+                    onFinish={() => void finish(t)}
+                    onDelete={() => {
+                      if (confirm(`Удалить «${t.title}»?`))
+                        void act(() => api(`/tasks/${t.id}`, 'DELETE'), 'Запись удалена');
+                    }}
+                  />
                 )}
-                {t.acceptance && (
-                  <p className="preserve">
-                    <strong>Условия завершения:</strong> {t.acceptance}
-                  </p>
+                {editing?.id === t.id && editing.projectId === projectId && composer}
+                {resultTask?.id === t.id && resultTask.projectId === projectId && (
+                  <ResultEditor
+                    task={resultTask}
+                    onClose={() => {
+                      setResultTask(null);
+                      requestAnimationFrame(() =>
+                        document.getElementById(`task-open-${t.id}`)?.focus(),
+                      );
+                    }}
+                  />
                 )}
-                {t.links.map((v, i) => (
-                  <p key={i} className="preserve">
-                    {v}
-                  </p>
-                ))}
-                {t.result && (
-                  <>
-                    <p className="preserve">
-                      <strong>Что сделано:</strong> {t.result.summary}
-                    </p>
-                    <p className="preserve">
-                      <strong>Проверено:</strong> {t.result.verified || 'Не указано'}
-                    </p>
-                    <p className="preserve">
-                      <strong>Не проверено:</strong> {t.result.unverified || 'Не указано'}
-                    </p>
-                    {t.result.remaining && (
-                      <p className="preserve">
-                        <strong>Осталось:</strong> {t.result.remaining}
-                      </p>
-                    )}
-                  </>
-                )}
-              </details>
-            )}
-            {t.completedAt && <small>Завершена: {date(t.completedAt)}</small>}
-            {t.cancellation && (
-              <p>
-                Отменена при закрытии проекта · {date(t.cancellation.at)}{' '}
-                <Link to={`/project-lifecycle/${t.cancellation.projectEventId}`}>
-                  Причина закрытия →
-                </Link>
-              </p>
-            )}
-            <div className="row">
-              <button disabled={busy} onClick={() => finish(t)}>
-                {isTaskOpen(t) ? 'Завершить' : 'Вернуть'}
-              </button>
-              <button onClick={() => edit(t)}>Изменить</button>
-              <button onClick={() => setResultTask(t)}>
-                {t.result ? 'Изменить итог' : 'Добавить итог'}
-              </button>
-              <Link to={`/history?task=${t.code}`}>История</Link>
-              <button
-                disabled={busy}
-                onClick={() => {
-                  if (confirm(`Удалить «${t.title}»?`))
-                    void act(() => api(`/tasks/${t.id}`, 'DELETE'), 'Запись удалена');
-                }}
-              >
-                Удалить
-              </button>
-            </div>
-          </article>
+              </Fragment>
+            ))}
+          </div>
         ))}
       </section>
-    </>
+      <Link className="task-history-link" to={filter ? `/history?project=${filter}` : '/history'}>
+        История работы →
+      </Link>
+    </div>
   );
 }
 
@@ -426,11 +462,7 @@ export function TaskHistory() {
     <>
       <div className="page-heading">
         <div>
-          <p className="section-label">Результаты работы</p>
           <h1>История работы</h1>
-          <p className="subtitle">
-            Прежние результаты сохраняются при изменении, возврате и удалении задачи.
-          </p>
         </div>
         <Link className="button" to="/tasks">
           К задачам →
@@ -540,11 +572,7 @@ export function TaskHistory() {
           </li>
         ))}
       </ol>
-      {query.data?.total === 0 && (
-        <p className="empty">
-          За этот период записей нет. Результаты появятся после сохранения или завершения задачи.
-        </p>
-      )}
+      {query.data?.total === 0 && <p className="empty">За этот период записей нет.</p>}
       <div className="row section-space">
         <button disabled={!offset || query.isFetching} onClick={() => setOffset(offset - 50)}>
           Назад

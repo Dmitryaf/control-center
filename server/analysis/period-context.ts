@@ -13,12 +13,13 @@ import { Reviews } from '../reviews.js';
 import { Tasks } from '../tasks.js';
 import { Observations } from '../observations.js';
 import { HttpError } from '../errors.js';
-import { sensitiveText, digest, projectStamp } from './privacy.js';
+import { containsSensitiveText, digest, projectStamp } from './privacy.js';
 export { digest, projectStamp } from './privacy.js';
 import { CodexContext } from '../codex/context.js';
 import { maxInputBytes } from './openai.js';
+import { dateInZone } from '../../shared/periods.js';
 
-export const periodPolicyVersion = 'period-review-v6';
+export const periodPolicyVersion = 'period-review-v7';
 export interface ContextGuard {
   kind:
     | 'project'
@@ -262,6 +263,37 @@ export function buildPeriodContext(
     // Explicit opt-in to bounded background, distinct from events of this period.
     // General reviews are excluded: they can contain unselected projects.
     for (const projectId of selection.projectIds) {
+      const completions = store.db
+        .prepare(
+          `
+        SELECT h.id,h.recorded_at,h.snapshot FROM task_history h
+        WHERE h.project_id=? AND h.kind='completed' AND h.recorded_at<?
+          AND h.id=(SELECT MAX(previous.id) FROM task_history previous
+            WHERE previous.task_id=h.task_id AND previous.project_id=h.project_id
+              AND previous.kind='completed' AND previous.recorded_at<?)
+        ORDER BY h.recorded_at DESC,h.id DESC LIMIT 5
+      `,
+        )
+        .all(projectId, review.startAt, review.startAt) as unknown as {
+        id: number;
+        recorded_at: string;
+        snapshot: string;
+      }[];
+      for (const completion of completions) {
+        const task = JSON.parse(completion.snapshot);
+        const text: string = task.result?.summary || '';
+        add({
+          id: `task:${completion.id}`,
+          kind: 'task',
+          projectId,
+          title: `Предыстория: ${task.code} · ${task.title}`,
+          text: text.slice(0, 2000),
+          day: dateInZone(new Date(completion.recorded_at), review.timezone),
+          recordedAt: completion.recorded_at,
+          dateQuality: 'background',
+          partial: text.length > 2000,
+        });
+      }
       const previous = store.db
         .prepare(
           "SELECT id FROM reviews WHERE scope_key=? AND period_end<? AND next_start_at<=? AND trim(user_text)<>'' ORDER BY period_end DESC,id DESC LIMIT 3",
@@ -421,7 +453,7 @@ export function buildPeriodContext(
     limitations: [
       ...(selection.includeProjectHistory
         ? [
-            'Предыстория: до трёх непустых обзоров и пяти наблюдений до начала периода для каждого выбранного проекта. Это контекст, не события текущего периода и не полная история.',
+            'Предыстория: до пяти последних завершённых задач, трёх непустых обзоров и пяти наблюдений до начала периода для каждого выбранного проекта. Это контекст, не события текущего периода и не полная история.',
           ]
         : []),
       'Прежние AI-итоги — производные предположения, не независимые факты; вложенные старые ссылки не входят в этот пакет.',
@@ -449,7 +481,7 @@ export function buildPeriodContext(
       400,
       `Пакет больше 80 000 байт (${Buffer.byteLength(json)}). Выберите неделю вместо месяца, меньше проектов или источников; пакет не обрезается и не отправлен.`,
     );
-  if (sensitiveText.test(json))
+  if (containsSensitiveText(payload))
     throw new HttpError(
       400,
       'В выбранных текстах найден возможный секрет или локальный путь. Исключите источник либо исправьте текст.',

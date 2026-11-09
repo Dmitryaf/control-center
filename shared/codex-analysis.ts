@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import { periodSelectionSchema, type PeriodRun } from './period-analysis.js';
 
+export const codexDefaultQuestion =
+  'Помоги осмыслить развитие выбранных проектов за этот период. Что изменилось по сути, что это даёт и куда разумно двигаться дальше? Посмотри на каждый проект отдельно, а затем на общую картину: есть ли полезные связи, переносимые идеи или возможности, которые я мог упустить? Пиши коротко и простыми словами. Не придумывай прогресс и не добавляй советы только ради заполнения ответа.';
+export interface CodexAnalysisInstructions {
+  policy: string;
+  question: string;
+  instruction: string;
+}
+
 export const codexFileSchema = z
   .object({
     projectId: z.string().uuid(),
@@ -12,7 +20,7 @@ export const codexPrepareSchema = z
     reviewId: z.string().uuid(),
     requestKey: z.string().uuid(),
     selection: periodSelectionSchema,
-    question: z.string().trim().min(1).max(4000),
+    question: z.string().trim().max(4000).default(''),
     model: z
       .string()
       .regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/)
@@ -21,7 +29,9 @@ export const codexPrepareSchema = z
     parentRunId: z.string().uuid().optional(),
     readConsent: z.literal(true),
   })
-  .strict();
+  .strict()
+  .refine((value) => !value.parentRunId || !!value.question, 'Напишите уточняющий вопрос.')
+  .transform((value) => ({ ...value, question: value.question || codexDefaultQuestion }));
 export const codexFilesQuerySchema = z
   .object({
     projectIds: z.array(z.string().uuid()).min(1).max(10),

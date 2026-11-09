@@ -1,10 +1,15 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fixture } from '../fixtures';
 import { designFixture } from './design-fixture';
 import type { AnalysisPreview, AnalysisResult } from '../../shared/analysis';
 import type { Workspace } from '../../shared/contracts';
+
+async function openAnalysisSetup(page: Page) {
+  await page.getByText('Выбрать проекты', { exact: true }).click();
+  await page.getByText('Другие возможности анализа', { exact: true }).click();
+}
 
 test('selected saved payload → explicit approval → proposals → one edited task; keyboard and wide/narrow layouts', async ({
   page,
@@ -76,8 +81,12 @@ test('selected saved payload → explicit approval → proposals → one edited 
   });
   try {
     await page.goto('/');
-    await page.getByRole('link', { name: 'Анализ проектов →', exact: true }).click();
+    await page
+      .getByRole('navigation')
+      .getByRole('link', { name: 'Анализ проектов', exact: true })
+      .click();
     await expect(page).toHaveURL(/\/analysis$/);
+    await openAnalysisSetup(page);
     await page
       .getByText('Краткий разбор текущего состояния — без сохранения обзора', { exact: true })
       .click();
@@ -197,6 +206,7 @@ test('unconfigured provider, preview failure, lost response and expired consent 
     });
   });
   await page.goto('/analysis');
+  await openAnalysisSetup(page);
   await page
     .getByText('Краткий разбор текущего состояния — без сохранения обзора', { exact: true })
     .click();

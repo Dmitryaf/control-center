@@ -90,6 +90,7 @@ export const codexAnalysisImportSchema = z
 export const recentAnalysisQuerySchema = z
   .object({
     projectIds: z.string().max(400).optional(),
+    view: z.literal('discussions').optional(),
   })
   .strict();
 export interface PeriodSource {
@@ -169,7 +170,7 @@ export interface PeriodRunPage {
   nextCursor: string | null;
 }
 export interface RecentAnalyses {
-  items: (PeriodRunSummary & { projectName: string })[];
+  items: (PeriodRunSummary & { projectName: string; title: string })[];
   truncated: boolean;
 }
 export const periodRunPageSchema = z

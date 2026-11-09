@@ -25,6 +25,39 @@ visibility: repository
 Private body not for export.
 `;
 
+for (const lost of [false, true]) {
+  test(`disconnect wins over an in-flight ${lost ? 'unavailable' : 'connected'} private index refresh`, async (t) => {
+    const f = await fixture();
+    const store = new Store(':memory:');
+    t.after(async () => {
+      store.close();
+      await f.cleanup();
+    });
+    const repo = await f.repo('project');
+    const privateRoot = path.join(f.root, 'private');
+    await mkdir(path.join(privateRoot, 'decisions'), { recursive: true });
+    const body = decision('D-0001', 'Retained private decision');
+    await writeFile(path.join(privateRoot, 'decisions', 'one.md'), body);
+    store.saveSettings({ ...defaultSettings, roots: [repo] });
+    const projects = new Projects(store);
+    await projects.scan();
+    const id = projects.list()[0].id;
+    await projects.context.save(id, { visibility: 'public', privateContextPath: privateRoot });
+    assert.equal((await projects.refresh(id)).context.privateStatus, 'connected');
+    const retainedRoot = lost ? path.join(f.root, 'moved-private') : privateRoot;
+    if (lost) await rename(privateRoot, retainedRoot);
+    const staleRefresh = projects.decisions.refresh(id);
+    await projects.context.save(id, { visibility: 'public', privateContextPath: null });
+    await staleRefresh;
+    const current = projects.view(projects.require(id));
+    assert.equal(current.context.privateStatus, 'disconnected');
+    assert.equal(current.context.hadPrivateRecords, false);
+    assert.ok(!projects.decisions.list().some((item) => item.source === 'private_context'));
+    assert.equal(await readFile(path.join(retainedRoot, 'decisions', 'one.md'), 'utf8'), body);
+    assert.equal((await projects.refresh(id)).context.privateStatus, 'disconnected');
+  });
+}
+
 test('visibility is explicit; audit uses Git index, exact allowlist and local-only Kit', async (t) => {
   const f = await fixture();
   const store = new Store(':memory:');
@@ -261,7 +294,7 @@ test('old SQLite v2 migrates without moving local decisions, legacy paths or che
   for (let i = 0; i < 2; i++) {
     const store = new Store(dbPath);
     try {
-      assert.equal(store.db.prepare('PRAGMA user_version').get()?.user_version, 14);
+      assert.equal(store.db.prepare('PRAGMA user_version').get()?.user_version, 15);
       const row = store.project('project-id')!;
       assert.equal(row.visibility, 'unknown');
       assert.equal(row.private_context_path, null);

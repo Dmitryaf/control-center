@@ -39,7 +39,8 @@ test('journal hierarchy, time semantics, overflow and keyboard contracts', async
         await expect(page.locator('.movement-clock').first()).toContainText('18');
       }
       if (name === 'project') {
-        await page.getByText('Настройки проекта', { exact: true }).click();
+        await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+        await page.getByRole('menuitem', { name: 'Настройки проекта', exact: true }).click();
         await expect(page.locator('.context-panel')).toContainText('Приватный контекст недоступен');
         await page.getByText(/Проверка публикации ·/).click();
         await expect(page.locator('.context-panel')).toContainText('.ai-rules/PROJECT_RULES.md');
@@ -60,6 +61,19 @@ test('journal hierarchy, time semantics, overflow and keyboard contracts', async
       if (name === 'projects') {
         await expect(page.locator('.project-row')).toHaveCount(12);
         await expect(page.locator('.project-row').nth(1)).toContainText('Без Git');
+        await expect(page.getByLabel('Тип проекта')).toBeHidden();
+        await page.getByRole('button', { name: 'Фильтры', exact: true }).click();
+        await page.getByLabel('Приоритет проекта').selectOption('high');
+        await page.getByLabel('Тип проекта').selectOption('tool');
+        await expect(page.locator('.project-row')).toHaveCount(0);
+        await page.getByLabel('Тип проекта').selectOption('product');
+        await expect(page.locator('.project-row')).toHaveCount(1);
+        await page.getByLabel('Статус проекта').selectOption('paused');
+        await expect(page.locator('.project-row')).toHaveCount(0);
+        await page.getByRole('button', { name: 'Фильтры · 2' }).click();
+        await expect(page.locator('.project-row')).toHaveCount(0);
+        await page.getByRole('button', { name: 'Сбросить', exact: true }).click();
+        await expect(page.locator('.project-row')).toHaveCount(12);
       }
       await page.evaluate(() => scrollTo(0, 0));
       await page.screenshot({

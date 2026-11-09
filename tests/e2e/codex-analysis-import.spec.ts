@@ -65,6 +65,10 @@ test('real HTTP Codex import is visible from project analysis, persists on reloa
     await page.goto(`/projects/${project.id}`);
     await page.getByRole('link', { name: 'Получить ИИ-анализ →', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Анализ проектов', exact: true })).toBeVisible();
+    await page
+      .locator('.analysis-scope summary')
+      .filter({ hasText: project.metadata.name })
+      .click();
     await expect(
       page.getByRole('checkbox', { name: project.metadata.name, exact: true }),
     ).toBeChecked();
@@ -84,13 +88,14 @@ test('real HTTP Codex import is visible from project analysis, persists on reloa
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await expect(saved.getByRole('alert')).toContainText('Synthetic recent read failure');
     await expect(saved).toContainText('Codex · внесён вручную');
-    await saved.getByRole('link', { name: 'Открыть анализ →', exact: true }).click();
+    await expect(saved.locator('.analysis-reading')).toHaveCount(0);
+    await saved.getByRole('link', { name: 'Анализ Codex', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Анализ Codex', exact: true })).toBeVisible();
     const result = page.getByRole('region', { name: 'Сохранённый анализ' });
     await expect(result).toContainText(run.report!.narrative);
     await expect(result).toContainText('API-запрос не выполнялся');
     const grounds = result.locator('details').filter({
-      has: page.locator('summary', { hasText: 'Основания и существенные ограничения' }),
+      has: page.locator('summary', { hasText: 'Откуда это известно' }),
     });
     await expect(grounds).not.toHaveAttribute('open');
     await expect(
@@ -104,9 +109,7 @@ test('real HTTP Codex import is visible from project analysis, persists on reloa
     await expect(grounds).toContainText(`codex_context:${requestKey}`);
     await grounds.locator('summary').click();
     const narrativeBox = await result.locator('p.preserve').boundingBox();
-    const packetBox = await result
-      .getByText('Сохранённые основания и ограничения', { exact: true })
-      .boundingBox();
+    const packetBox = await result.getByText('Сведения о запуске', { exact: true }).boundingBox();
     expect(narrativeBox!.y).toBeLessThan(packetBox!.y);
     await expect(result.locator('p.preserve')).toHaveCSS('white-space', 'pre-wrap');
     await expect(result.locator('b')).toHaveCount(0);

@@ -4,6 +4,7 @@ import {
   scheduleEnableSchema,
   scheduleRevisionSchema,
   type AnalysisSchedule,
+  type AnalysisProvider,
 } from '../../shared/analysis-schedules.js';
 import { dateInZone, periodBounds, type PeriodKind } from '../../shared/periods.js';
 import type { Store } from '../db.js';
@@ -13,8 +14,10 @@ import { normalizeSelection, periodPolicyVersion, projectStamp } from './period-
 import { verifySchedule, verifyScheduleAccess, type ScheduleAccess } from './schedule-guard.js';
 import type { PeriodAnalysis } from './period-analysis.js';
 import { CodexContext } from '../codex/context.js';
+import { CodexAnalysis, codexAnalysisPolicy } from '../codex/analysis.js';
 
 type Row = {
+  provider: AnalysisProvider;
   id: string;
   scope_key: string;
   project_name: string | null;
@@ -40,6 +43,7 @@ export class AnalysisSchedules {
     private analysis: PeriodAnalysis,
     private now: () => number = Date.now,
     private codex = new CodexContext(store),
+    private codexAnalysis?: CodexAnalysis,
   ) {}
   private timestamp() {
     return new Date(this.now()).toISOString();
@@ -47,6 +51,7 @@ export class AnalysisSchedules {
   private dto(row: Row): AnalysisSchedule {
     return {
       id: row.id,
+      provider: row.provider,
       scopeKey: row.scope_key,
       projectName: row.project_name,
       kind: row.period_kind,
@@ -97,11 +102,23 @@ export class AnalysisSchedules {
   enable(input: unknown) {
     const data = scheduleEnableSchema.parse(input);
     const status = this.analysis.status();
-    if (!status.ready || data.expectedModel !== status.model)
+    if (data.provider === 'openai' && (!status.ready || data.expectedModel !== status.model))
       throw new HttpError(409, 'Проверьте настроенную модель перед включением.');
+    if (
+      data.provider === 'codex' &&
+      (!this.codexAnalysis || data.expectedPolicy !== codexAnalysisPolicy)
+    )
+      throw new HttpError(
+        409,
+        'Промпт Codex изменился. Просмотрите его и подтвердите расписание заново.',
+      );
+    if (data.provider === 'codex' && !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/.test(data.expectedModel))
+      throw new HttpError(400, 'Проверьте модель Codex.');
     const result = this.store.transaction(() => {
       const review = new Reviews(this.store).read(data.reviewId);
       const selection = normalizeSelection(data.selection);
+      if (data.provider === 'codex' && !selection.projectIds.length)
+        throw new HttpError(400, 'Выберите хотя бы один проект для Codex.');
       if (selection.codexDigestIds.length)
         throw new HttpError(
           400,
@@ -151,8 +168,8 @@ export class AnalysisSchedules {
       ).periodStart;
       this.store.db
         .prepare(
-          `INSERT INTO analysis_schedules(id,scope_key,project_name,period_kind,timezone,model,policy_version,selection_json,access_json,revision,enabled,enabled_at,next_period_start,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?,?) ON CONFLICT(id) DO UPDATE SET timezone=excluded.timezone,model=excluded.model,policy_version=excluded.policy_version,selection_json=excluded.selection_json,access_json=excluded.access_json,revision=excluded.revision,enabled=1,enabled_at=excluded.enabled_at,next_period_start=excluded.next_period_start,lease_owner=NULL,lease_until=NULL,note=NULL,updated_at=excluded.updated_at`,
+          `INSERT INTO analysis_schedules(id,scope_key,project_name,period_kind,timezone,model,policy_version,selection_json,access_json,revision,enabled,enabled_at,next_period_start,updated_at,provider)
+        VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?,?,?) ON CONFLICT(id) DO UPDATE SET provider=excluded.provider,timezone=excluded.timezone,model=excluded.model,policy_version=excluded.policy_version,selection_json=excluded.selection_json,access_json=excluded.access_json,revision=excluded.revision,enabled=1,enabled_at=excluded.enabled_at,next_period_start=excluded.next_period_start,lease_owner=NULL,lease_until=NULL,note=NULL,updated_at=excluded.updated_at`,
         )
         .run(
           id,
@@ -160,14 +177,15 @@ export class AnalysisSchedules {
           review.projectName,
           review.kind,
           review.timezone,
-          status.model!,
-          periodPolicyVersion,
+          data.expectedModel,
+          data.provider === 'codex' ? codexAnalysisPolicy : periodPolicyVersion,
           JSON.stringify(selection),
           JSON.stringify(access),
           (old?.revision ?? 0) + 1,
           this.timestamp(),
           start,
           this.timestamp(),
+          data.provider,
         );
       return id;
     });
@@ -207,7 +225,10 @@ export class AnalysisSchedules {
     const row = this.store.db.prepare('SELECT * FROM analysis_schedules WHERE id=?').get(id)!;
     const approved = JSON.parse(String(row.access_json)) as ScheduleAccess[];
     verifyScheduleAccess(this.store, value.selection.projectIds, approved);
-    if (row.policy_version !== periodPolicyVersion)
+    if (
+      row.policy_version !==
+      (value.provider === 'codex' ? codexAnalysisPolicy : periodPolicyVersion)
+    )
       throw new HttpError(410, 'Источники или доступ изменились. Подтвердите их заново в обзоре.');
     const review = new Reviews(this.store).create(
       {
@@ -222,6 +243,8 @@ export class AnalysisSchedules {
       revision: value.revision,
       selection: value.selection,
       expectedModel: value.model,
+      provider: value.provider ?? 'openai',
+      expectedPolicy: value.provider === 'codex' ? codexAnalysisPolicy : periodPolicyVersion,
       readConsent: true,
       sendConsent: true,
       codexProjectIds: value.codexProjectIds ?? [],
@@ -241,7 +264,10 @@ export class AnalysisSchedules {
         "SELECT id FROM analysis_runs WHERE schedule_id=? AND status IN ('pending','running')",
       )
       .all(id);
-    for (const row of rows) this.analysis.cancel(String(row.id));
+    for (const row of rows) {
+      this.analysis.cancel(String(row.id));
+      this.codexAnalysis?.abort(String(row.id));
+    }
   }
   private pause(row: Row, note: string) {
     this.store.db
@@ -253,7 +279,7 @@ export class AnalysisSchedules {
   private pauseUncertain(row: Row, runId: string) {
     this.pause(
       row,
-      'Не удалось подтвердить исход отправленного запроса. Возможна оплата; продолжение требует подтверждения без повтора этого периода.',
+      'Не удалось подтвердить исход отправленного запроса. Возможно использование лимитов или оплата; продолжение требует подтверждения без повтора этого периода.',
     );
     this.store.db
       .prepare(
@@ -302,9 +328,18 @@ export class AnalysisSchedules {
     if (!row) return;
     try {
       const status = this.analysis.status();
-      if (status.model && status.model !== row.model)
+      if (row.provider === 'openai' && status.model && status.model !== row.model)
         throw new HttpError(410, 'Модель изменилась. Подтвердите расписание заново.');
-      verifySchedule(this.store, row.id, row.revision, row.model);
+      const verify = () =>
+        verifySchedule(
+          this.store,
+          row.id,
+          row.revision,
+          row.model,
+          row.provider,
+          row.provider === 'codex' ? codexAnalysisPolicy : periodPolicyVersion,
+        );
+      verify();
       const key = `schedule:${row.id}:${row.period_kind}:${row.next_period_start}`;
       const unfinished = this.store.db
         .prepare(
@@ -342,7 +377,19 @@ export class AnalysisSchedules {
         );
         return;
       }
-      if (!status.ready) {
+      if (row.provider === 'codex') {
+        const codex = await this.codexAnalysis?.status();
+        if (this.stopping) return;
+        verify();
+        if (!codex?.available || codex.authenticated !== true) {
+          this.pause(
+            row,
+            'Войдите в отдельный профиль Codex в Control Center и проверьте подключение. Продолжение требует подтверждения.',
+          );
+          return;
+        }
+      }
+      if (row.provider === 'openai' && !status.ready) {
         this.advance(
           row,
           next.periodStart,
@@ -393,21 +440,37 @@ export class AnalysisSchedules {
       if (this.stopping) return;
       if (context) selection.codexDigestIds = context.items.map((item) => item.id);
       // Reading is asynchronous: check the standing consent again after it finishes.
-      verifySchedule(this.store, row.id, row.revision, row.model);
+      verify();
       let run = existing
         ? this.analysis.read(String(existing.id))
-        : this.analysis.prepareScheduled(
-            {
-              reviewId: review.id,
-              requestKey: randomUUID(),
-              selection,
-              readConsent: true,
-              repeatConsent: false,
-            },
-            { id: row.id, revision: row.revision, key, limitations: context?.limitations },
-          );
+        : row.provider === 'codex'
+          ? await this.codexAnalysis!.prepareScheduled(
+              {
+                reviewId: review.id,
+                requestKey: randomUUID(),
+                selection,
+                readConsent: true,
+                ...(row.model === 'codex-default' ? {} : { model: row.model }),
+              },
+              { id: row.id, revision: row.revision, key, limitations: context?.limitations },
+            )
+          : this.analysis.prepareScheduled(
+              {
+                reviewId: review.id,
+                requestKey: randomUUID(),
+                selection,
+                readConsent: true,
+                repeatConsent: false,
+              },
+              { id: row.id, revision: row.revision, key, limitations: context?.limitations },
+            );
+      if (this.stopping) return;
       if (run.status === 'pending') {
         if (!run.payload.sources.some((s) => s.text.trim())) run = this.analysis.cancel(run.id);
+        else if (row.provider === 'codex')
+          run = (
+            await this.codexAnalysis!.start(run.id, { packetHash: run.packetHash, consent: true })
+          ).run;
         else run = await this.analysis.run(run.id, { packetHash: run.packetHash, consent: true });
       }
       if (run.status === 'running') return;
@@ -470,6 +533,7 @@ export class AnalysisSchedules {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     await this.analysis.stop();
+    await this.codexAnalysis?.stop();
     await this.active;
   }
 }

@@ -99,6 +99,7 @@ test('persisted AI proposal → protected human draft → real atomic task/idea 
     await route.fulfill({ status: 503, json: { error: 'Fixture lost response after commit' } });
   });
   await page.goto(`/period-analysis?review=${reviewId}&run=${runId}`);
+  await page.getByText(/^Предложения · /).click();
   await page.getByRole('link', { name: 'Проверить и принять предложение →' }).first().click();
   await expect(page.getByRole('heading', { name: 'Принять предложение' })).toBeVisible();
   await page.getByRole('combobox', { name: 'Создать', exact: true }).selectOption('task');

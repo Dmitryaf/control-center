@@ -29,7 +29,6 @@ function OpenReview({ project, day }: { project: string | null; day: string | nu
     <>
       <div className="page-heading">
         <div>
-          <p className="section-label">Проекты во времени</p>
           <h1>Открыть обзор периода</h1>
         </div>
         <Link to="/timeline?kind=review">Обзоры в истории →</Link>
@@ -357,11 +356,7 @@ function Editor({ initial, onDeleted }: { initial: Review; onDeleted: () => void
             Текст обзора
             <textarea rows={14} maxLength={60000} {...register('userText')} />
           </label>
-          <p className="help">
-            Свободный итог: что изменилось, что мешало, какие решения приняты и что делать дальше.
-            Сохраняется ваш текст; автоматического анализа нет. Предыдущие редакции текста не
-            архивируются.
-          </p>
+          <p className="help">Предыдущие редакции текста не сохраняются.</p>
           {validation && <p role="status">{validation}</p>}
           <div className="row section-space">
             <button className="primary" disabled={busy || isSubmitting}>

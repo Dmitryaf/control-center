@@ -64,8 +64,21 @@ test('embedded Codex: real HTTP preview, lost send reply, follow-up, restart, st
   await start();
   try {
     await page.goto(`${base}/analysis?project=${project.id}`);
+    const firstQuestion = 'Что проверить в садовом дневнике до добавления новых возможностей?';
+    const question = page.getByLabel('Что хотите обсудить?');
+    await question.fill(firstQuestion);
+    await page.getByRole('navigation').getByRole('link', { name: 'Проекты', exact: true }).click();
+    await expect(page.getByRole('alertdialog')).toBeVisible();
+    await page.getByRole('button', { name: 'Продолжить редактирование' }).click();
+    await expect(question).toHaveValue(firstQuestion);
+    await page
+      .locator('.analysis-scope summary')
+      .filter({ hasText: /^Неделя/ })
+      .click();
     await page.getByLabel('Дата внутри периода').fill('2024-03-10');
-    await page.getByRole('button', { name: 'Анализировать через Codex', exact: true }).click();
+    await page.getByText('Другие возможности анализа', { exact: true }).click();
+    await page.getByRole('button', { name: 'Выбрать источники, файлы и модель Codex' }).click();
+    await expect(page.getByLabel('Вопрос Codex', { exact: true })).toHaveValue(firstQuestion);
     await expect(
       page.getByRole('heading', { name: 'Обсуждение с Codex', exact: true }),
     ).toBeVisible();
@@ -90,7 +103,7 @@ test('embedded Codex: real HTTP preview, lost send reply, follow-up, restart, st
     await expect(page.getByText('ABCD-EFGH', { exact: true })).toHaveCount(0);
     executor.authenticated = true;
     await page.getByRole('button', { name: 'Проверить вход', exact: true }).click();
-    await expect(page.getByText(/Codex установлен/)).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Вход в Codex' })).toBeHidden();
     await page
       .getByLabel('Вопрос Codex', { exact: true })
       .fill('Что проверить в садовом дневнике до добавления новых возможностей?');
@@ -124,7 +137,17 @@ test('embedded Codex: real HTTP preview, lost send reply, follow-up, restart, st
     });
     await page.getByRole('checkbox', { name: /Я просмотрел контекст/ }).check();
     await page.getByRole('button', { name: 'Запустить Codex', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Анализ Codex', exact: true })).toHaveCount(1);
+    await expect(
+      page.getByRole('heading', {
+        name: 'Что проверить в садовом дневнике до добавления новых возможностей?',
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.goto(`${base}/analysis`);
+    const saved = page.getByRole('region', { name: 'Сохранённые анализы проектов' });
+    await expect(page.locator('.analysis-reading')).toHaveCount(0);
+    await saved.getByRole('link', { name: firstQuestion, exact: true }).click();
+    await expect(page.getByLabel('Уточняющий вопрос', { exact: true })).toBeVisible();
     expect(executor.prompts.length).toBe(1);
     const firstPrompt = JSON.parse(executor.prompts[0].split('\n').at(-1)!);
     expect(
@@ -135,17 +158,23 @@ test('embedded Codex: real HTTP preview, lost send reply, follow-up, restart, st
     await page
       .getByLabel('Уточняющий вопрос', { exact: true })
       .fill('Как провести эту проверку за один подход?');
-    await page.getByRole('button', { name: 'Подготовить контекст', exact: true }).click();
+    await page.getByRole('button', { name: 'Подготовить уточнение', exact: true }).click();
     await page.getByRole('checkbox', { name: /Я просмотрел контекст/ }).check();
     await page.getByRole('button', { name: 'Запустить Codex', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Анализ Codex', exact: true })).toHaveCount(2);
+    await expect(
+      page.getByRole('heading', { name: 'Как провести эту проверку за один подход?', exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('.analysis-reading')).toHaveCount(2);
     expect(executor.prompts.length).toBe(2);
     await expect(page.getByLabel('Уточняющий вопрос', { exact: true })).toHaveValue('');
     expect(JSON.parse(executor.prompts[1].split('\n').at(-1)!).conversation).toHaveLength(1);
     await stop();
     await start();
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Анализ Codex', exact: true })).toHaveCount(2);
+    await expect(
+      page.getByRole('heading', { name: 'Как провести эту проверку за один подход?', exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('.analysis-reading')).toHaveCount(2);
     await expect(page.getByLabel('Уточняющий вопрос', { exact: true })).toHaveValue('');
     expect(executor.prompts.length).toBe(2);
     for (const width of [1440, 390]) {
@@ -156,12 +185,39 @@ test('embedded Codex: real HTTP preview, lost send reply, follow-up, restart, st
       await page.getByLabel('Уточняющий вопрос', { exact: true }).scrollIntoViewIfNeeded();
       await page.screenshot({ path: `.local/work/embedded-codex-ui/discussion-${width}.png` });
     }
-    await page.getByRole('link', { name: 'Начать новое обсуждение →', exact: true }).click();
+    await page.goto(`${base}/analysis?project=${project.id}`);
+    await expect(saved.getByRole('link', { name: firstQuestion, exact: true })).toHaveCount(1);
+    await expect(
+      saved.getByText('Как провести эту проверку за один подход?', { exact: true }),
+    ).toHaveCount(0);
     executor.mode = 'wait';
-    await page
-      .getByLabel('Вопрос Codex', { exact: true })
-      .fill('Новый синтетический вопрос для проверки остановки.');
-    await page.getByRole('button', { name: 'Подготовить контекст', exact: true }).click();
+    const finalQuestion = 'Новый синтетический вопрос для проверки остановки.';
+    await question.fill(finalQuestion);
+    let firstPreparedId: string | null = null;
+    await page.route('**/api/codex-analysis/prepare', async (route) => {
+      const response = await route.fetch();
+      const prepared = await response.json();
+      if (!firstPreparedId) {
+        firstPreparedId = prepared.id;
+        await route.fulfill({
+          status: 503,
+          json: { error: 'Не удалось получить подтверждение подготовки' },
+        });
+      } else {
+        expect(prepared.id).toBe(firstPreparedId);
+        await route.fulfill({ response });
+      }
+    });
+    await page.getByRole('button', { name: 'Просмотреть запрос', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText(
+      'Не удалось получить подтверждение подготовки',
+    );
+    await expect(question).toHaveValue(finalQuestion);
+    expect(executor.prompts.length).toBe(2);
+    await page.getByRole('button', { name: 'Просмотреть запрос', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Просмотр запроса Codex' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Запустить Codex' })).toBeDisabled();
+    expect(executor.prompts.length).toBe(2);
     await page.getByRole('checkbox', { name: /Я просмотрел контекст/ }).check();
     await page.getByRole('button', { name: 'Запустить Codex', exact: true }).click();
     await expect.poll(() => executor.prompts.length).toBe(3);

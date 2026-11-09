@@ -68,6 +68,11 @@ test('primary analysis route keeps selected projects, prepares useful local cont
       ).toBe(true);
     }
     await page.goto('/analysis');
+    await page.getByText('Выбрать проекты', { exact: true }).click();
+    await page
+      .locator('.analysis-scope summary')
+      .filter({ hasText: /^Неделя/ })
+      .click();
     for (const project of projects.slice(0, 2))
       await page.getByRole('checkbox', { name: project.metadata.name, exact: true }).check();
     await page.getByRole('combobox', { name: 'Период обзора', exact: true }).selectOption('month');
@@ -86,6 +91,7 @@ test('primary analysis route keeps selected projects, prepares useful local cont
         fullPage: true,
       });
     }
+    await page.getByText('Другие возможности анализа', { exact: true }).click();
     await page.getByRole('button', { name: 'Подготовить обзор периода' }).focus();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/period-analysis\?review=/);

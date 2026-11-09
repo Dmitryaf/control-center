@@ -62,19 +62,17 @@ export function CheckCard({
         )}
         {!compact ? (
           <>
-            <p className="check-question preserve">{c.question}</p>
+            {c.question !== c.title && <p className="check-question preserve">{c.question}</p>}
             <dl className="check-dates">
               <dt>Последний внешний шаг</dt>
-              <dd>
-                {c.lastExternalActionAt ? date(c.lastExternalActionAt) : 'Ещё не записано'}
-                {c.lastExternalActionAt
-                  ? ` · ${c.daysWithoutMovement} дн.${c.completedAt ? ' до завершения' : ' назад'}`
-                  : ''}
-              </dd>
+              <dd>{c.lastExternalActionAt ? date(c.lastExternalActionAt) : 'Ещё не записано'}</dd>
               <dt>Последнее свидетельство</dt>
               <dd>{c.lastEvidenceAt ? date(c.lastEvidenceAt) : 'Ещё не записано'}</dd>
               <dt>Пересмотр</dt>
-              <dd>{c.reviewAt ? date(c.reviewAt) : c.reviewCondition || 'Не задан'}</dd>
+              <dd>
+                {[c.reviewAt && date(c.reviewAt), c.reviewCondition].filter(Boolean).join(' · ') ||
+                  'Не задан'}
+              </dd>
             </dl>
             {c.signals.map((s) => (
               <p className={`signal ${s.level}`} key={s.code}>
@@ -296,9 +294,7 @@ export default function Checks() {
     <>
       <div className="page-heading">
         <div>
-          <p className="section-label">От предположения к свидетельствам</p>
           <h1>Проверки</h1>
-          <p className="subtitle">Внешние шаги, результаты и время принять решение.</p>
         </div>
         {!creating && (
           <Link className="button primary" to="/checks?new=1">
@@ -333,7 +329,7 @@ export default function Checks() {
             {w!.checks
               .filter((c) => c.status === filter)
               .map((c) => (
-                <CheckCard key={c.id} check={c} />
+                <CheckCard key={c.id} check={c} compact />
               ))}
           </div>
           {!w!.checks.some((c) => c.status === filter) && (
@@ -607,9 +603,6 @@ export function CheckDetail() {
       <div className="page-heading">
         <div>
           <h1>{c.title}</h1>
-          <p className="subtitle">
-            Git показывает работу над проектом. Здесь — движение к внешнему подтверждению.
-          </p>
         </div>
         {c.status !== 'completed' && (
           <div className="row">
@@ -650,14 +643,15 @@ export function CheckDetail() {
               ['expectedExternalResult', 'Ожидаемый внешний результат'],
               ['continueIf', 'Продолжаем, если'],
               ['stopIf', 'Останавливаемся, если'],
-              ['reviewCondition', 'Пересмотр'],
             ] as const
-          ).map(([k, l]) => (
-            <div key={k}>
-              <h3>{l}</h3>
-              <p>{c[k] || 'Условие не задано'}</p>
-            </div>
-          ))}
+          )
+            .filter(([k]) => c[k])
+            .map(([k, l]) => (
+              <div key={k}>
+                <h3>{l}</h3>
+                <p>{c[k]}</p>
+              </div>
+            ))}
         </div>
         {c.ideaId && (
           <p>

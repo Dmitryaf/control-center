@@ -51,13 +51,15 @@ test('idea → check → external action/evidence → archive; canonical sources
     ).toBe(true);
     await page.goto(`/projects/${project.id}`);
     await expect(page.getByText('Дополнительные каталоги решений', { exact: true })).toHaveCount(0);
-    await page.getByText('Настройки проекта', { exact: true }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Настройки проекта', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'D-0001 File choice' })).toBeVisible();
     await expect(
       page.getByText('Пора пересмотреть решение D-0001', { exact: true }).last(),
     ).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Private rationale' })).toBeVisible();
-    await page.getByRole('button', { name: 'Изменить сводку' }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Изменить сводку', exact: true }).click();
     await page.getByLabel('Зачем существует', { exact: true }).fill('Keep local goal');
     await page.getByRole('button', { name: 'Сохранить сводку', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Сводка сохранена');
@@ -76,6 +78,8 @@ test('idea → check → external action/evidence → archive; canonical sources
     await expect(page.getByRole('status')).toContainText('Оставлена версия');
     expect(await readFile(yamlFile, 'utf8')).toContain('External focus');
     await page.goto('/ideas');
+    await expect(page.getByLabel('Название идеи')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Новая идея' }).click();
     await page.getByLabel('Название идеи').fill('Validate demand');
     await page.getByLabel('Описание', { exact: true }).fill('People need this workflow');
     await page.getByRole('combobox', { name: 'Проект', exact: true }).selectOption(project.id);
@@ -106,7 +110,7 @@ test('idea → check → external action/evidence → archive; canonical sources
     await page.getByLabel('Числовое значение').fill('2');
     await page.getByRole('button', { name: 'Сохранить запись' }).click();
     await expect(page.locator('.timeline')).toContainText('Two agreed');
-    await expect(page.locator('.check-card')).toContainText('11 дн. назад');
+    await expect(page.locator('.movement-clock strong')).toHaveText('11дн.');
     await expect(page.locator('.check-card')).toContainText('Проект активно меняется');
     const evidence = page.locator('.timeline article').filter({ hasText: 'Two agreed' });
     await evidence.getByRole('button', { name: 'Изменить', exact: true }).click();
@@ -122,7 +126,7 @@ test('idea → check → external action/evidence → archive; canonical sources
       .filter({ hasText: 'Temporary entry' })
       .getByRole('button', { name: 'Удалить запись' })
       .click();
-    await expect(page.locator('.check-card')).toContainText('11 дн. назад');
+    await expect(page.locator('.movement-clock strong')).toHaveText('11дн.');
     await page.goto('/');
     await expect(page.getByRole('link', { name: 'Validate demand' }).first()).toBeVisible();
     await expect(page.getByText(/Проект активно меняется/).first()).toBeVisible();
@@ -156,7 +160,8 @@ test('idea → check → external action/evidence → archive; canonical sources
     await expect(page.getByRole('status')).toContainText('история сохранена');
     expect((await state()).checks.find((c) => c.id === checkId)?.projectId).toBe(project.id);
     expect((await state()).projects.find((p) => p.id === project.id)?.path).toBe(moved);
-    await page.getByText('Настройки проекта', { exact: true }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Настройки проекта', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Private rationale' })).toBeVisible();
     await page.goto('/settings');
     await page.getByRole('button', { name: 'Создать резервную копию' }).click();
@@ -165,8 +170,10 @@ test('idea → check → external action/evidence → archive; canonical sources
     await page.getByRole('button', { name: 'Сохранить и сканировать' }).click();
     await expect(page.getByRole('status')).toContainText('Настройки сохранены');
     await page.goto(`/projects/${project.id}`);
-    await page.getByText('Настройки проекта', { exact: true }).click();
-    await page.getByRole('button', { name: 'Удалить из Control Center' }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Настройки проекта', exact: true }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Удалить из Control Center', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Проект удалён из Control Center');
     expect((await state()).checks.find((c) => c.id === checkId)?.projectId).toBe(null);
     await page.goto('/ideas');

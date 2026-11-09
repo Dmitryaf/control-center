@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AnalysisSchedule } from '../../../shared/analysis-schedules';
 import type { AnalysisStatus } from '../../../shared/analysis';
@@ -7,7 +7,11 @@ import type { Review } from '../../../shared/reviews';
 import type { CodexGrant } from '../../../shared/codex-context';
 import { useActions, useWorkspace } from '../../shared/workspace';
 import { api } from '../../shared/http';
-import { SourceSelection, emptySelection } from './SourceSelection';
+import { UnsavedChanges } from '../../shared/UnsavedChanges';
+import { SourceSelection, emptySelection, coreSelection } from './SourceSelection';
+import type { AnalysisProvider } from '../../../shared/analysis-schedules';
+import type { CodexExecutionStatus } from '../../../shared/codex-analysis';
+import { AnalysisInstructions, useCodexInstructions } from '../codex-analysis/AnalysisInstructions';
 
 function ScheduleCard({ value }: { value: AnalysisSchedule }) {
   const { act, busy } = useActions();
@@ -20,7 +24,9 @@ function ScheduleCard({ value }: { value: AnalysisSchedule }) {
         {value.kind === 'week' ? 'Неделя' : 'Месяц'}
       </h3>
       <p>
-        {value.enabled ? 'Включено' : 'Отключено'} · {value.model} · {value.timezone}
+        {value.enabled ? 'Включено' : 'Отключено'} ·{' '}
+        {value.provider === 'codex' ? 'Codex' : 'OpenAI API'} ·{' '}
+        {value.model === 'codex-default' ? 'default CLI' : value.model} · {value.timezone}
       </p>
       <p>
         Следующий период начинается {value.nextPeriodStart}. {value.note}
@@ -108,13 +114,46 @@ export function ScheduleForm({
   status: AnalysisStatus | undefined;
 }) {
   const { data: w } = useWorkspace();
+  const { hash } = useLocation();
+  const [params] = useSearchParams();
   const { act, busy } = useActions();
   const client = useQueryClient();
+  const initialSelection = {
+    ...emptySelection(review.scopeKey === 'general' ? null : review.scopeKey.slice(8)),
+    ...(review.scopeKey === 'general' && params.get('projects')
+      ? {
+          projectIds: params
+            .get('projects')!
+            .split(',')
+            .filter((id) => w!.projects.some((project) => project.id === id)),
+        }
+      : {}),
+  };
   const [selection, setSelection] = useState(
-    emptySelection(review.scopeKey === 'general' ? null : review.scopeKey.slice(8)),
+    params.get('provider') === 'codex' ? coreSelection(initialSelection) : initialSelection,
   );
   const [read, setRead] = useState(false),
     [send, setSend] = useState(false);
+  const [provider, setProvider] = useState<AnalysisProvider>(
+    params.get('provider') === 'codex' ? 'codex' : 'openai',
+  );
+  const [codexModel, setCodexModel] = useState('');
+  const [dirty, setDirty] = useState(false);
+  const instructions = useCodexInstructions();
+  const codexStatus = useQuery({
+    queryKey: ['codex-execution-status'],
+    queryFn: ({ signal }) =>
+      api<CodexExecutionStatus>('/codex-analysis/status', 'GET', undefined, signal),
+    enabled: provider === 'codex',
+    staleTime: 30000,
+  });
+  const expectedModel = provider === 'codex' ? codexModel.trim() || 'codex-default' : status?.model;
+  const ready =
+    provider === 'codex'
+      ? codexStatus.data?.available &&
+        codexStatus.data.authenticated === true &&
+        !!instructions.data
+      : status?.ready;
   const [codexProjects, setCodexProjects] = useState<string[]>([]);
   const [codexRead, setCodexRead] = useState(false),
     [codexSend, setCodexSend] = useState(false);
@@ -137,20 +176,35 @@ export function ScheduleForm({
     refetchInterval: 5000,
   });
   return (
-    <details className="section-space period-source-form">
-      <summary>Автоматический анализ завершённых периодов</summary>
+    <details
+      className="section-space period-source-form"
+      id="schedule"
+      open={hash === '#schedule' || params.get('provider') === 'codex' ? true : undefined}
+      aria-labelledby="schedule-settings-summary"
+    >
+      <UnsavedChanges dirty={dirty} />
+      <summary id="schedule-settings-summary">Автоматический анализ завершённых периодов</summary>
       <p>
         По умолчанию выключено. После включения первый запрос возможен только по завершении текущей{' '}
         {review.kind === 'week' ? 'недели' : 'месяца'} в зоне {review.timezone}. Весь этот период
         может включать записи до включения.
       </p>
-      <p>
-        Выбранные сведения будут отправляться в OpenAI без просмотра каждого пакета, с возможной
-        оплатой: модель {status?.model ?? 'не настроена'}, до {status?.maxInputBytes ?? 80000} байт
-        входа и {status?.maxOutputTokens ?? 3000} выходных tokens. Пропуски не догоняются,
-        техническая ошибка не отменяет будущие выпуски. Неизвестный исход запроса или изменение
-        доступа останавливают отправки до подтверждения. Сервер должен работать.
-      </p>
+      {provider === 'openai' ? (
+        <p>
+          Выбранные сведения будут отправляться в OpenAI без просмотра каждого пакета, с возможной
+          оплатой: модель {status?.model ?? 'не настроена'}, до {status?.maxInputBytes ?? 80000}{' '}
+          байт входа и {status?.maxOutputTokens ?? 3000} выходных tokens. Пропуски не догоняются,
+          техническая ошибка не отменяет будущие выпуски. Неизвестный исход запроса или изменение
+          доступа останавливают отправки до подтверждения. Сервер должен работать.
+        </p>
+      ) : (
+        <p>
+          Codex будет разбирать выбранные проекты без просмотра каждого нового пакета через
+          отдельный профиль Control Center, используя лимиты аккаунта. До 80 КБ контекста. Файлы не
+          подключаются; новые диалоги требуют отдельных разрешений ниже. Сервер должен работать;
+          пропущенные периоды не догоняются, неизвестный исход приостанавливает расписание.
+        </p>
+      )}
       {current.error && <p role="alert">{current.error.message}</p>}
       {current.data && <ScheduleCard value={current.data} />}
       <form
@@ -160,7 +214,8 @@ export function ScheduleForm({
           if (
             !read ||
             !send ||
-            !status?.model ||
+            !expectedModel ||
+            !ready ||
             (codexProjects.length && (!codexRead || !codexSend))
           )
             return;
@@ -169,12 +224,15 @@ export function ScheduleForm({
               reviewId: review.id,
               revision: current.data?.revision ?? null,
               selection,
-              expectedModel: status.model,
+              provider,
+              expectedModel,
+              ...(provider === 'codex' ? { expectedPolicy: instructions.data!.policy } : {}),
               readConsent: true,
               sendConsent: true,
               codexProjectIds: codexProjects,
               ...(codexProjects.length ? { codexReadConsent: true, codexSendConsent: true } : {}),
             });
+            setDirty(false);
             setRead(false);
             setSend(false);
             setCodexRead(false);
@@ -183,9 +241,57 @@ export function ScheduleForm({
           }, 'Расписание включено с текущего периода');
         }}
       >
+        <label>
+          Исполнитель анализа
+          <select
+            value={provider}
+            onChange={(event) => {
+              const value = event.target.value as AnalysisProvider;
+              setProvider(value);
+              setDirty(true);
+              setRead(false);
+              setSend(false);
+              setCodexRead(false);
+              setCodexSend(false);
+              if (value === 'codex') setSelection(coreSelection(selection));
+            }}
+          >
+            <option value="openai">OpenAI API</option>
+            <option value="codex">Codex · лимиты аккаунта</option>
+          </select>
+        </label>
+        {provider === 'codex' && (
+          <>
+            <label>
+              Модель Codex
+              <input
+                value={codexModel}
+                placeholder="default CLI"
+                maxLength={100}
+                onChange={(event) => {
+                  setCodexModel(event.target.value);
+                  setDirty(true);
+                  setRead(false);
+                  setSend(false);
+                }}
+              />
+            </label>
+            <AnalysisInstructions />
+            {codexStatus.isPending && <p role="status">Проверка профиля Codex…</p>}
+            {(!ready || codexStatus.error) && (
+              <p role="alert">
+                {codexStatus.error?.message ||
+                  codexStatus.data?.reason ||
+                  'Нужен вход в отдельный профиль Codex.'}{' '}
+                <Link to="/analysis">Открыть анализ и подключение Codex →</Link>
+              </p>
+            )}
+          </>
+        )}
         <SourceSelection
           value={selection}
           onChange={(value) => {
+            setDirty(true);
             setSelection(value);
             setRead(false);
             setSend(false);
@@ -216,6 +322,7 @@ export function ScheduleForm({
                       disabled={!enabled}
                       checked={codexProjects.includes(project.id)}
                       onChange={(event) => {
+                        setDirty(true);
                         setCodexProjects(
                           event.target.checked
                             ? [...codexProjects, project.id]
@@ -255,8 +362,9 @@ export function ScheduleForm({
                   checked={codexSend}
                   onChange={(event) => setCodexSend(event.target.checked)}
                 />
-                Разрешаю отправлять эти новые выдержки пользователя и ассистента в OpenAI без
-                просмотра каждого пакета, в указанных лимитах оплаты
+                Разрешаю отправлять эти новые выдержки пользователя и ассистента{' '}
+                {provider === 'codex' ? 'в Codex' : 'в OpenAI'} без просмотра каждого пакета, в
+                указанных лимитах оплаты
               </label>
             </>
           )}
@@ -267,8 +375,9 @@ export function ScheduleForm({
         </label>
         <label className="check">
           <input type="checkbox" checked={send} onChange={(e) => setSend(e.target.checked)} />
-          Разрешаю автоматическую отправку выбранных сведений в OpenAI с указанной моделью и
-          лимитами, с возможной оплатой
+          {provider === 'codex'
+            ? 'Разрешаю автоматическую отправку выбранных сведений в Codex с просмотренным промптом и выбранной моделью, используя лимиты аккаунта'
+            : 'Разрешаю автоматическую отправку выбранных сведений в OpenAI с указанной моделью и лимитами, с возможной оплатой'}
         </label>
         <div>
           <button
@@ -279,7 +388,7 @@ export function ScheduleForm({
               !!current.error ||
               !read ||
               !send ||
-              !status?.ready ||
+              !ready ||
               (codexProjects.length > 0 && (!codexRead || !codexSend || !!grants.error))
             }
           >
@@ -291,9 +400,24 @@ export function ScheduleForm({
   );
 }
 export default function Schedules() {
+  const [params] = useSearchParams();
+  const reviewId = params.get('review');
+  const review = useQuery({
+    queryKey: ['review', reviewId],
+    enabled: !!reviewId,
+    queryFn: ({ signal }) =>
+      api<Review>(`/reviews/${encodeURIComponent(reviewId!)}`, 'GET', undefined, signal),
+  });
+  const status = useQuery({
+    queryKey: ['period-analysis-status'],
+    enabled: !!reviewId,
+    queryFn: ({ signal }) =>
+      api<AnalysisStatus>('/period-analysis/status', 'GET', undefined, signal),
+  });
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const cursor = cursors.at(-1);
   const query = useQuery({
+    enabled: !reviewId,
     queryKey: ['analysis-schedules', 'list', cursor],
     queryFn: ({ signal }) =>
       api<{ items: AnalysisSchedule[]; nextCursor: string | null }>(
@@ -307,31 +431,48 @@ export default function Schedules() {
   return (
     <>
       <h1>Расписания AI-анализа</h1>
-      <p>
-        Создайте или включите расписание внутри <Link to="/reviews">обзора недели или месяца</Link>.
-        Новые проекты и виды источников требуют нового выбора.
-      </p>
-      <Link to="/timeline?kind=ai_analysis">Все сохранённые запуски →</Link>
-      {query.error && <p role="alert">{query.error.message}</p>}
-      {query.isPending && <p role="status">Загружаем расписания…</p>}
-      {query.data?.items.length === 0 && <p>Расписаний нет. Автоматическая отправка выключена.</p>}
-      {query.data?.items.map((value) => (
-        <ScheduleCard key={value.id} value={value} />
-      ))}
-      <div className="row">
-        <button
-          disabled={cursors.length === 1 || query.isFetching}
-          onClick={() => setCursors(cursors.slice(0, -1))}
-        >
-          Предыдущие
-        </button>
-        <button
-          disabled={!query.data?.nextCursor || query.isFetching}
-          onClick={() => setCursors([...cursors, query.data!.nextCursor])}
-        >
-          Следующие
-        </button>
-      </div>
+      {reviewId ? (
+        <>
+          <Link to="/analysis">К выбору проектов и периода →</Link>
+          {review.isPending && <p role="status">Загрузка периода…</p>}
+          {review.error && <p role="alert">{review.error.message}</p>}
+          {review.data && <ScheduleForm review={review.data} status={status.data} />}
+          <p className="section-space">
+            <Link to="/analysis-schedules">Все расписания →</Link>
+          </p>
+        </>
+      ) : (
+        <>
+          <p>
+            Создайте или включите расписание внутри{' '}
+            <Link to="/reviews">обзора недели или месяца</Link>. Новые проекты и виды источников
+            требуют нового выбора.
+          </p>
+          <Link to="/timeline?kind=ai_analysis">Все сохранённые запуски →</Link>
+          {query.error && <p role="alert">{query.error.message}</p>}
+          {query.isPending && <p role="status">Загружаем расписания…</p>}
+          {query.data?.items.length === 0 && (
+            <p>Расписаний нет. Автоматическая отправка выключена.</p>
+          )}
+          {query.data?.items.map((value) => (
+            <ScheduleCard key={value.id} value={value} />
+          ))}
+          <div className="row">
+            <button
+              disabled={cursors.length === 1 || query.isFetching}
+              onClick={() => setCursors(cursors.slice(0, -1))}
+            >
+              Предыдущие
+            </button>
+            <button
+              disabled={!query.data?.nextCursor || query.isFetching}
+              onClick={() => setCursors([...cursors, query.data!.nextCursor])}
+            >
+              Следующие
+            </button>
+          </div>
+        </>
+      )}
     </>
   );
 }

@@ -52,7 +52,7 @@ test('v12 project closure migration preserves old records without inventing clos
     store.close();
     await f.cleanup();
   });
-  assert.equal(store.db.prepare('PRAGMA user_version').get()?.user_version, 14);
+  assert.equal(store.db.prepare('PRAGMA user_version').get()?.user_version, 15);
   for (const [index, name] of [
     'projects',
     'records',

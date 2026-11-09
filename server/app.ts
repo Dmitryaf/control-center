@@ -52,7 +52,7 @@ export function createApp(
   const acceptances = new ProposalAcceptances(store, periodAnalysis);
   const codex = suppliedCodex ?? new CodexContext(store);
   const codexAnalysis = suppliedCodexAnalysis ?? new CodexAnalysis(store, history, periodAnalysis);
-  const schedules = new AnalysisSchedules(store, periodAnalysis, Date.now, codex);
+  const schedules = new AnalysisSchedules(store, periodAnalysis, Date.now, codex, codexAnalysis);
   const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -160,6 +160,9 @@ export function createApp(
   });
   app.get('/api/codex-analysis/status', async (_req, res) =>
     res.json(await codexAnalysis.status()),
+  );
+  app.get('/api/codex-analysis/instructions', (_req, res) =>
+    res.json(codexAnalysis.instructions()),
   );
   app.post('/api/codex-analysis/login', async (req, res) => {
     z.object({ confirm: z.literal(true) })

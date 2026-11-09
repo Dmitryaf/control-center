@@ -45,8 +45,14 @@ export default function History() {
       from: params.get('from') ?? '',
       to: params.get('to') ?? '',
     });
-    setPeriod(params.has('from') || params.has('to') ? 'custom' : 'all');
-  }, [params]);
+    setPeriod((previous) => {
+      if (!params.has('from') && !params.has('to')) return 'all';
+      const range = zonedRange(previous, timezone);
+      return range.from === params.get('from') && range.to === params.get('to')
+        ? previous
+        : 'custom';
+    });
+  }, [params, timezone]);
   const [page, setPage] = useState<{ key: string; cursors: (string | null)[] }>({
     key: filterKey,
     cursors: [null],
@@ -72,14 +78,7 @@ export default function History() {
     <>
       <div className="page-heading">
         <div>
-          <p className="section-label">Проекты во времени</p>
-          <p>
-            <Link to="/analysis-schedules">Расписания AI-анализа →</Link> ·{' '}
-            <Link to="/proposal-acceptances">Принятые предложения →</Link> ·{' '}
-            <Link to="/codex-context">Итоги диалогов Codex →</Link>
-          </p>
           <h1>История</h1>
-          <p className="subtitle">Результаты, внешние шаги и основания решений рядом.</p>
         </div>
         <div className="row">
           <Link
@@ -99,7 +98,11 @@ export default function History() {
           >
             Записать наблюдение
           </Link>
-          <Link to="/history">История задач →</Link>
+          <Link
+            to={`/history${params.get('project') && params.get('project') !== '__unlinked__' ? `?project=${params.get('project')}` : ''}`}
+          >
+            История по номеру задачи
+          </Link>
         </div>
       </div>
       <form
@@ -164,35 +167,38 @@ export default function History() {
             <option value="custom">Свой диапазон</option>
           </select>
         </label>
-        <label>
-          С даты
-          <input
-            type="date"
-            value={draft.from}
-            onChange={(event) => {
-              setPeriod('custom');
-              setDraft({ ...draft, from: event.target.value });
-            }}
-          />
-        </label>
-        <label>
-          По дату
-          <input
-            type="date"
-            min={draft.from || undefined}
-            value={draft.to}
-            onChange={(event) => {
-              setPeriod('custom');
-              setDraft({ ...draft, to: event.target.value });
-            }}
-          />
-        </label>
+        {period === 'custom' && (
+          <>
+            <label>
+              С даты
+              <input
+                type="date"
+                value={draft.from}
+                onChange={(event) => {
+                  setPeriod('custom');
+                  setDraft({ ...draft, from: event.target.value });
+                }}
+              />
+            </label>
+            <label>
+              По дату
+              <input
+                type="date"
+                min={draft.from || undefined}
+                value={draft.to}
+                onChange={(event) => {
+                  setPeriod('custom');
+                  setDraft({ ...draft, to: event.target.value });
+                }}
+              />
+            </label>
+          </>
+        )}
         <button>Показать</button>
       </form>
       <p className="help section-space">
         Часовой пояс: {timezone}. Даты фильтра включают весь день в этой зоне.
-        {includesToday && ' Текущий день ещё не завершён.'} Указанные даты проверок и решений не
-        содержат времени.
+        {includesToday && ' Текущий день ещё не завершён.'}
       </p>
       <details className="section-space history-coverage">
         <summary>Что входит в историю и чего она не сохраняет</summary>
@@ -206,13 +212,7 @@ export default function History() {
         </p>
         <p>
           Общие и отвязанные записи видны вместе. Прежняя связь локального решения с удалённым
-          проектом не восстанавливается. Записи и свидетельства сообщают сохранённые сведения, а не
-          доказывают их истинность или авторство.
-        </p>
-        <p>
-          Порядок записей с одним днём: сначала записи с известным временем, затем записи без
-          времени. Между ними не предполагается причинной связи. Пока вы просматриваете страницы,
-          источники могут измениться; для свежей выборки начните сначала.
+          проектом не восстанавливается.
         </p>
       </details>
       {(!params.get('kind') || params.get('kind') === 'file_decision') &&
@@ -229,8 +229,7 @@ export default function History() {
               {fileCoverage.notLoadedProjects}.
             </p>
             <p>
-              Они не представлены как датированные события. Обновите проекты кнопкой «Обновить»
-              вверху страницы; подробности — в проектных решениях.
+              Подробности доступны в <Link to="/decisions#file-decisions">проектных решениях</Link>.
             </p>
           </div>
         )}
@@ -290,9 +289,6 @@ export default function History() {
               {entry.excerpt && <p className="preserve">{entry.excerpt}</p>}
               {entry.truncated && (
                 <p className="help">Показан фрагмент; полный текст — в источнике.</p>
-              )}
-              {entry.kind !== 'task' && entry.kind !== 'project' && (
-                <p className="help">Текущая редакция источника, без архива правок.</p>
               )}
               <Link to={entry.href}>Открыть источник →</Link>
             </article>

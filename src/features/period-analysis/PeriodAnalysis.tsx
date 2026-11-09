@@ -13,6 +13,8 @@ import { useWorkspace, useActions } from '../../shared/workspace';
 import { api } from '../../shared/http';
 import { date } from '../../shared/labels';
 import { CodexChoices } from '../codex-context/CodexChoices';
+import { SavedReport } from '../analysis/SavedReport';
+import { NotebookHeading } from '../../shared/NotebookHeading';
 import { ScheduleForm } from './Schedules';
 import { SourceSelection, emptySelection } from './SourceSelection';
 
@@ -57,38 +59,17 @@ export function RunDetail({
     },
   });
   return (
-    <section className="panel section-space period-analysis" aria-label="Сохранённый анализ">
-      <div className="section-heading">
-        <h2>Вариант {run.generation}</h2>
-        <span className="signal-label">{stateLabel[run.status]}</span>
-      </div>
-      <p className="help">
-        {runtime
-          ? `Источник: Codex · запущен из Control Center · ${run.model === 'codex-default' ? 'модель по умолчанию CLI' : run.model}`
-          : manual
-            ? 'Источник: Codex · внесён вручную; API-запрос не выполнялся'
-            : `Модель: ${run.model || 'Не настроена'}`}{' '}
-        · {date(run.payload.period.from)} — {date(run.payload.period.to)} ·{' '}
-        {run.payload.period.timezone}
-      </p>
-      <p className="help">
-        Проекты:{' '}
-        {run.payload.sources
-          .filter((source) => source.kind === 'project')
-          .map((source) => source.title)
-          .join(', ') ||
-          run.payload.scope.name ||
-          'Состав указан в сохранённых основаниях'}
-        .
-      </p>
-      {manual && !run.payload.origin?.purpose && (
-        <p className="message warning">
-          Старый ручной импорт: назначение не было указано. Проверьте основания — запись могла
-          содержать техническую проверку, а не обзор проектов.
-        </p>
-      )}
-      {run.payload.period.incomplete && (
-        <p className="message warning">Период на момент подготовки был неполным.</p>
+    <section
+      className={run.report ? 'period-analysis reading-run' : 'panel section-space period-analysis'}
+      aria-label="Сохранённый анализ"
+    >
+      {run.report ? (
+        <SavedReport run={run} />
+      ) : (
+        <div className="section-heading">
+          <h2>Вариант {run.generation}</h2>
+          <span className="signal-label">{stateLabel[run.status]}</span>
+        </div>
       )}
       {run.error && <p role="alert">{run.error}</p>}
       {execute.error && <p role="alert">{execute.error.message}</p>}
@@ -98,83 +79,39 @@ export function RunDetail({
           оплаты.
         </p>
       )}
-      {run.report && (
-        <div className="section-space prose">
-          <h3>{manual || runtime ? 'Анализ Codex' : 'AI-обзор'}</h3>
-          <p className="preserve">{run.report.narrative}</p>
-          {(run.report.findings.length > 0 || run.report.uncertainties.length > 0) && (
-            <details>
-              <summary>Основания и существенные ограничения</summary>
-              {run.report.findings.length > 0 && (
-                <>
-                  <h3>Выводы и основания</h3>
-                  {run.report.findings.map((finding, index) => (
-                    <article key={index}>
-                      <p>{finding.statement}</p>
-                      <ul>
-                        {finding.sources.map((id) => (
-                          <li key={id}>
-                            {run.payload.sources.find((source) => source.id === id)?.title}{' '}
-                            <small>({id})</small>
-                          </li>
-                        ))}
-                      </ul>
-                    </article>
-                  ))}
-                </>
-              )}
-              {run.report.uncertainties.length > 0 && (
-                <>
-                  <h3>Что остаётся неизвестным</h3>
-                  <ul>
-                    {run.report.uncertainties.map((item, index) => (
-                      <li key={index}>{item}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </details>
-          )}
-          {run.report.proposals.length > 0 && (
-            <>
-              <h3>Идеи и возможные направления</h3>
-              {run.report.proposals.map((proposal, index) => (
-                <article key={index}>
-                  <h4>{proposal.title}</h4>
-                  <p>{proposal.description}</p>
-                  <p>{proposal.reason}</p>
-                  <p>
-                    Основания:{' '}
-                    {proposal.sources
-                      .map((id) => run.payload.sources.find((s) => s.id === id)?.title ?? id)
-                      .join('; ')}
-                  </p>
-                  <Link to={`/period-proposal?run=${run.id}&index=${index}`}>
-                    Проверить и принять предложение →
-                  </Link>
-                  <p className="help">
-                    Что ещё выяснить: {proposal.uncertainty || 'Не указано'}. Как проверить:{' '}
-                    {proposal.cheapCheck}
-                  </p>
-                </article>
-              ))}
-            </>
-          )}
-          <p className="help">
-            {runtime
-              ? 'Это ответ Codex по сохранённому пакету. Обсуждение и каждый вариант ответа хранятся в Control Center.'
-              : manual
-                ? 'Это готовый анализ, внесённый из Codex вместе с основаниями; приложение не проверяло исходный сеанс.'
-                : 'Это вывод модели по сохранённому пакету.'}{' '}
-            Он не доказывает правильность текста и не заменяет ваш итог. Задачи и идеи автоматически
-            не создаются.
-          </p>
-        </div>
+      {runtime && !embedded && (
+        <p>
+          <Link
+            to={`/codex-analysis?review=${run.reviewKey}&run=${run.id}${run.report && run.reviewId ? '#question' : ''}`}
+          >
+            {run.report && run.reviewId ? 'Уточнить у Codex →' : 'Открыть обсуждение с Codex →'}
+          </Link>
+        </p>
       )}
-      <details open={run.status === 'pending'}>
-        <summary>
-          {manual || runtime ? 'Сохранённые основания и ограничения' : 'Точный пакет и ограничения'}
-        </summary>
+      <details className="analysis-run-details" open={run.status === 'pending'}>
+        <summary>Сведения о запуске</summary>
+        <p>
+          Вариант {run.generation} · {stateLabel[run.status]}
+        </p>
+        <p className="help">
+          {runtime
+            ? `Источник: Codex · запущен из Control Center · ${run.model === 'codex-default' ? 'модель по умолчанию CLI' : run.model}`
+            : manual
+              ? 'Источник: Codex · внесён вручную; API-запрос не выполнялся'
+              : `Модель: ${run.model || 'Не настроена'}`}{' '}
+          · {date(run.payload.period.from)} — {date(run.payload.period.to)} ·{' '}
+          {run.payload.period.timezone}
+        </p>
+        <p className="help">
+          Проекты:{' '}
+          {run.payload.sources
+            .filter((source) => source.kind === 'project')
+            .map((source) => source.title)
+            .join(', ') ||
+            run.payload.scope.name ||
+            'Состав указан в сохранённых основаниях'}
+          .
+        </p>
         <p className="help">
           Пакет сохранён: {new Date(run.createdAt).toLocaleString('ru')}. Источников:{' '}
           {run.payload.sources.length}.
@@ -190,14 +127,52 @@ export function RunDetail({
         </p>
         <pre className="analysis-packet">{JSON.stringify(run.payload, null, 2)}</pre>
         <p className="source-path">Hash: {run.packetHash}</p>
+        {run.usage && !runtime && (
+          <p className="help section-space">
+            Фактические токены: вход {run.usage.inputTokens}, выход {run.usage.outputTokens}.
+            Денежная стоимость не рассчитывается.
+          </p>
+        )}
+        {run.responseId && !runtime && <p className="source-path">Response ID: {run.responseId}</p>}
+        {run.rawOutput && (
+          <details className="section-space">
+            <summary>
+              {runtime ? 'Сведения о запуске и исходный ответ' : 'Исходный текст ответа'}
+            </summary>
+            {runtime && run.usage && (
+              <p className="help">
+                Токены: вход {run.usage.inputTokens}, выход {run.usage.outputTokens}.
+              </p>
+            )}
+            {runtime && run.responseId && (
+              <p className="source-path">Codex execution ID: {run.responseId}</p>
+            )}
+            <pre className="analysis-packet">{run.rawOutput}</pre>
+          </details>
+        )}
+        {run.status !== 'running' && (
+          <button
+            className="section-space"
+            disabled={busy || execute.isPending}
+            onClick={() => {
+              if (
+                !confirm(
+                  'Удалить локальные пакет и результат анализа? Ваш обзор, исходные события и уже принятые задачи/идеи с их основаниями сохранятся.',
+                )
+              )
+                return;
+              void act(async () => {
+                await api(`/period-analysis/${run.id}`, 'DELETE', { confirm: true });
+                onDeleted();
+                client.removeQueries({ queryKey: ['period-run', run.id], exact: true });
+                await refresh();
+              }, 'Анализ удалён');
+            }}
+          >
+            Удалить локальный анализ
+          </button>
+        )}
       </details>
-      {runtime && !embedded && (
-        <p>
-          <Link to={`/codex-analysis?review=${run.reviewKey}&run=${run.id}`}>
-            Открыть обсуждение с Codex →
-          </Link>
-        </p>
-      )}
       {run.status === 'pending' && !runtime && (
         <div className="form section-space">
           <label className="check">
@@ -249,51 +224,6 @@ export function RunDetail({
           }
         >
           Отменить этот запуск
-        </button>
-      )}
-      {run.usage && !runtime && (
-        <p className="help section-space">
-          Фактические токены: вход {run.usage.inputTokens}, выход {run.usage.outputTokens}. Денежная
-          стоимость не рассчитывается.
-        </p>
-      )}
-      {run.responseId && !runtime && <p className="source-path">Response ID: {run.responseId}</p>}
-      {run.rawOutput && (
-        <details className="section-space">
-          <summary>
-            {runtime ? 'Сведения о запуске и исходный ответ' : 'Исходный текст ответа'}
-          </summary>
-          {runtime && run.usage && (
-            <p className="help">
-              Токены: вход {run.usage.inputTokens}, выход {run.usage.outputTokens}.
-            </p>
-          )}
-          {runtime && run.responseId && (
-            <p className="source-path">Codex execution ID: {run.responseId}</p>
-          )}
-          <pre className="analysis-packet">{run.rawOutput}</pre>
-        </details>
-      )}
-      {run.status !== 'running' && (
-        <button
-          className="section-space"
-          disabled={busy || execute.isPending}
-          onClick={() => {
-            if (
-              !confirm(
-                'Удалить локальные пакет и результат анализа? Ваш обзор, исходные события и уже принятые задачи/идеи с их основаниями сохранятся.',
-              )
-            )
-              return;
-            void act(async () => {
-              await api(`/period-analysis/${run.id}`, 'DELETE', { confirm: true });
-              onDeleted();
-              client.removeQueries({ queryKey: ['period-run', run.id], exact: true });
-              await refresh();
-            }, 'Анализ удалён');
-          }}
-        >
-          Удалить локальный анализ
         </button>
       )}
     </section>
@@ -363,34 +293,13 @@ function AnalysisPage({ reviewId }: { reviewId: string }) {
   const chosen = selection ?? initial;
   return (
     <>
-      <div className="page-heading">
-        <div>
-          <p className="section-label">Сохранённые варианты</p>
-          <h1>
-            {selected.data?.origin === 'codex_manual' ? 'Анализ проекта' : 'AI-анализ периода'}
-          </h1>
-          {review.data && (
-            <p className="subtitle">
-              {review.data.projectName ?? 'Общий обзор'} · {date(review.data.periodStart)} —{' '}
-              {date(review.data.periodEnd)}
-            </p>
-          )}
-        </div>
-        {selected.data?.reviewId !== null && (
-          <Link to={`/reviews?id=${reviewId}`}>Вернуться к своему обзору →</Link>
-        )}
-      </div>
-      <p className="help">
-        {selected.data?.origin === 'codex_manual'
-          ? 'Готовый анализ Codex сохранён локально. Его чтение не требует API-ключа.'
-          : 'Сначала выберите источники и подготовьте пакет. Отправка требует отдельного подтверждения.'}
-      </p>
-      <p>
-        <Link to="/analysis">Анализы проектов →</Link> ·{' '}
-        <Link to="/proposal-acceptances">Принятые предложения →</Link> ·{' '}
-        <Link to="/analysis-schedules">Все расписания →</Link> ·{' '}
-        <Link to="/timeline?kind=ai_analysis">Все AI-запуски →</Link>
-      </p>
+      <NotebookHeading
+        date={selected.data ? new Date(selected.data.createdAt) : undefined}
+        title={selected.data?.report ? 'Анализ проектов' : 'AI-анализ периода'}
+      />
+      <Link className="analysis-back" to="/analysis">
+        Все анализы
+      </Link>
       {selected.data?.reviewId === null && (
         <p>Обзор удалён; сохранённый анализ остаётся доступен.</p>
       )}
@@ -423,106 +332,122 @@ function AnalysisPage({ reviewId }: { reviewId: string }) {
             onDeleted={() => setDeletedIds([...deletedIds, selected.data!.id])}
           />
         )}
-      {review.data && (
-        <form
-          aria-label="Подготовка ручного анализа"
-          className="panel form section-space period-source-form"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            if (!readConsent) return;
-            setRetryingPrepare(true);
-            await act(async () => {
-              const saved = await api<PeriodRun>('/period-analysis/prepare', 'POST', {
-                reviewId,
-                requestKey,
-                selection: chosen,
-                readConsent: true,
-                repeatConsent,
-              });
-              client.setQueryData(['period-run', saved.id], saved);
-              setRequestKey(crypto.randomUUID());
-              setRetryingPrepare(false);
-              setReadConsent(false);
-              setRepeatConsent(false);
-              setCursors([null]);
-              await client.invalidateQueries({ queryKey: ['period-runs', reviewId] });
-              const next = new URLSearchParams(params);
-              next.set('run', saved.id);
-              setParams(next);
-            }, 'Точный пакет подготовлен. Отправка ещё не разрешена');
-          }}
-        >
-          <h2>Подготовить новый пакет</h2>
-          <SourceSelection
-            value={chosen}
-            onChange={setSelection}
-            projects={w!.projects}
-            projectId={projectId}
-            disabled={busy}
-          />
-          <CodexChoices reviewId={reviewId} value={chosen} onChange={setSelection} />
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={readConsent}
-              onChange={(e) => setReadConsent(e.target.checked)}
+      <details className="analysis-setup" open={!selected.data?.report}>
+        <summary>Настройки и история обзора</summary>
+        {review.data && (
+          <p>
+            <Link to={`/reviews?id=${reviewId}`}>Вернуться к своему обзору →</Link>
+          </p>
+        )}
+        <p>
+          <Link to="/analysis">Анализы проектов →</Link> ·{' '}
+          <Link to="/proposal-acceptances">Принятые предложения →</Link> ·{' '}
+          <Link to="/analysis-schedules">Все расписания →</Link> ·{' '}
+          <Link to="/timeline?kind=ai_analysis">Все AI-запуски →</Link>
+        </p>
+        {review.data && (
+          <form
+            aria-label="Подготовка ручного анализа"
+            className="panel form section-space period-source-form"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              if (!readConsent) return;
+              setRetryingPrepare(true);
+              await act(async () => {
+                const saved = await api<PeriodRun>('/period-analysis/prepare', 'POST', {
+                  reviewId,
+                  requestKey,
+                  selection: chosen,
+                  readConsent: true,
+                  repeatConsent,
+                });
+                client.setQueryData(['period-run', saved.id], saved);
+                setRequestKey(crypto.randomUUID());
+                setRetryingPrepare(false);
+                setReadConsent(false);
+                setRepeatConsent(false);
+                setCursors([null]);
+                await client.invalidateQueries({ queryKey: ['period-runs', reviewId] });
+                const next = new URLSearchParams(params);
+                next.set('run', saved.id);
+                setParams(next);
+              }, 'Точный пакет подготовлен. Отправка ещё не разрешена');
+            }}
+          >
+            <h2>Подготовить новый пакет</h2>
+            <SourceSelection
+              value={chosen}
+              onChange={setSelection}
+              projects={w!.projects}
+              projectId={projectId}
+              disabled={busy}
             />
-            Разрешаю прочитать выбранные источники и сохранить пакет локально
-          </label>
-          {!!runs.data?.items.length && (
+            <CodexChoices reviewId={reviewId} value={chosen} onChange={setSelection} />
             <label className="check">
               <input
                 type="checkbox"
-                checked={repeatConsent}
-                onChange={(e) => setRepeatConsent(e.target.checked)}
+                checked={readConsent}
+                onChange={(e) => setReadConsent(e.target.checked)}
               />
-              Понимаю, что новый вариант — отдельный запрос; предыдущий мог быть оплачен даже при
-              неизвестном результате
+              Разрешаю прочитать выбранные источники и сохранить пакет локально
             </label>
-          )}
-          <div>
-            <button
-              className="primary"
-              disabled={
-                busy ||
-                !readConsent ||
-                (!!runs.data?.items.length && !repeatConsent && !retryingPrepare)
-              }
-            >
-              Подготовить точный пакет
-            </button>
-          </div>
-        </form>
-      )}
-      {review.data && <ScheduleForm review={review.data} status={status.data} />}
-      {runs.data && (
-        <section className="panel section-space" aria-label="История AI-анализов">
-          <h2>История вариантов</h2>
-          {runs.data.items.length === 0 && <p className="empty">Сохранённых запусков пока нет.</p>}
-          {runs.data.items.map((run) => (
-            <p key={run.id}>
-              <Link to={`/period-analysis?review=${reviewId}&run=${run.id}`}>
-                Вариант {run.generation} · {stateLabel[run.status]}
-              </Link>{' '}
-              <small>{new Date(run.createdAt).toLocaleString('ru')}</small>
-            </p>
-          ))}
-          <div className="row">
-            <button
-              disabled={cursors.length === 1 || runs.isFetching}
-              onClick={() => setCursors(cursors.slice(0, -1))}
-            >
-              Предыдущие варианты
-            </button>
-            <button
-              disabled={!runs.data.nextCursor || runs.isFetching}
-              onClick={() => setCursors([...cursors, runs.data!.nextCursor])}
-            >
-              Следующие варианты
-            </button>
-          </div>
-        </section>
-      )}
+            {!!runs.data?.items.length && (
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={repeatConsent}
+                  onChange={(e) => setRepeatConsent(e.target.checked)}
+                />
+                Понимаю, что новый вариант — отдельный запрос; предыдущий мог быть оплачен даже при
+                неизвестном результате
+              </label>
+            )}
+            <div>
+              <button
+                className="primary"
+                disabled={
+                  busy ||
+                  !readConsent ||
+                  (!!runs.data?.items.length && !repeatConsent && !retryingPrepare)
+                }
+              >
+                Подготовить точный пакет
+              </button>
+            </div>
+          </form>
+        )}
+        {review.data && <ScheduleForm review={review.data} status={status.data} />}
+        {runs.data && (
+          <section className="panel section-space" aria-label="История AI-анализов">
+            <h2>История вариантов</h2>
+            {runs.data.items.length === 0 && (
+              <p className="empty">Сохранённых запусков пока нет.</p>
+            )}
+            {runs.data.items.map((run) => (
+              <p key={run.id}>
+                <Link to={`/period-analysis?review=${reviewId}&run=${run.id}`}>
+                  Вариант {run.generation} · {stateLabel[run.status]}
+                </Link>{' '}
+                <small>{new Date(run.createdAt).toLocaleString('ru')}</small>
+              </p>
+            ))}
+            <div className="row">
+              <button
+                disabled={cursors.length === 1 || runs.isFetching}
+                onClick={() => setCursors(cursors.slice(0, -1))}
+              >
+                Предыдущие варианты
+              </button>
+              <button
+                disabled={!runs.data.nextCursor || runs.isFetching}
+                onClick={() => setCursors([...cursors, runs.data!.nextCursor])}
+              >
+                Следующие варианты
+              </button>
+            </div>
+          </section>
+        )}
+      </details>
     </>
   );
 }
@@ -532,8 +457,7 @@ export default function PeriodAnalysis() {
   if (!reviewId)
     return (
       <div className="panel">
-        <p>Сначала откройте обзор недели или месяца.</p>
-        <Link to="/reviews">Выбрать период →</Link>
+        <Link to="/reviews">Выбрать неделю или месяц →</Link>
       </div>
     );
   return <AnalysisPage key={reviewId} reviewId={reviewId} />;

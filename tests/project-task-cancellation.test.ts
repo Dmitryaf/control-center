@@ -206,7 +206,7 @@ test('schema13 migration preserves raw history, sequence and a verified compatib
   const rows = seed.db.prepare('SELECT * FROM task_history').all();
   seed.close();
   const migrated = new Store(file);
-  assert.equal(migrated.db.prepare('PRAGMA user_version').get()?.user_version, 14);
+  assert.equal(migrated.db.prepare('PRAGMA user_version').get()?.user_version, 15);
   assert.equal(new Tasks(migrated).read(legacyOpen.id).cancellation, null);
   assert.deepEqual(migrated.db.prepare('SELECT * FROM task_history').all(), rows);
   assert.equal(

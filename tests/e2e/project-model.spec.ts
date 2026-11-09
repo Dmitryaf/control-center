@@ -141,7 +141,7 @@ test('new, active, busy and paused projects explain work with bounded lists and 
           ).toHaveCount(0);
         await expect(page.locator('.recent-work-list > li')).toHaveCount(index === 0 ? 0 : 5);
         await expect(
-          page.getByRole('button', { name: 'Настройки проекта', exact: true }),
+          page.getByRole('button', { name: 'Действия проекта', exact: true }),
         ).toHaveAttribute('aria-expanded', 'false');
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
           true,
@@ -154,7 +154,8 @@ test('new, active, busy and paused projects explain work with bounded lists and 
     }
     const project = projects[0];
     await page.goto(`/projects/${project.id}`);
-    await page.getByRole('button', { name: 'Изменить сводку' }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Изменить сводку', exact: true }).click();
     await expect(page.getByLabel('Связанные имена для PROJECT.yaml')).toBeHidden();
     await page
       .getByLabel('Зачем существует', { exact: true })

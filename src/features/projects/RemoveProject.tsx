@@ -1,4 +1,4 @@
-import { Trash2 } from 'lucide-react';
+import { ActionMenuItem } from '../../shared/ActionMenu';
 import { api } from '../../shared/http';
 import { useActions } from '../../shared/workspace';
 
@@ -13,13 +13,12 @@ export function RemoveProject({
 }) {
   const { act, busy } = useActions();
   return (
-    <button
-      className="remove-project"
+    <ActionMenuItem
       disabled={busy}
-      onClick={async () => {
+      onSelect={async () => {
         if (
           !confirm(
-            `Удалить «${name}» из Control Center? Каталог и файлы останутся на диске. Записи будут отвязаны, локальная сводка и связи удалены, путь исключён из сканирования.`,
+            `Удалить «${name}» из Control Center? Каталог и файлы останутся на диске. Записи будут отвязаны, локальная сводка и связи удалены. Отдельный путь проекта будет убран из каталогов сканирования, повторное обнаружение исключено.`,
           )
         )
           return;
@@ -27,8 +26,7 @@ export function RemoveProject({
           onRemoved?.();
       }}
     >
-      <Trash2 size={15} aria-hidden="true" />
       Удалить из Control Center
-    </button>
+    </ActionMenuItem>
   );
 }

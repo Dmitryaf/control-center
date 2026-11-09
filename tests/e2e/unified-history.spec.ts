@@ -87,6 +87,10 @@ test('real common/project history pages results, checks and decisions, preserves
     for (const width of [1440, 1100, 800, 390]) {
       await page.setViewportSize({ width, height: 1000 });
       await page.goto(`/timeline?project=${project.id}`);
+      await expect(page.getByRole('link', { name: 'История по номеру задачи' })).toHaveAttribute(
+        'href',
+        `/history?project=${project.id}`,
+      );
       await expect(page.locator('.history-record')).toHaveCount(30);
       await expect(
         page.getByRole('status', { name: 'Ограничения файловых источников' }),
@@ -187,6 +191,8 @@ test('history read errors keep known entries, retry without losing filters, and 
   await expect(page.locator('.history-record')).toContainText('Known result');
   fail = false;
   await page.getByRole('button', { name: 'Повторить', exact: true }).click();
+  await expect(page.getByLabel('С даты', { exact: true })).toHaveCount(0);
+  await page.getByRole('combobox', { name: 'Период', exact: true }).selectOption('custom');
   await page.getByLabel('С даты', { exact: true }).fill('2025-01-01');
   await page.getByRole('button', { name: 'Показать', exact: true }).click();
   await expect(page.locator('.history-record')).toHaveCount(0);

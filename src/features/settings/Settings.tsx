@@ -72,25 +72,31 @@ export default function Settings() {
       <UnsavedChanges dirty={isDirty} />
       <div className="page-heading">
         <div>
-          <p className="section-label">Локальное пространство</p>
           <h1>Настройки</h1>
-          <p className="subtitle">Откуда читать проекты и когда обращать на них внимание.</p>
         </div>
       </div>
       <form className="panel form settings-form" onSubmit={handleSubmit(save)}>
         <h2>Каталоги проектов</h2>
+        {workspace!.scan.scannedAt && (
+          <small>
+            Последнее сканирование ·{' '}
+            <time dateTime={workspace!.scan.scannedAt}>
+              {new Date(workspace!.scan.scannedAt).toLocaleString('ru')}
+            </time>
+          </small>
+        )}
         <label>
           Полные пути, каждый с новой строки
           <textarea rows={4} placeholder={'C:/Personal\nC:/Work'} {...register('roots')} />
         </label>
-        <p className="help">
-          Поиск останавливается внутри найденного проекта. Вложенный проект можно добавить отдельным
-          каталогом. Символические ссылки не обходятся.
-        </p>
-        <label>
-          Исключённые имена каталогов
-          <textarea rows={4} {...register('exclusions')} />
-        </label>
+        <p className="help">Вложенный проект можно добавить отдельным путём.</p>
+        <details>
+          <summary>Исключения при поиске</summary>
+          <label>
+            Исключённые имена каталогов
+            <textarea rows={4} {...register('exclusions')} />
+          </label>
+        </details>
         <details>
           <summary>Проекты, удалённые из Control Center</summary>
           <label className="section-space">
@@ -108,28 +114,28 @@ export default function Settings() {
           <input required {...register('timezone')} placeholder="Asia/Yekaterinburg" />
         </label>
         <p className="help">
-          Название IANA, например Asia/Yekaterinburg или Europe/Berlin. Неделя начинается в
-          понедельник. Сохранённые обзоры сохраняют прежнюю зону и границы.
+          Например, Asia/Yekaterinburg. Смена пояса применяется к новым обзорам.
         </p>
         {numberField('autoRefreshMinutes', 'Интервал обновления, минут', 0, 60)}
         <p className="help">
-          0 отключает автоматическое обновление. Пока запущен локальный сервер, он перечитывает Git,
-          сводки и решения известных проектов. Новые каталоги находятся при сканировании. Файлы,
-          задачи и ваши правки сводок не меняются.
+          Укажите 0, чтобы отключить обновления. Новые каталоги добавляются при сканировании.
         </p>
-        <div className="form-grid">
-          {numberField('inactivityDays', 'Нет новых commits, дней')}
-          {numberField('reviewDays', 'Пересмотр метаданных, дней')}
-        </div>
-        <h2>Время без внешнего движения</h2>
-        <p className="help">
-          Только для активных проверок. Интервалы должны возрастать. Git не сбрасывает эти сроки.
-        </p>
-        <div className="form-grid">
-          {numberField('movementInfoDays', 'Информация, дней')}
-          {numberField('movementAttentionDays', 'Внимание, дней')}
-          {numberField('movementDecisionDays', 'Нужно решение, дней')}
-        </div>
+        <details>
+          <summary>Когда напоминать о проектах и проверках</summary>
+          <div className="form-grid">
+            {numberField('inactivityDays', 'Нет новых commits, дней')}
+            {numberField('reviewDays', 'Пересмотр метаданных, дней')}
+          </div>
+          <h2>Время без внешнего движения</h2>
+          <p className="help">
+            Только для активных проверок. Интервалы должны возрастать. Git не сбрасывает эти сроки.
+          </p>
+          <div className="form-grid">
+            {numberField('movementInfoDays', 'Информация, дней')}
+            {numberField('movementAttentionDays', 'Внимание, дней')}
+            {numberField('movementDecisionDays', 'Нужно решение, дней')}
+          </div>
+        </details>
         {validation && <p role="alert">{validation}</p>}
         <div>
           <button className="primary" disabled={busy}>
@@ -138,8 +144,7 @@ export default function Settings() {
         </div>
       </form>
       <section className="panel section-space prose">
-        <h2>Как хранятся данные</h2>
-        <p className="source-path">База: {workspace!.storage.databasePath}</p>
+        <h2>Резервная копия</h2>
         <button
           disabled={busy}
           onClick={() =>
@@ -151,19 +156,14 @@ export default function Settings() {
           Создать резервную копию
         </button>
         {backupPath && <p className="source-path">Копия: {backupPath}</p>}
-        <p className="help">
-          Для восстановления остановите приложение, сохраните текущую базу вместе с -wal/-shm
-          отдельно и поместите копию под именем control-center.sqlite в указанный каталог.
-          Подробности — в README.
-        </p>
-        <p>
-          Задачи, идеи, решения, связи, настройки и ваши правки сводок хранятся в локальной SQLite.
-          Сканирование читает репозитории без изменения файлов.
-        </p>
-        <p>
-          Файл PROJECT.yaml меняется только по кнопке экспорта на странице проекта. Сохранённые в
-          Control Center правки имеют приоритет над YAML.
-        </p>
+        <details>
+          <summary>Расположение базы и восстановление</summary>
+          <p className="source-path">{workspace!.storage.databasePath}</p>
+          <p>
+            Остановите приложение и сохраните текущую базу вместе с файлами -wal и -shm отдельно.
+            Поместите копию под именем control-center.sqlite в каталог базы.
+          </p>
+        </details>
       </section>
     </>
   );

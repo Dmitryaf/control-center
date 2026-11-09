@@ -99,7 +99,7 @@ export class DecisionIndex {
     if (text === null) throw new HttpError(404, 'Исходный файл решения недоступен.');
     return { body: parseDecision(text, projectId, record.sourcePath, record.source).body };
   }
-  async refresh(projectId: string) {
+  async refresh(projectId: string): Promise<void> {
     const project = this.store.project(projectId);
     if (!project) return;
     const found: FileDecision[] = [];
@@ -164,7 +164,7 @@ export class DecisionIndex {
       privateStatus: project.private_context_path ? 'unavailable' : 'disconnected',
       hasPrivateMap: false,
     };
-    this.contexts.set(projectId, context);
+    let hasPrivateRecords = false;
     if (project.private_context_path) {
       const root = project.private_context_path;
       try {
@@ -187,10 +187,8 @@ export class DecisionIndex {
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
         }
-        if (found.slice(before).some((record) => !record.error) || context.hasPrivateMap)
-          this.store.db
-            .prepare('UPDATE projects SET private_context_had_records=1 WHERE id=?')
-            .run(projectId);
+        hasPrivateRecords =
+          found.slice(before).some((record) => !record.error) || context.hasPrivateMap;
       } catch {
         context.privateStatus = 'unavailable';
         context.hasPrivateMap = false;
@@ -199,6 +197,23 @@ export class DecisionIndex {
         // Status is shown on the project; attention depends on prior canonical records.
       }
     }
+    const current = this.store.project(projectId);
+    if (!current) {
+      this.forget(projectId);
+      return;
+    }
+    if (
+      current.path !== project.path ||
+      current.private_context_path !== project.private_context_path
+    )
+      return this.refresh(projectId);
+    if (hasPrivateRecords)
+      this.store.db
+        .prepare(
+          'UPDATE projects SET private_context_had_records=1 WHERE id=? AND private_context_path=?',
+        )
+        .run(projectId, project.private_context_path);
+    this.contexts.set(projectId, context);
     const ids = found.map((r) => r.metadata?.id).filter(Boolean);
     for (const record of found)
       if (record.metadata && ids.filter((id) => id === record.metadata!.id).length > 1)

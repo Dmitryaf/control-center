@@ -1,24 +1,42 @@
 import { Link, Outlet, useLocation } from 'react-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { DraftProvider } from './shared/UnsavedChanges';
 import { useWorkspace, useActions } from './shared/workspace';
 import { api } from './shared/http';
-import { LayoutDashboard, FolderOpen, ListTodo, History, Sparkles, Settings } from 'lucide-react';
+import {
+  LayoutDashboard,
+  FolderOpen,
+  ListTodo,
+  History,
+  MessageSquareText,
+  Notebook,
+  Menu,
+  RefreshCw,
+  Settings,
+} from 'lucide-react';
 
 export default function App() {
   const query = useWorkspace();
   const { busy, error, notice, act } = useActions();
   const workspace = query.data;
   const location = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const menuToggle = useRef<HTMLButtonElement>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   useEffect(() => {
+    if (
+      document.activeElement?.closest('#workspace-navigation') &&
+      menuToggle.current?.offsetWidth &&
+      !location.hash
+    ) {
+      document.getElementById('content')?.focus({ preventScroll: true });
+    }
+    setMobileOpen(false);
     setMoreOpen(
-      ['/checks', '/ideas', '/decisions', '/settings'].some((path) =>
-        location.pathname.startsWith(path),
-      ),
+      ['/checks', '/ideas', '/decisions'].some((path) => location.pathname.startsWith(path)),
     );
-  }, [location.pathname]);
+  }, [location.key, location.pathname]);
   const ready = !!workspace;
   useEffect(() => {
     if (!ready || !location.hash) return;
@@ -50,54 +68,68 @@ export default function App() {
     window.addEventListener('focus', refresh);
     return () => window.removeEventListener('focus', refresh);
   }, [client, busy]);
-  const selected = (path: string) =>
-    path === '/'
-      ? location.pathname === '/'
-      : location.pathname.startsWith(path) ||
-        (path === '/analysis' && location.pathname === '/codex-analysis') ||
-        (path === '/tasks' && location.pathname === '/history') ||
-        (path === '/timeline' &&
-          (location.pathname.startsWith('/project-lifecycle/') ||
-            [
-              '/observations',
-              '/reviews',
-              '/period-analysis',
-              '/analysis-schedules',
-              '/period-proposal',
-              '/proposal-acceptances',
-              '/codex-context',
-            ].includes(location.pathname)));
+  const route = '/' + location.pathname.split('/')[1];
+  const sections: Record<string, string> = {
+    '/codex-analysis': '/analysis',
+    '/period-analysis': '/analysis',
+    '/analysis-schedules': '/analysis',
+    '/period-proposal': '/analysis',
+    '/proposal-acceptances': '/analysis',
+    '/codex-context': '/analysis',
+    '/history': '/timeline',
+    '/observations': '/timeline',
+    '/reviews': '/timeline',
+    '/project-lifecycle': '/timeline',
+  };
+  const selected = (path: string) => path === (sections[route] ?? route);
   return (
     <div className="shell">
       <a className="skip-link" href="#content">
         К содержимому
       </a>
-      <header className="workspace-bar">
+      <header
+        className="workspace-bar"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && mobileOpen) {
+            setMobileOpen(false);
+            menuToggle.current?.focus();
+          }
+        }}
+      >
         <Link to="/" className="brand">
           <span className="brand-mark" aria-hidden="true">
-            ↗
+            <Notebook size={20} />
           </span>
-          <span>
-            Control Center<small>Локальное рабочее пространство</small>
-          </span>
+          <span>Control Center</span>
         </Link>
-        <nav aria-label="Основная навигация">
+        <button
+          ref={menuToggle}
+          type="button"
+          className="mobile-menu-toggle"
+          aria-expanded={mobileOpen}
+          aria-controls="workspace-navigation"
+          onClick={() => setMobileOpen(!mobileOpen)}
+        >
+          <Menu size={18} aria-hidden="true" /> Меню
+        </button>
+        <nav id="workspace-navigation" aria-label="Основная навигация" data-open={mobileOpen}>
           {[
             { path: '/', label: 'Обзор', icon: LayoutDashboard },
             { path: '/projects', label: 'Проекты', icon: FolderOpen },
             { path: '/tasks', label: 'Задачи', icon: ListTodo },
             { path: '/timeline', label: 'История', icon: History },
-            { path: '/analysis', label: 'Анализ проектов', icon: Sparkles },
+            { path: '/analysis', label: 'Анализ проектов', icon: MessageSquareText },
             { path: '/settings', label: 'Настройки', icon: Settings },
           ].map(({ path, label, icon: Icon }) => (
             <Link
               key={path}
               to={path}
+              aria-label={path === '/analysis' ? label : undefined}
               aria-current={selected(path) ? 'page' : undefined}
               className={selected(path) ? 'selected' : ''}
             >
               <Icon size={18} aria-hidden="true" />
-              <span className="navigation-label">{label}</span>
+              <span className="navigation-label">{path === '/analysis' ? 'Анализ' : label}</span>
             </Link>
           ))}
           <details
@@ -125,10 +157,13 @@ export default function App() {
           </details>
         </nav>
         <button
+          className="refresh-workspace"
+          aria-label={busy || (!workspace && query.isPending) ? 'Обновление…' : '↻ Обновить'}
           disabled={busy || (!workspace && query.isPending)}
           onClick={() => act(() => api('/scan', 'POST'), 'Данные обновлены')}
         >
-          {busy || (!workspace && query.isPending) ? 'Обновление…' : '↻ Обновить'}
+          <RefreshCw size={16} aria-hidden="true" />
+          <span>{busy || (!workspace && query.isPending) ? 'Обновление…' : 'Обновить'}</span>
         </button>
       </header>
       <div className="main-shell">
@@ -173,13 +208,11 @@ export default function App() {
                   ))}
                 </div>
               )}
-              <p className="help" aria-live="polite">
-                {workspace.refresh.running
-                  ? 'Читаем состояние проектов…'
-                  : workspace.settings.autoRefreshMinutes
-                    ? `Интервал обновления проектов: ${workspace.settings.autoRefreshMinutes} мин.`
-                    : 'Автоматическое обновление проектов отключено.'}
-              </p>
+              {workspace.refresh.running && (
+                <p className="help" role="status">
+                  Читаем состояние проектов…
+                </p>
+              )}
               {workspace.refresh.errors.length > 0 && (
                 <div className="message warning" role="alert" aria-label="Обновление проектов">
                   <strong>При автоматическом обновлении не все данные удалось прочитать</strong>

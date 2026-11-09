@@ -12,6 +12,7 @@ export function Ideas() {
   const { data: w } = useWorkspace();
   const { act, busy } = useActions();
   const [id, setId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const empty: IdeaInput = { title: '', description: '', projectId: null, state: 'new' };
   const {
     register,
@@ -24,78 +25,83 @@ export function Ideas() {
       <UnsavedChanges dirty={isDirty} />
       <div className="page-heading">
         <div>
-          <p className="section-label">Входящие</p>
           <h1>Идеи</h1>
-          <p className="subtitle">Сохранить мысль сейчас, разобраться позже.</p>
         </div>
-      </div>
-      <form
-        className="panel form"
-        onSubmit={handleSubmit(async (v) => {
-          if (
-            await act(
-              () =>
-                api(id ? `/ideas/${id}` : '/ideas', id ? 'PUT' : 'POST', {
-                  ...v,
-                  projectId: v.projectId || null,
-                }),
-              'Идея сохранена',
-            )
-          ) {
-            reset(empty);
-            setId(null);
-          }
-        })}
-      >
-        <h2>{id ? 'Изменить идею' : 'Новая идея'}</h2>
-        <label>
-          Название идеи
-          <input required maxLength={240} {...register('title')} />
-        </label>
-        <label>
-          Описание
-          <textarea rows={3} {...register('description')} />
-        </label>
-        <div className="form-grid">
-          <label>
-            Проект
-            <select {...register('projectId')}>
-              <option value="">Без проекта</option>
-              {w!.projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.metadata.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Состояние
-            <select {...register('state')}>
-              {Object.entries(ideaLabels).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="row">
-          <button className="primary" disabled={busy}>
-            {id ? 'Сохранить идею' : 'Добавить идею'}
+        {!formOpen && (
+          <button className="primary" onClick={() => setFormOpen(true)}>
+            Новая идея
           </button>
-          {id && (
+        )}
+      </div>
+      {formOpen && (
+        <form
+          className="panel form"
+          onSubmit={handleSubmit(async (v) => {
+            if (
+              await act(
+                () =>
+                  api(id ? `/ideas/${id}` : '/ideas', id ? 'PUT' : 'POST', {
+                    ...v,
+                    projectId: v.projectId || null,
+                  }),
+                'Идея сохранена',
+              )
+            ) {
+              reset(empty);
+              setId(null);
+              setFormOpen(false);
+            }
+          })}
+        >
+          <h2>{id ? 'Изменить идею' : 'Новая идея'}</h2>
+          <label>
+            Название идеи
+            <input autoFocus required maxLength={240} {...register('title')} />
+          </label>
+          <label>
+            Описание
+            <textarea rows={3} {...register('description')} />
+          </label>
+          <div className="form-grid">
+            <label>
+              Проект
+              <select {...register('projectId')}>
+                <option value="">Без проекта</option>
+                {w!.projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.metadata.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Состояние
+              <select {...register('state')}>
+                {Object.entries(ideaLabels).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="row">
+            <button className="primary" disabled={busy}>
+              {id ? 'Сохранить идею' : 'Добавить идею'}
+            </button>
             <button
               type="button"
               onClick={() => {
                 reset(empty);
                 setId(null);
+                setFormOpen(false);
               }}
             >
               Отмена
             </button>
-          )}
-        </div>
-      </form>
+          </div>
+        </form>
+      )}
       <div className="section-heading section-space">
         <h2>
           Все идеи <span className="count">{w!.ideas.length}</span>
@@ -122,9 +128,7 @@ export function Ideas() {
                 </Link>
               </p>
             )}
-            <p className="idea-age">
-              Идея существует: {daysBetween(i.createdAt, today())} дн. · {date(i.createdAt)}
-            </p>
+            <p className="idea-age">Идея существует: {daysBetween(i.createdAt, today())} дн.</p>
             <p className="preserve">{i.description}</p>
             <div className="row">
               <select
@@ -150,6 +154,8 @@ export function Ideas() {
               </select>
               <button
                 onClick={() => {
+                  if (isDirty && !confirm('Отбросить несохранённые изменения?')) return;
+                  setFormOpen(true);
                   reset({ ...i });
                   setId(i.id);
                   window.scrollTo({ top: 0 });
@@ -170,6 +176,7 @@ export function Ideas() {
                     if (id === i.id) {
                       reset(empty);
                       setId(null);
+                      setFormOpen(false);
                     }
                   }
                 }}
@@ -192,11 +199,7 @@ export function Ideas() {
           </article>
         ))}
       </div>
-      {!w!.ideas.length && (
-        <p className="panel empty section-space">
-          Список свободен. Добавьте первую мысль — проект выбирать необязательно.
-        </p>
-      )}
+      {!w!.ideas.length && <p className="panel empty section-space">Идей пока нет.</p>}
     </>
   );
 }
@@ -204,6 +207,7 @@ export function Decisions() {
   const { data: w } = useWorkspace();
   const { act, busy } = useActions();
   const [id, setId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const empty: DecisionInput = {
     title: '',
     context: '',
@@ -224,101 +228,100 @@ export function Decisions() {
       <UnsavedChanges dirty={isDirty} />
       <div className="page-heading">
         <div>
-          <p className="section-label">Журнал</p>
           <h1>Решения</h1>
-          <p className="subtitle">Что выбрано и почему — чтобы не вспоминать заново.</p>
         </div>
+        {!formOpen && (
+          <button className="primary" onClick={() => setFormOpen(true)}>
+            Новое решение
+          </button>
+        )}
       </div>
-      <DecisionFiles />
-      <h2 className="section-space">Общие решения экосистемы</h2>
-      <p className="help">
-        Новые проектные решения добавляйте в канонические файлы. Существующие локальные записи
-        сохранены ниже.
-      </p>
-      <form
-        className="panel form"
-        onSubmit={handleSubmit(async (v) => {
-          if (
-            await act(
-              () =>
-                api(id ? `/decisions/${id}` : '/decisions', id ? 'PUT' : 'POST', {
-                  ...v,
-                  projectId: v.projectId || null,
-                }),
-              'Решение сохранено',
-            )
-          ) {
-            reset(empty);
-            setId(null);
-          }
-        })}
-      >
-        <h2>{id ? 'Изменить решение' : 'Записать решение'}</h2>
-        <label>
-          Название решения
-          <input maxLength={240} required {...register('title')} />
-        </label>
-        {(
-          [
-            ['context', 'Контекст'],
-            ['decision', 'Решение'],
-            ['reason', 'Почему'],
-          ] as const
-        ).map(([k, l]) => (
-          <label key={k}>
-            {l}
-            <textarea rows={3} required={k === 'decision'} {...register(k)} />
+      {formOpen && (
+        <form
+          className="panel form"
+          onSubmit={handleSubmit(async (v) => {
+            if (
+              await act(
+                () =>
+                  api(id ? `/decisions/${id}` : '/decisions', id ? 'PUT' : 'POST', {
+                    ...v,
+                    projectId: v.projectId || null,
+                  }),
+                'Решение сохранено',
+              )
+            ) {
+              reset(empty);
+              setId(null);
+              setFormOpen(false);
+            }
+          })}
+        >
+          <h2>{id ? 'Изменить решение' : 'Записать решение'}</h2>
+          <label>
+            Название решения
+            <input autoFocus maxLength={240} required {...register('title')} />
           </label>
-        ))}
-        <div className="form-grid">
-          {id && (
+          {(
+            [
+              ['context', 'Контекст'],
+              ['decision', 'Решение'],
+              ['reason', 'Почему'],
+            ] as const
+          ).map(([k, l]) => (
+            <label key={k}>
+              {l}
+              <textarea rows={3} required={k === 'decision'} {...register(k)} />
+            </label>
+          ))}
+          <div className="form-grid">
+            {id && (
+              <label>
+                Проект
+                <select {...register('projectId')}>
+                  <option value="">Без проекта</option>
+                  {w!.projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.metadata.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label>
-              Проект
-              <select {...register('projectId')}>
-                <option value="">Без проекта</option>
-                {w!.projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.metadata.name}
+              Статус
+              <select {...register('status')}>
+                {Object.entries(decisionLabels).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
                   </option>
                 ))}
               </select>
             </label>
-          )}
-          <label>
-            Статус
-            <select {...register('status')}>
-              {Object.entries(decisionLabels).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Дата
-            <input type="date" required {...register('date')} />
-          </label>
-        </div>
-        <div className="row">
-          <button className="primary" disabled={busy}>
-            {id ? 'Сохранить решение' : 'Добавить решение'}
-          </button>
-          {id && (
+            <label>
+              Дата
+              <input type="date" required {...register('date')} />
+            </label>
+          </div>
+          <div className="row">
+            <button className="primary" disabled={busy}>
+              {id ? 'Сохранить решение' : 'Добавить решение'}
+            </button>
             <button
               type="button"
               onClick={() => {
                 reset(empty);
                 setId(null);
+                setFormOpen(false);
               }}
             >
               Отмена
             </button>
-          )}
-        </div>
-      </form>
+          </div>
+        </form>
+      )}
       <div className="section-heading section-space">
         <h2>
-          Журнал решений <span className="count">{w!.decisions.length}</span>
+          Записанные решения <span className="count">{w!.decisions.length}</span>
         </h2>
       </div>
       <div className="record-list">
@@ -350,6 +353,8 @@ export function Decisions() {
               <small>{date(d.date)}</small>
               <button
                 onClick={() => {
+                  if (isDirty && !confirm('Отбросить несохранённые изменения?')) return;
+                  setFormOpen(true);
                   reset({ ...d });
                   setId(d.id);
                   window.scrollTo({ top: 0 });
@@ -367,6 +372,7 @@ export function Decisions() {
                     if (id === d.id) {
                       reset(empty);
                       setId(null);
+                      setFormOpen(false);
                     }
                   }
                 }}
@@ -377,6 +383,8 @@ export function Decisions() {
           </article>
         ))}
       </div>
+      {!w!.decisions.length && <p className="empty">Записанных решений пока нет.</p>}
+      <DecisionFiles />
     </>
   );
 }

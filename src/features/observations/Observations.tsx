@@ -149,10 +149,7 @@ function Editor({
             Текст наблюдения
             <textarea required rows={8} maxLength={20000} {...register('body')} />
           </label>
-          <p className="help">
-            Мысль, факт или препятствие. Запись остаётся в локальной базе и её резервных копиях; в
-            файлы проекта не переносится. Предыдущие редакции текста не сохраняются.
-          </p>
+          {initial && <p className="help">Предыдущие редакции текста не сохраняются.</p>}
           {initial?.scopeProjectId && !initial.projectId && (
             <p className="help">
               Живая связь с проектом снята; прежнее название и принадлежность сохранятся, пока вы
@@ -202,7 +199,6 @@ export default function Observations() {
     <>
       <div className="page-heading">
         <div>
-          <p className="section-label">Мысли и факты</p>
           <h1>{id ? 'Наблюдение' : 'Записать наблюдение'}</h1>
         </div>
         <Link to={`/timeline?kind=observation${project ? `&project=${project}` : ''}`}>

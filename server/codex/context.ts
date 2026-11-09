@@ -477,6 +477,14 @@ export class CodexContext {
               threadId: thread.id,
             });
           } catch (cause) {
+            if (cause instanceof HttpError && cause.status === 503) {
+              this.access(project.projectId, project.revision);
+              if (previous) this.markStale(previous);
+              limitations.push(
+                `Проект ${project.projectId}: один диалог пропущен, потому что его не удалось прочитать. Остальные кандидаты проверены в прежнем лимите.`,
+              );
+              continue;
+            }
             if (cause instanceof HttpError && cause.status === 400) {
               if (previous) {
                 this.markStale(previous);

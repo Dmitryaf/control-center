@@ -1,0 +1,219 @@
+.task-desk {
+  --task-rule: #dfddd4;
+  --task-blue: #385b7c;
+  --task-quiet: #626a6c;
+}
+.task-desk .task-entry {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  background: #fffefb;
+  color: var(--task-blue);
+  border: 1px solid #cccfc8;
+  border-radius: 10px;
+  padding: 7px 12px;
+}
+.task-entry > svg {
+  flex: none;
+}
+.task-desk .task-entry input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  padding: 7px 3px;
+  font-size: 16px;
+}
+.task-desk .task-icon,
+.task-desk .task-submit,
+.task-desk .task-check {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  flex: none;
+  background: transparent;
+  color: var(--task-quiet);
+  border: 0;
+}
+.task-desk .task-submit {
+  height: 44px;
+  width: 44px;
+  color: var(--task-blue);
+  border: 1px solid var(--task-rule);
+}
+.task-desk .task-icon:hover,
+.task-desk .task-submit:hover,
+.task-desk .task-check:hover {
+  background: #e7edef;
+}
+.task-composer h2 {
+  margin-bottom: 10px;
+  font-size: 17px;
+}
+.task-fields {
+  margin-block: 12px;
+}
+.task-fields > button {
+  justify-self: start;
+}
+.task-destination {
+  display: block;
+  margin-top: 5px;
+  color: var(--task-quiet);
+}
+.task-filters,
+.task-filters > div,
+.task-project-filter {
+  display: flex;
+  align-items: center;
+}
+.task-filters {
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--task-rule);
+  padding-bottom: 9px;
+  margin: 23px 0 16px;
+}
+.task-filters > div {
+  gap: 5px;
+  min-width: 0;
+}
+.task-desk .task-filters select {
+  background: transparent;
+  border: 0;
+  padding: 5px 2px;
+  width: auto;
+  max-width: 100%;
+  color: inherit;
+  cursor: pointer;
+}
+.task-filters > select {
+  font-weight: 650;
+  flex-shrink: 0;
+}
+.task-filters .task-project-filter {
+  flex-direction: row;
+  gap: 6px;
+  min-width: 0;
+  color: var(--task-quiet);
+}
+.task-project-filter svg {
+  flex: none;
+}
+.task-search-input {
+  margin-bottom: 15px;
+}
+.task-group + .task-group {
+  margin-top: 21px;
+}
+.task-group > h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  line-height: 1.5;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 620;
+}
+.task-group > h2::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex: none;
+  background: #7899b3;
+}
+.task-group:nth-of-type(3n + 2) > h2::before {
+  background: #829a88;
+}
+.task-group:nth-of-type(3n) > h2::before {
+  background: #c99a78;
+}
+.task-group h2 a {
+  color: inherit;
+}
+.task-desk .task-line {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  gap: 7px;
+  align-items: start;
+  padding: 10px 0;
+  margin: 0;
+}
+.task-line + .task-line {
+  border-top: 1px solid #eae7df;
+}
+.task-line .task-check {
+  width: 44px;
+  height: 44px;
+}
+.task-check span {
+  display: block;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid #829095;
+  border-radius: 5px;
+  background: #fffefa;
+}
+.task-copy h3 {
+  margin: 0;
+}
+.task-copy .task-title {
+  display: inline;
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 450;
+  line-height: 1.5;
+  text-align: start;
+  color: #2d353a;
+}
+.task-title:hover {
+  text-decoration: underline;
+}
+.task-meta,
+.task-priority {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.task-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--task-quiet);
+}
+.task-priority {
+  gap: 4px;
+}
+.task-priority.high {
+  color: #855536;
+}
+.task-copy .task-details,
+.task-copy .task-note {
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+.task-copy .task-details p {
+  margin: 6px 0;
+}
+.task-history-link {
+  display: inline-block;
+  margin-top: 24px;
+  font-size: 13px;
+}
+.inline-task-editor,
+.task-group form[aria-label^='Итог'] {
+  border-inline-start: 2px solid var(--task-rule);
+  padding: 12px clamp(8px, 2vw, 24px);
+  margin: 0 0 15px;
+}
+.task-desk .task-title {
+  min-height: 44px;
+  display: inline-block;
+}
+.task-desk .task-filters select {
+  min-height: 44px;
+}

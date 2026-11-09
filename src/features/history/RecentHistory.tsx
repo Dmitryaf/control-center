@@ -118,7 +118,7 @@ export function RecentHistoryResult({
       {query.data && !query.data.items.length && (
         <p className="empty">
           {projectView
-            ? 'Здесь появятся наблюдения, решения и результаты работы.'
+            ? 'История проекта пока пуста.'
             : compact
               ? 'Записей работы пока нет.'
               : 'В доступных источниках за выбранный период записей нет.'}

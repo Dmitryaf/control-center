@@ -24,6 +24,9 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await writeFile(path.join(product, 'work.txt'), 'dirty working tree');
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Начните с каталога проектов' })).toBeVisible();
+    const welcome = await page.locator('.welcome').boundingBox();
+    const attention = await page.locator('#attention').boundingBox();
+    expect(welcome!.y).toBeLessThan(attention!.y);
     await page.getByRole('link', { name: 'Добавить каталог →' }).click();
     await page.getByLabel('Полные пути').fill(f.root);
     await page.getByRole('button', { name: 'Сохранить и сканировать' }).click();
@@ -35,11 +38,13 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await expect(page.getByRole('heading', { name: 'local-product', exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'local-product', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'local-product', exact: true })).toBeVisible();
-    await page.getByText('Настройки проекта', { exact: true }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Настройки проекта', exact: true }).click();
     await expect(page.getByText('Есть незакоммиченные изменения', { exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByRole('heading', { name: 'local-product', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Изменить сводку' }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Изменить сводку', exact: true }).click();
     await page.getByRole('combobox', { name: 'Статус', exact: true }).selectOption('active');
     await page.getByText('Дополнительные поля', { exact: true }).click();
     await page.getByRole('combobox', { name: 'Тип', exact: true }).selectOption('product');
@@ -52,7 +57,8 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await page.getByRole('button', { name: 'Пересмотрено сегодня' }).click();
     await page.getByRole('button', { name: 'Сохранить сводку', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Сводка сохранена');
-    await page.getByText('Настройки проекта', { exact: true }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Настройки проекта', exact: true }).click();
     await page.getByRole('button', { name: 'Обновить PROJECT.yaml' }).click();
     await expect(page.getByRole('status')).toContainText('PROJECT.yaml записан');
     expect(await readFile(path.join(product, 'PROJECT.yaml'), 'utf8')).toContain(
@@ -83,6 +89,8 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     ).toBeVisible();
     await page.getByText('Ещё', { exact: true }).click();
     await page.getByRole('navigation').getByRole('link', { name: /Идеи/ }).click();
+    await expect(page.getByLabel('Название идеи')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Новая идея' }).click();
     await page.getByLabel('Название идеи').fill('Общий инструмент');
     await page.getByLabel('Описание', { exact: true }).fill('Сначала проверить потребность.');
     await page.getByRole('button', { name: 'Добавить идею' }).click();
@@ -95,6 +103,8 @@ test('complete personal workspace workflow from an empty database', async ({ pag
       .getByRole('navigation')
       .getByRole('link', { name: /Решения/ })
       .click();
+    await expect(page.getByLabel('Название решения')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Новое решение' }).click();
     await page.getByLabel('Название решения').fill('Хранить данные локально');
     await page.getByLabel('Решение', { exact: true }).fill('Использовать SQLite');
     await page.getByLabel('Почему', { exact: true }).fill('Не нужен отдельный сервер');
@@ -108,12 +118,13 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await expect(page.getByRole('article', { name: 'local-product', exact: true })).toBeVisible();
     await expect(page.getByRole('article', { name: 'local-tool', exact: true })).toBeVisible();
     await expect(
-      page
-        .getByRole('article', { name: 'local-product', exact: true })
-        .locator('.current-task-list li'),
-    ).toHaveCount(1);
+      page.locator('.current-task-list li').filter({ hasText: 'Проверить выпуск' }),
+    ).toContainText('local-product');
     await expect(page.getByRole('link', { name: 'Все задачи →', exact: true })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Идеи · 1 →' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Открыть обзор периода' })).toHaveAttribute(
+      'href',
+      '/reviews',
+    );
     await expect(page.locator('.current-work')).toContainText('Проверить выпуск');
     await page.screenshot({ path: '.local/overview-desktop.png', fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });

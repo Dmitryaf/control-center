@@ -8,6 +8,34 @@ export const digest = (value: unknown) =>
   createHash('sha256')
     .update(typeof value === 'string' ? value : JSON.stringify(value))
     .digest('hex');
+
+// Inspect text values rather than escaped wire JSON: "\\n\\n" is not a UNC path.
+export function containsSensitiveText(value: unknown): boolean {
+  const pending: unknown[] = [value];
+  while (pending.length) {
+    const current = pending.pop();
+    if (typeof current === 'string') {
+      const trimmed = current.trimStart();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          pending.push(JSON.parse(current));
+          continue;
+        } catch {
+          /* Ordinary prose. */
+        }
+      }
+      if (sensitiveText.test(current)) return true;
+    } else if (Array.isArray(current)) {
+      for (const item of current) pending.push(item);
+    } else if (current && typeof current === 'object') {
+      for (const [key, item] of Object.entries(current)) {
+        if (sensitiveText.test(key)) return true;
+        pending.push(item);
+      }
+    }
+  }
+  return false;
+}
 export const projectStamp = (row: NonNullable<ReturnType<Store['project']>>) =>
   digest({
     visibility: row.visibility,

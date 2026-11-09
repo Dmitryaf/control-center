@@ -24,14 +24,15 @@ test('React settings → real scan → tasks → immutable history → backup; d
       .getByRole('combobox', { name: 'Показать проект', exact: true })
       .selectOption({ label: 'react-product' });
     await page.getByLabel('Название задачи').fill('React contract task');
-    await page
-      .getByRole('combobox', { name: 'Проект', exact: true })
-      .selectOption({ label: 'react-product' });
+    await page.getByRole('button', { name: 'Параметры задачи' }).click();
+    await expect(page.getByRole('combobox', { name: 'Проект', exact: true })).toHaveValue(
+      await page.getByLabel('Показать проект').inputValue(),
+    );
     await page.getByRole('button', { name: 'Создать задачу', exact: true }).click();
     await expect(
       page.getByRole('heading', { name: 'React contract task', exact: true }),
     ).toBeVisible();
-    await page.getByRole('button', { name: 'Изменить', exact: true }).click();
+    await page.getByRole('button', { name: 'React contract task', exact: true }).click();
     await page.getByLabel('Название задачи').fill('Retained draft');
     const current = (await (await request.get('/api/workspace')).json()) as Workspace;
     const task = current.tasks.find((t) => t.title === 'React contract task')!;

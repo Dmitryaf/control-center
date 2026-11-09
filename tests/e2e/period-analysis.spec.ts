@@ -207,6 +207,7 @@ test('saved period AI flow: actual preview → explicit sending → retained res
     expect(sends).toBe(1);
     const own = (await (await request.get(`/api/reviews/${review.id}`)).json()) as Review;
     expect(own.userText).toBe('My own report must survive AI');
+    await page.getByText('Настройки и история обзора', { exact: true }).click();
     await page
       .getByRole('form', { name: 'Подготовка ручного анализа' })
       .getByText('Настроить источники', { exact: true })
@@ -250,6 +251,7 @@ test('saved period AI flow: actual preview → explicit sending → retained res
     expect(sends).toBe(2);
     await expect(page.getByRole('button', { name: 'Отправить пакет в OpenAI' })).toHaveCount(0);
     page.once('dialog', (dialog) => dialog.accept());
+    await page.getByText('Сведения о запуске', { exact: true }).click();
     await page.getByRole('button', { name: 'Удалить локальный анализ' }).click();
     await expect(
       page.getByText('Локальная запись анализа удалена.', { exact: true }),

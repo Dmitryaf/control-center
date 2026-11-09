@@ -53,20 +53,45 @@ test('short task form and separate result preserve existing conditions, links, s
       })
     ).json()) as Task;
     await page.goto(`${base}/tasks?project=${project.id}`);
-    const form = page.locator('form').first();
-    await expect(form.getByRole('textbox')).toHaveCount(2);
+    const form = page.getByRole('form', { name: /^(Новая задача|Изменить задачу)$/ });
+    await expect(form.getByRole('textbox')).toHaveCount(1);
+    await expect(form.getByRole('combobox')).toHaveCount(0);
+    await expect(
+      page.getByRole('heading', { name: project.metadata.name, exact: true }),
+    ).toBeVisible();
     await expect(form.getByLabel('Ожидаемый результат')).toHaveCount(0);
-    await page.getByLabel('Название задачи', { exact: true }).fill('Короткая задача без отчёта');
-    await page.getByLabel('Название задачи', { exact: true }).press('Enter');
+    const titleInput = page.getByLabel('Название задачи', { exact: true });
+    const card = page.locator('.task-card').filter({ hasText: saved.code });
+    await titleInput.fill('Короткая задача без отчёта');
+    page.once('dialog', (dialog) => dialog.dismiss());
+    await card.getByRole('button', { name: saved.title, exact: true }).click();
+    await expect(titleInput).toHaveValue('Короткая задача без отчёта');
+    const parameters = form.getByRole('button', { name: 'Параметры задачи' });
+    await parameters.click();
+    await form.getByLabel('Описание', { exact: true }).fill('Сохранить при сворачивании');
+    await parameters.click();
+    await titleInput.press('Enter');
     const quick = page.locator('.task-card').filter({
       has: page.getByRole('heading', { name: 'Короткая задача без отчёта', exact: true }),
     });
     await expect(quick).toBeVisible();
+    await quick.getByRole('heading').getByRole('button').click();
+    await expect(quick.locator('xpath=following-sibling::*[1]')).toHaveAttribute(
+      'aria-label',
+      'Изменить задачу',
+    );
+    await expect(form.getByLabel('Описание', { exact: true })).toHaveValue(
+      'Сохранить при сворачивании',
+    );
+    await titleInput.fill('Черновик редактирования');
+    page.once('dialog', (dialog) => dialog.dismiss());
+    await card.getByRole('button', { name: saved.title, exact: true }).click();
+    await expect(titleInput).toHaveValue('Черновик редактирования');
+    await form.getByRole('button', { name: 'Отмена' }).click();
     await quick.getByRole('button', { name: 'Завершить', exact: true }).click();
     await expect(quick).toHaveCount(0);
-    const card = page.locator('.task-card').filter({ hasText: saved.code });
     const resultForm = page.getByRole('form', { name: `Итог ${saved.code}`, exact: true });
-    await card.getByRole('button', { name: 'Изменить', exact: true }).click();
+    await card.getByRole('button', { name: saved.title, exact: true }).click();
     await page
       .getByLabel('Описание', { exact: true })
       .fill('Уточнение постановки без изменения отчёта');
@@ -78,7 +103,13 @@ test('short task form and separate result preserve existing conditions, links, s
     expect(afterEdit.acceptance).toBe(saved.acceptance);
     expect(afterEdit.links).toEqual(saved.links);
     expect(afterEdit.result).toEqual(saved.result);
-    await card.getByRole('button', { name: 'Изменить итог', exact: true }).click();
+    await card.getByRole('button', { name: 'Действия ' + saved.code }).click();
+    await page.getByRole('menuitem', { name: 'Изменить итог', exact: true }).click();
+    await expect(resultForm.getByLabel('Итог работы')).toBeFocused();
+    await expect(card.locator('xpath=following-sibling::*[1]')).toHaveAttribute(
+      'aria-label',
+      `Итог ${saved.code}`,
+    );
     await resultForm
       .getByLabel('Итог работы', { exact: true })
       .fill('Уточнённый итог с прежними основаниями');
@@ -91,8 +122,20 @@ test('short task form and separate result preserve existing conditions, links, s
       ...saved.result,
       summary: 'Уточнённый итог с прежними основаниями',
     });
-    await card.getByRole('button', { name: 'Изменить итог', exact: true }).click();
+    await card.getByRole('button', { name: 'Действия ' + saved.code }).click();
+    await page.getByRole('menuitem', { name: 'Изменить итог', exact: true }).click();
     await resultForm.getByLabel('Итог работы', { exact: true }).fill('Мой несохранённый итог');
+    await titleInput.fill('Отдельная задача');
+    await parameters.click();
+    await form.getByRole('combobox', { name: 'Проект', exact: true }).selectOption({ value: '' });
+    await titleInput.press('Enter');
+    const other = page.getByRole('button', { name: 'Отдельная задача', exact: true });
+    await expect(other).toBeVisible();
+    await expect(page.getByLabel('Показать проект')).toHaveValue('__general__');
+    await other.click();
+    await expect(resultForm.getByLabel('Итог работы')).toHaveValue('Мой несохранённый итог');
+    await form.getByRole('button', { name: 'Отмена' }).click();
+    await page.getByLabel('Показать проект').selectOption(project.id);
     await request.put(`/api/tasks/${saved.id}`, {
       headers,
       data: {

@@ -80,8 +80,9 @@ test('production timer → saved snapshot → open draft, YAML conflict, freshne
     await expect(
       page.getByRole('heading', { name: 'Состояние проекта', exact: true }),
     ).toBeVisible();
-    await expect(page.getByText('Интервал обновления проектов: 1 мин.')).toBeVisible();
-    await page.getByRole('button', { name: 'Изменить сводку' }).focus();
+    await expect(page.getByText('Интервал обновления проектов: 1 мин.')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Изменить сводку', exact: true }).focus();
     await page.keyboard.press('Enter');
     await page.getByLabel('Зачем существует', { exact: true }).fill('Мой несохранённый черновик');
     const prior = (await readWorkspace()).projects.find((p) => p.id === project.id)!;
@@ -153,13 +154,13 @@ test('production timer → saved snapshot → open draft, YAML conflict, freshne
     // Preservation was checked above; explicitly discard before leaving the editor.
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Закрыть редактор', exact: true }).click();
-    await page.getByText('Ещё', { exact: true }).click();
+    await page.getByRole('button', { name: 'Меню', exact: true }).click();
     await page.getByRole('navigation').getByRole('link', { name: 'Настройки' }).click();
     const interval = page.getByLabel('Интервал обновления, минут');
     await interval.fill('0');
     await interval.press('Enter');
     await expect(page.getByRole('status')).toContainText('Настройки сохранены');
-    await expect(page.getByText('Автоматическое обновление проектов отключено.')).toBeVisible();
+    await expect(interval).toHaveValue('0');
     expect((await readWorkspace()).settings.autoRefreshMinutes).toBe(0);
     await page.route('**/api/workspace', (route) => route.abort());
     await expect(page.getByRole('alert', { name: 'Связь с сервером' })).toContainText(

@@ -16,7 +16,7 @@ function Provenance({ value }: { value: ProposalAcceptance['original'] }) {
       <h3>{p.title}</h3>
       <p>{p.description}</p>
       <p>Основание: {p.reason}</p>
-      <p>Неизвестное: {p.uncertainty || 'Не указано'}</p>
+      {p.uncertainty && <p>Что уточнить: {p.uncertainty}</p>}
       <p>Дешёвая проверка: {p.cheapCheck}</p>
       <p className="help">
         {value.origin === 'codex_runtime'
@@ -58,7 +58,7 @@ function AcceptedCard({ value }: { value: ProposalAcceptance }) {
       <h3>Принятая пользователем редакция</h3>
       <p className="prose">{a.description}</p>
       <p>Основание: {a.reason}</p>
-      <p>Неизвестное: {a.uncertainty || 'Не указано'}</p>
+      {a.uncertainty && <p>Что уточнить: {a.uncertainty}</p>}
       <p>Дешёвая проверка: {a.cheapCheck}</p>
       {value.kind === 'task' && (
         <>
@@ -320,10 +320,6 @@ export default function Acceptances() {
   return (
     <>
       <h1>Принятые предложения</h1>
-      <p>
-        Здесь отдельно сохранены исходный вариант AI, пользовательская редакция и источники.
-        Последующие изменения задач и идей не переписывают эту запись.
-      </p>
       <Link to="/timeline?kind=ai_analysis">К истории AI-анализов →</Link>
       {query.error && <p role="alert">{query.error.message}</p>}
       {query.isPending && <p role="status">Загружаем принятые предложения…</p>}

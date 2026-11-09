@@ -76,16 +76,14 @@ test('owner journey across active, paused, waiting and completed projects: brows
     await test.step('1–2: visible project states and current work', async () => {
       await page.goto('/');
       for (const input of inputs) {
-        const row = page.locator('.project-summary').filter({ hasText: input.name });
+        const row = page.getByRole('article', { name: input.name, exact: true });
         await expect(row).toContainText(input.stage);
       }
-      const row = page.locator('.project-summary').filter({ hasText: inputs[0].name });
+      const row = page.getByRole('article', { name: inputs[0].name, exact: true });
       await row.getByRole('link', { name: inputs[0].name, exact: true }).click();
       await expect(page.getByRole('heading', { name: inputs[0].name, exact: true })).toBeVisible();
       await page.goto(`/tasks?project=${project.id}`);
-      await expect(page.getByRole('combobox', { name: 'Проект', exact: true })).toHaveValue(
-        project.id,
-      );
+      await expect(page.getByLabel('Показать проект')).toHaveValue(project.id);
     });
     await test.step('3–4: UI task → actual compiled MCP → immutable saved result', async () => {
       await page.getByLabel('Название задачи').fill(taskTitle);

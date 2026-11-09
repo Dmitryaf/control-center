@@ -12,6 +12,7 @@ import { History } from '../server/history.js';
 import { Reviews } from '../server/reviews.js';
 import { Tasks } from '../server/tasks.js';
 import { PeriodAnalysis } from '../server/analysis/period-analysis.js';
+import { digest } from '../server/analysis/privacy.js';
 import { CodexAnalysis } from '../server/codex/analysis.js';
 import { CodexAnalysisFixture } from './codex-analysis-fixture.js';
 import { createApp } from '../server/app.js';
@@ -112,6 +113,12 @@ test('Codex preview → explicit dispatch → persisted report → follow-up and
     selection: run.selection,
     question: 'Как проверить этот вывод одним действием?',
   });
+  const discussions = s.analyses.recent({ view: 'discussions', projectIds: s.project.id });
+  assert.deepEqual(
+    discussions.items.map(({ id, status, title }) => ({ id, status, title })),
+    [{ id: followup.id, status: 'pending', title: input.question }],
+  );
+  assert.equal(s.analyses.recent().items[0].id, run.id);
   await s.service.start(followup.id, { packetHash: followup.packetHash, consent: true });
   assert.equal((await settled(s.service, followup.id)).status, 'succeeded');
   const supplied = JSON.parse(s.executor.prompts[1].split('\n').at(-1)!);
@@ -134,6 +141,76 @@ test('Codex preview → explicit dispatch → persisted report → follow-up and
     reopened.close();
   }
 });
+test('a period review without a custom question uses a persisted default and still needs dispatch consent', async (t) => {
+  const s = await setup(t);
+  const input: Record<string, unknown> = s.input();
+  delete input.question;
+  const run = await s.service.prepare(input);
+  assert.equal(s.executor.prompts.length, 0);
+  assert.ok(run.payload.origin?.kind === 'codex_runtime');
+  assert.ok(run.payload.origin.question.length > 50);
+  await s.service.start(run.id, { packetHash: run.packetHash, consent: true });
+  assert.equal((await settled(s.service, run.id)).status, 'succeeded');
+  const packet = JSON.parse(s.executor.prompts[0].split('\n').at(-1)!);
+  assert.equal(packet.question, run.payload.origin.question);
+  assert.deepEqual(s.analyses.read(run.id).report, s.service.read(run.id).run.report);
+});
+
+for (const oldPolicy of [
+  'codex-project-review-v1',
+  'codex-project-review-v2',
+  'codex-project-review-v3',
+  'codex-project-review-v4',
+]) {
+  test(`pending ${oldPolicy} needs a new preview; its completed answers accept a new question`, async (t) => {
+    const s = await setup(t);
+    const markOld = (id: string) => {
+      const run = s.service.read(id).run;
+      assert.ok(run.payload.origin?.kind === 'codex_runtime');
+      run.payload.origin.policy = oldPolicy;
+      const oldHash = digest({ payload: run.payload, model: run.model, policy: oldPolicy });
+      s.store.db
+        .prepare(
+          'UPDATE analysis_runs SET policy_version=?,payload_json=?,packet_hash=? WHERE id=?',
+        )
+        .run(oldPolicy, JSON.stringify(run.payload), oldHash, id);
+      return oldHash;
+    };
+    const pending = await s.service.prepare(s.input());
+    const packetHash = markOld(pending.id);
+    await assert.rejects(s.service.start(pending.id, { packetHash, consent: true }), /Политика/);
+    assert.equal(s.executor.prompts.length, 0);
+
+    const first = await s.service.prepare(s.input());
+    await s.service.start(first.id, { packetHash: first.packetHash, consent: true });
+    const original = await settled(s.service, first.id);
+    markOld(first.id);
+    const followup = await s.service.prepare({
+      ...s.input(),
+      parentRunId: first.id,
+      selection: first.selection,
+      question: 'Что известно о результате?',
+    });
+    assert.equal(followup.approvedAt, null);
+    assert.equal(followup.status, 'pending');
+    assert.equal(s.executor.prompts.length, 1);
+    s.executor.report = {
+      narrative: 'За эту неделю нет записей об изменениях.',
+      findings: [],
+      uncertainties: [],
+      proposals: [],
+    };
+    await s.service.start(followup.id, { packetHash: followup.packetHash, consent: true });
+    const answer = await settled(s.service, followup.id);
+    assert.equal(answer.status, 'succeeded');
+    assert.deepEqual(answer.report, s.executor.report);
+    const packet = JSON.parse(s.executor.prompts[1].split('\n').at(-1)!);
+    assert.equal(packet.question, 'Что известно о результате?');
+    assert.deepEqual(packet.context.scope.projectIds, [s.project.id]);
+    assert.deepEqual(packet.conversation[0].report, original.report);
+    assert.deepEqual(s.service.read(first.id).run.report, original.report);
+  });
+}
 test('Codex refuses stale/foreign input and validates actual model output without touching tasks', async (t) => {
   const s = await setup(t);
   const task = new Tasks(s.store).save({ title: 'Existing task', projectId: s.project.id });

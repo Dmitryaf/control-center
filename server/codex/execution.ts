@@ -43,6 +43,7 @@ export interface CodexExecutor {
     model: string | null;
     signal: AbortSignal;
     onProgress: (stage: string) => void;
+    beforeDispatch?: () => void;
   }): Promise<CodexExecutionResult>;
 }
 export class CodexExecutionError extends Error {
@@ -274,6 +275,7 @@ export class LocalCodexExecutor implements CodexExecutor {
     model,
     signal,
     onProgress,
+    beforeDispatch,
   }: Parameters<CodexExecutor['execute']>[0]): Promise<CodexExecutionResult> {
     if (model && !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/.test(model))
       throw new CodexExecutionError('Недопустимый идентификатор модели.', 'failed');
@@ -419,8 +421,13 @@ export class LocalCodexExecutor implements CodexExecutor {
         });
         if (signal.aborted) abort();
         else {
-          onProgress('Запуск Codex');
-          child.stdin.end(prompt);
+          try {
+            beforeDispatch?.();
+            onProgress('Запуск Codex');
+            child.stdin.end(prompt);
+          } catch {
+            fail('Разрешение изменилось до отправки. Запрос не передан Codex.', 'failed');
+          }
         }
       });
     } finally {

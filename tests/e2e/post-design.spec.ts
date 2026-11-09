@@ -23,7 +23,8 @@ test('project shows paused-only unfinished checks and keeps completed checks in 
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/projects/project-0');
     await expect(page.locator('.check-card')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Настройки проекта', exact: true }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Настройки проекта', exact: true }).click();
     await page.getByRole('link', { name: 'Все проверки →', exact: true }).click();
     await page.getByRole('button', { name: /На паузе/ }).click();
     await expect(page.getByRole('link', { name: paused.title, exact: true })).toBeVisible();
@@ -48,6 +49,12 @@ test('workspace navigation stays reachable and identifies the current section at
     await page.goto('/checks');
     const nav = page.getByRole('navigation', { name: 'Основная навигация' });
     await page.goto('/');
+    const mobile = width <= 760;
+    const toggle = page.getByRole('button', { name: 'Меню', exact: true });
+    if (mobile) {
+      await expect(nav).toBeHidden();
+      await toggle.click();
+    }
     await expect(nav.getByRole('link')).toHaveCount(6);
     await nav.locator('summary').focus();
     await page.keyboard.press('Enter');
@@ -64,6 +71,7 @@ test('workspace navigation stays reachable and identifies the current section at
       '/settings',
     ];
     for (const href of destinations) {
+      if (mobile && !(await nav.isVisible())) await toggle.click();
       if (href !== '/' && !['/projects', '/tasks', '/timeline'].includes(href)) {
         if (
           !(await nav
@@ -78,12 +86,17 @@ test('workspace navigation stays reachable and identifies the current section at
       await expect(link).toBeFocused();
       await page.keyboard.press('Enter');
       await expect(page).toHaveURL(new RegExp(`${href === '/' ? '/' : href}$`));
-      await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
-      await expect(link).toHaveAttribute('aria-current', 'page');
-      await expect(link).toBeFocused();
+      const current = page.locator('#workspace-navigation [aria-current="page"]');
+      await expect(current).toHaveCount(1);
+      await expect(current).toHaveAttribute('href', href);
+      if (mobile) {
+        await expect(nav).toBeHidden();
+        await expect(page.locator('main')).toBeFocused();
+      } else await expect(link).toBeFocused();
       await expect(page.locator('h1')).toBeVisible();
     }
     await page.goto('/checks');
+    if (mobile) await toggle.click();
     await expect(nav.getByRole('link', { name: 'Проверки', exact: true })).toHaveAttribute(
       'aria-current',
       'page',
@@ -100,7 +113,7 @@ test('workspace navigation stays reachable and identifies the current section at
         };
       };
       const brand = rect(bar.querySelector('.brand')!);
-      const refresh = rect(bar.querySelector('button')!);
+      const refresh = rect(bar.querySelector('.refresh-workspace')!);
       const anchors = [...bar.querySelectorAll('nav a')].map((anchor) => {
         const range = document.createRange();
         range.selectNodeContents(anchor.querySelector('.navigation-label') ?? anchor);
@@ -152,7 +165,8 @@ test('long project heading does not squeeze its action into broken words with en
   );
   await page.setViewportSize({ width: 1100, height: 1000 });
   await page.goto('/projects/project-0');
-  const edit = page.getByRole('button', { name: 'Изменить сводку', exact: true });
+  await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+  const edit = page.getByRole('menuitem', { name: 'Изменить сводку', exact: true });
   await expect(edit).toBeVisible();
   // A bounded action-layout check, not a general text-readability assertion.
   await page.evaluate(() => {

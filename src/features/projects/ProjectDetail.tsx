@@ -18,10 +18,12 @@ import { useWorkspace, useActions, workspaceKey } from '../../shared/workspace';
 import { UnsavedChanges } from '../../shared/UnsavedChanges';
 import { ProjectReview } from './ProjectReview';
 import { RecentHistory } from '../history/RecentHistory';
+import { ActionMenu, ActionMenuItem } from '../../shared/ActionMenu';
+import './projects.css';
 import { RemoveProject } from './RemoveProject';
 import { ProjectLifecycle, type LifecycleAction } from './ProjectLifecycle';
 import { isClosedProject } from '../../../shared/project-lifecycle';
-import { Plus, NotebookPen, Settings2 } from 'lucide-react';
+import { Plus, NotebookPen } from 'lucide-react';
 
 function MetadataEditor({ project, onClose }: { project: Project; onClose: () => void }) {
   const { act, busy } = useActions();
@@ -70,7 +72,7 @@ function MetadataEditor({ project, onClose }: { project: Project; onClose: () =>
       <div className="form-grid">
         <label>
           Название
-          <input required maxLength={240} {...register('name')} />
+          <input autoFocus required maxLength={240} {...register('name')} />
         </label>
         <label>
           Статус
@@ -89,11 +91,7 @@ function MetadataEditor({ project, onClose }: { project: Project; onClose: () =>
       </div>
       <label>
         Зачем существует
-        <textarea
-          rows={3}
-          placeholder="Что создаёте, какую задачу решаете и для кого; в чём основная идея. Достаточно нескольких предложений."
-          {...register('goal')}
-        />
+        <textarea rows={3} {...register('goal')} />
       </label>
       <details className="editor-advanced">
         <summary>Дополнительные поля</summary>
@@ -634,29 +632,9 @@ export default function ProjectDetail() {
             <span className="muted">{p.metadata.stage}</span>
           </div>
         </div>
-        <div className="row">
-          {!editing && (
-            <button disabled={busy || lifecycleAction !== null} onClick={() => setEditing(true)}>
-              Изменить сводку
-            </button>
-          )}
-          <button
-            disabled={busy || editing || lifecycleAction !== null}
-            onClick={() =>
-              setLifecycleAction(isClosedProject(p.metadata.status) ? 'reopen' : 'close')
-            }
-          >
-            {isClosedProject(p.metadata.status) ? 'Вернуть в работу' : 'Закрыть проект'}
-          </button>
-          <RemoveProject
-            id={p.id}
-            name={p.metadata.name}
-            onRemoved={() => void navigate('/projects')}
-          />
-        </div>
       </div>
-      <div className="project-action-bar" aria-label="Действия проекта">
-        <Link className="button primary" to={`/tasks?project=${p.id}`}>
+      <div className="project-work-actions" aria-label="Действия проекта">
+        <Link className="button primary" to={`/tasks?project=${p.id}&new=1`}>
           <Plus size={17} aria-hidden="true" />
           Добавить задачу
         </Link>
@@ -664,20 +642,40 @@ export default function ProjectDetail() {
           <NotebookPen size={17} aria-hidden="true" />
           Записать наблюдение
         </Link>
-        <button
-          aria-expanded={settingsOpen}
-          aria-controls="project-settings"
-          onClick={() => {
-            setSettingsOpen(!settingsOpen);
-            if (!settingsOpen)
-              requestAnimationFrame(() =>
-                document.getElementById('project-settings')?.scrollIntoView({ block: 'start' }),
-              );
-          }}
-        >
-          <Settings2 size={17} aria-hidden="true" />
-          Настройки проекта
-        </button>
+        <ActionMenu label="Действия проекта">
+          <ActionMenuItem
+            disabled={busy || editing || lifecycleAction !== null}
+            onSelect={() => setEditing(true)}
+          >
+            Изменить сводку
+          </ActionMenuItem>
+          <ActionMenuItem
+            onSelect={() => {
+              setSettingsOpen(!settingsOpen);
+              if (!settingsOpen)
+                requestAnimationFrame(() => {
+                  const settings = document.getElementById('project-settings');
+                  settings?.focus({ preventScroll: true });
+                  settings?.scrollIntoView({ block: 'start' });
+                });
+            }}
+          >
+            {settingsOpen ? 'Скрыть настройки проекта' : 'Настройки проекта'}
+          </ActionMenuItem>
+          <ActionMenuItem
+            disabled={busy || editing || lifecycleAction !== null}
+            onSelect={() =>
+              setLifecycleAction(isClosedProject(p.metadata.status) ? 'reopen' : 'close')
+            }
+          >
+            {isClosedProject(p.metadata.status) ? 'Вернуть в работу' : 'Закрыть проект'}
+          </ActionMenuItem>
+          <RemoveProject
+            id={p.id}
+            name={p.metadata.name}
+            onRemoved={() => void navigate('/projects')}
+          />
+        </ActionMenu>
       </div>
       <nav className="project-section-nav" aria-label="Разделы проекта">
         <a href="#project-about">О проекте</a>
@@ -757,11 +755,6 @@ export default function ProjectDetail() {
               )}
             </div>
           </section>
-          {!!tasks.length && (
-            <p>
-              <Link to={`/tasks?project=${p.id}`}>Все задачи · {tasks.length} →</Link>
-            </p>
-          )}
           <section
             id="project-history"
             className="section-space"
@@ -782,6 +775,7 @@ export default function ProjectDetail() {
         <aside>
           <div
             id="project-settings"
+            tabIndex={-1}
             className="panel section-space project-settings"
             hidden={!settingsOpen}
           >

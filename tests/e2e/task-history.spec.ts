@@ -44,7 +44,7 @@ test('work history preserves repeated results from production MCP, filters, dele
     await page.getByRole('link', { name: 'История работы →' }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('История работы');
     await expect(
-      page.getByRole('navigation').getByRole('link', { name: 'Задачи', exact: true }),
+      page.getByRole('navigation').getByRole('link', { name: 'История', exact: true }),
     ).toHaveAttribute('aria-current', 'page');
     await expect(page.locator('.history-entry')).toHaveCount(1);
     await expect(page.getByText(/Первый результат: поиск по названию/)).toBeVisible();
@@ -145,12 +145,9 @@ test('work history preserves repeated results from production MCP, filters, dele
       .getByRole('link', { name: 'Открыть текущую задачу →' })
       .click();
     await expect(page.getByLabel('Название задачи')).toHaveValue(title);
+    await page.getByRole('button', { name: 'Действия ' + task.code, exact: true }).click();
     page.once('dialog', (dialog) => dialog.accept());
-    await page
-      .locator('.task-card')
-      .filter({ hasText: task.code })
-      .getByRole('button', { name: 'Удалить', exact: true })
-      .click();
+    await page.getByRole('menuitem', { name: 'Удалить', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Запись удалена');
     await page.goto(`/history?task=${task.code}`);
     await expect(page.locator('.history-entry')).toHaveCount(4);

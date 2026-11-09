@@ -12,6 +12,7 @@ export class CodexAnalysisFixture implements CodexExecutor {
   loginState: CodexExecutionStatus['login'] = null;
   loginCalls = 0;
   mode: 'success' | 'wait' | 'invalid' | 'foreign' | 'secret' = 'success';
+  report: PeriodReport | null = null;
   prompts: string[] = [];
   release: (() => void) | null = null;
   async probe() {
@@ -37,6 +38,7 @@ export class CodexAnalysisFixture implements CodexExecutor {
     this.loginState = null;
   }
   async execute(input: Parameters<CodexExecutor['execute']>[0]): Promise<CodexExecutionResult> {
+    input.beforeDispatch?.();
     this.prompts.push(input.prompt);
     input.onProgress('Codex анализирует выбранный контекст');
     if (this.mode === 'wait')
@@ -53,15 +55,17 @@ export class CodexAnalysisFixture implements CodexExecutor {
     const packet = JSON.parse(input.prompt.slice(input.prompt.lastIndexOf('\n') + 1));
     const source = packet.context.sources.find((s: { kind: string }) => s.kind === 'project');
     const report: PeriodReport = {
-      narrative: `Разбор ${this.prompts.length}. Проект помогает сохранить наблюдения и выбрать следующий шаг. По переданным данным полезнее проверить один понятный сценарий, чем расширять список возможностей. Итог относится только к выбранному контексту.`,
+      narrative: packet.conversation.length
+        ? 'Попроси одного человека записать наблюдение и вернуться к нему позже. Посмотри, сможет ли он найти запись без подсказки.'
+        : 'Я бы сначала проверил, легко ли вернуться к прошлой записи. Записать наблюдение — только полдела: оно пригодится, когда человек в следующий раз откроет дневник.',
       findings: [
         {
           statement:
-            'У проекта есть сохранённая цель; признаки пользовательской пользы ещё требуют проверки.',
+            'В описании проекта есть цель, но пока нет отзыва человека, который попробовал им пользоваться.',
           sources: [source.id],
         },
       ],
-      uncertainties: ['В этом пакете нет независимой проверки опыта внешних пользователей.'],
+      uncertainties: ['Получается ли найти прошлую запись без подсказки?'],
       proposals: [
         {
           kind: 'improvement',
@@ -78,7 +82,7 @@ export class CodexAnalysisFixture implements CodexExecutor {
     if (this.mode === 'foreign') report.findings[0].sources = ['project:unselected'];
     if (this.mode === 'secret') report.narrative = 'password=synthetic-secret-value';
     return {
-      output: this.mode === 'invalid' ? 'not json' : JSON.stringify(report),
+      output: this.mode === 'invalid' ? 'not json' : JSON.stringify(this.report ?? report),
       threadId: 'synthetic-codex-execution',
       usage: { inputTokens: 120, outputTokens: 80 },
     };

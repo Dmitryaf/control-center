@@ -200,16 +200,22 @@ test('overview shows project context and exact current tasks once, keeps attenti
       'CC-22',
     ]);
     await expect(page.locator('.current-task-list li').last()).toContainText('Общая задача');
-    await expect(page.locator('.current-work .project-row')).toHaveCount(12);
+    await expect(page.locator('.overview-project-row')).toHaveCount(12);
     await expect(
-      page.locator('.current-work .project-row').filter({ hasText: 'Поддержка' }),
+      page.locator('.overview-project-row').filter({ hasText: 'Поддержка' }),
     ).toBeVisible();
     await expect(
-      page.locator('.current-work .project-row').filter({ hasText: 'Ожидание ответа' }),
+      page.locator('.overview-project-row').filter({ hasText: 'Ожидание ответа' }),
     ).toBeVisible();
     await expect(
       page.getByRole('article', { name: data.projects[1].metadata.name, exact: true }),
     ).toContainText('Отложен');
+    const firstProject = page.getByRole('article', {
+      name: data.projects[0].metadata.name,
+      exact: true,
+    });
+    await expect(firstProject.locator('details')).not.toHaveAttribute('open', '');
+    await firstProject.locator('summary').click();
     await expect(
       page.getByRole('article', { name: data.projects[0].metadata.name, exact: true }),
     ).toContainText(data.projects[0].metadata.goal);
@@ -234,8 +240,9 @@ test('overview shows project context and exact current tasks once, keeps attenti
     const tasks = (await page.locator('.current-work').boundingBox())!;
     const attention = (await page.locator('#attention').boundingBox())!;
     const history = (await page.locator('.recent-work').boundingBox())!;
-    expect(tasks.y).toBeLessThan(attention.y);
     expect(attention.y).toBeLessThan(history.y);
+    expect(history.y).toBeLessThan(tasks.y);
+    expect(tasks.y).toBeLessThan((await page.locator('#overview-projects').boundingBox())!.y);
     await expect(page.locator('.recent-work')).toContainText('Сохранённый результат');
     await expect(page.locator('.recent-work')).toContainText(
       'Наблюдение: гипотезу решили отложить',
@@ -249,7 +256,7 @@ test('overview shows project context and exact current tasks once, keeps attenti
     await page.keyboard.press('Enter');
     await expect(page.locator('.checks-overview')).toBeVisible();
     await expect(page.locator('.movement-clock').first()).toContainText('18');
-    await expect(page.locator('.project-register')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Проекты сейчас' })).toBeVisible();
     await expect(page.locator('.git-overview .activity-list')).toBeHidden();
     await page.locator('.git-overview > summary').click();
     await expect(page.locator('.git-overview .activity-list')).toBeVisible();
@@ -299,6 +306,7 @@ test('project card reads persisted history and keeps it visible after a failed r
   });
   await page.goto('/');
   const card = page.getByRole('article', { name: data.projects[0].metadata.name, exact: true });
+  await card.locator('summary').click();
   await expect(card).toContainText('Сохранённый итог проекта');
   await expect(card.locator('.project-latest time')).toHaveAttribute('datetime', entry.recordedAt);
   await expect(
@@ -458,7 +466,8 @@ test('legacy plans remain readable and importable, editing/export preserve origi
   const project = workspace.projects.find((item) => item.path === repo)!;
   try {
     await page.goto(`/projects/${project.id}`);
-    await page.getByRole('button', { name: 'Изменить сводку', exact: true }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Изменить сводку', exact: true }).click();
     // An existing API client changes the legacy plan while this UI draft is open.
     const legacyUpdate = await request.put(`/api/projects/${project.id}`, {
       headers,
@@ -477,7 +486,8 @@ test('legacy plans remain readable and importable, editing/export preserve origi
     await page.getByLabel('Зачем существует', { exact: true }).fill('Обновлённая цель');
     await page.getByRole('button', { name: 'Сохранить сводку', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Сводка сохранена');
-    await page.getByText('Настройки проекта', { exact: true }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Настройки проекта', exact: true }).click();
     await page.locator('.legacy-plan > summary').click();
     await expect(page.locator('.legacy-plan')).toContainText('Прежний фокус');
     await expect(page.locator('.legacy-plan')).toContainText('Прежний фокус из другого клиента');

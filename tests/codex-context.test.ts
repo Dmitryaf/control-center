@@ -78,6 +78,57 @@ async function setup(t: { after: (fn: () => void | Promise<void>) => void }) {
     },
   };
 }
+for (const status of [503, 403]) {
+  test(`automatic context ${status === 503 ? 'skips one unreadable candidate' : 'stops on access rejection'} without expanding the four-thread budget`, async (t) => {
+    const x = await setup(t);
+    const grant = await x.enable();
+    x.fake.state.updatedAt = Date.parse('2024-03-08T12:00:00Z') / 1000;
+    const blockedId = randomUUID();
+    const transport = {
+      ...x.fake.transport,
+      read: <T>(signal: AbortSignal, action: Parameters<typeof x.fake.transport.read<T>>[1]) =>
+        x.fake.transport.read(signal, (rpc) =>
+          action({
+            request: async (method, params) => {
+              if (method === 'thread/list') {
+                const page = (await rpc.request(method, params)) as {
+                  data: Record<string, unknown>[];
+                  nextCursor: null;
+                };
+                return {
+                  ...page,
+                  data: [
+                    { ...page.data[0], id: blockedId, name: 'Unreadable candidate' },
+                    ...page.data,
+                  ],
+                };
+              }
+              if ((params as { threadId?: string }).threadId === blockedId)
+                throw new HttpError(status, 'Candidate rejected');
+              return rpc.request(method, params);
+            },
+          }),
+        ),
+    };
+    const context = new CodexContext(x.store, transport, () => Date.parse('2024-03-11T00:00:00Z'));
+    const input = {
+      reviewId: x.review.id,
+      projects: [{ projectId: x.project.id, revision: grant.revision }],
+      readConsent: true,
+      saveConsent: true,
+    };
+    if (status === 403) {
+      await assert.rejects(context.prepare(input), /Candidate rejected/);
+      assert.equal(context.list({ reviewId: x.review.id }).items.length, 0);
+    } else {
+      const result = await context.prepare(input);
+      assert.equal(result.items.length, 1);
+      assert.equal(result.items[0].thread.id, x.fake.threadId);
+      assert.ok(result.limitations.some((text) => text.includes('пропущен')));
+    }
+  });
+}
+
 test('opt-in → scoped metadata → bounded period text → selected digest; restart and retries preserve only chosen excerpts', async (t) => {
   const x = await setup(t);
   assert.equal(x.context.grant(x.project.id).enabled, false);
@@ -430,7 +481,7 @@ test('schema 10 upgrades with a verified copy and retained IDs; failed DDL leave
   x.store.db.exec('DROP TABLE codex_digests;DROP TABLE codex_grants;PRAGMA user_version=10;');
   const upgraded = new Store(x.file);
   x.others.push(upgraded);
-  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 14);
+  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 15);
   assert.ok(upgraded.project(x.project.id));
   const name = (await readdir(path.join(x.f.root, 'backups'))).find((name) =>
     name.startsWith('before-codex-v11'),

@@ -63,7 +63,7 @@ for (const count of [10, 20, 30]) {
       );
       assert.throws(() => history.latestProjects({ projectId: ids[0] }));
       assert.equal(history.latestProjects().nextCursor, null);
-      assert.equal(store.db.prepare('PRAGMA user_version').get()?.user_version, 14);
+      assert.equal(store.db.prepare('PRAGMA user_version').get()?.user_version, 15);
     });
   }
 }

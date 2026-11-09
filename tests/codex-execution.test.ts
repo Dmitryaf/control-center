@@ -78,6 +78,43 @@ test('Codex execution uses an isolated process, filtered environment, schema and
   await assert.rejects(access(captured.cwd), { code: 'ENOENT' });
 });
 
+test('executor rechecks consent immediately before stdin and sends nothing when it is revoked', async (t) => {
+  const f = await fixture();
+  t.after(f.cleanup);
+  const program = path.join(f.root, 'guarded.cjs');
+  const config = path.join(f.root, 'config.json');
+  const marker = path.join(f.root, 'must-not-receive.json');
+  await writeFile(program, script);
+  await writeFile(
+    config,
+    JSON.stringify({
+      marker,
+      mode: 'success',
+      report: { narrative: 'unused', findings: [], uncertainties: [], proposals: [] },
+    }),
+  );
+  const executor = new LocalCodexExecutor(process.execPath, [program, config], {
+    ...process.env,
+    CONTROL_CENTER_DATA_DIR: f.root,
+  });
+  let checked = false;
+  await assert.rejects(
+    executor.execute({
+      prompt: 'synthetic packet that must not be sent',
+      model: null,
+      signal: new AbortController().signal,
+      onProgress() {},
+      beforeDispatch() {
+        checked = true;
+        throw new Error('Synthetic consent revoked');
+      },
+    }),
+    /Разрешение изменилось до отправки/,
+  );
+  assert.equal(checked, true);
+  await assert.rejects(access(marker), { code: 'ENOENT' });
+});
+
 test('dedicated Codex login is explicit, idempotent, cancellable and never inherits the main profile', async (t) => {
   const f = await fixture();
   t.after(() => f.cleanup());

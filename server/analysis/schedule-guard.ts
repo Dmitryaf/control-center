@@ -2,6 +2,7 @@ import type { Store } from '../db.js';
 import { HttpError } from '../errors.js';
 import { projectStamp, periodPolicyVersion } from './period-context.js';
 import { CodexContext } from '../codex/context.js';
+import type { AnalysisProvider } from '../../shared/analysis-schedules.js';
 
 export type ScheduleAccess = { id: string; stamp: string; codexRevision?: number };
 export function verifyScheduleAccess(
@@ -27,14 +28,22 @@ export function verifyScheduleAccess(
     );
 }
 
-export function verifySchedule(store: Store, id: string, revision: number, model: string) {
+export function verifySchedule(
+  store: Store,
+  id: string,
+  revision: number,
+  model: string,
+  provider: AnalysisProvider = 'openai',
+  policy = periodPolicyVersion,
+) {
   const row = store.db.prepare('SELECT * FROM analysis_schedules WHERE id=?').get(id);
   if (
     !row ||
     !row.enabled ||
     row.revision !== revision ||
     row.model !== model ||
-    row.policy_version !== periodPolicyVersion
+    row.provider !== provider ||
+    row.policy_version !== policy
   )
     throw new HttpError(410, 'Разрешение расписания отключено или изменилось.');
   const selection = JSON.parse(String(row.selection_json));

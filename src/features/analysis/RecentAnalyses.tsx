@@ -1,15 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import type { RecentAnalyses } from '../../../shared/period-analysis';
+import type { RecentAnalyses, PeriodRunState } from '../../../shared/period-analysis';
+import { date } from '../../shared/labels';
 import { api } from '../../shared/http';
+import { codexDefaultQuestion } from '../../../shared/codex-analysis';
 
-export function SavedAnalyses({ projectIds }: { projectIds: string[] }) {
+export function useSavedAnalyses(projectIds: string[]) {
   const key = [...projectIds].sort().join(',');
-  const query = useQuery({
-    queryKey: ['recent-project-analyses', key],
+  return useQuery({
+    queryKey: ['recent-project-analyses', 'discussions', key],
     queryFn: ({ signal }) =>
       api<RecentAnalyses>(
-        `/period-analysis/recent${key ? `?${new URLSearchParams({ projectIds: key })}` : ''}`,
+        `/period-analysis/recent?${new URLSearchParams(key ? { view: 'discussions', projectIds: key } : { view: 'discussions' })}`,
         'GET',
         undefined,
         signal,
@@ -17,13 +19,19 @@ export function SavedAnalyses({ projectIds }: { projectIds: string[] }) {
     retry: false,
     refetchInterval: 5000,
   });
+}
+const discussionState: Record<PeriodRunState, string> = {
+  succeeded: '',
+  failed: 'Ошибка',
+  unknown: 'Результат неизвестен',
+  cancelled: 'Отменено',
+  pending: 'Ожидает подтверждения',
+  running: 'Codex отвечает',
+};
+export function SavedAnalyses({ query }: { query: ReturnType<typeof useSavedAnalyses> }) {
   return (
-    <section className="panel section-space" aria-label="Сохранённые анализы проектов">
-      <h2>Сохранённые анализы</h2>
-      <p className="help">
-        Результаты остаются в локальной базе после закрытия страницы. Без выбора проектов показаны
-        последние анализы всех проектов.
-      </p>
+    <section className="analysis-saved" aria-label="Сохранённые анализы проектов">
+      <h2>Обсуждения</h2>
       {query.isPending && <p role="status">Загружаем сохранённые анализы…</p>}
       {query.error && (
         <p role="alert">
@@ -33,27 +41,21 @@ export function SavedAnalyses({ projectIds }: { projectIds: string[] }) {
       )}
       {query.data?.items.length === 0 && <p className="empty">Сохранённых анализов пока нет.</p>}
       {query.data?.items.map((run) => (
-        <article key={run.id}>
-          <h3>{run.projectName}</h3>
-          <p>
-            {run.origin === 'codex_runtime'
-              ? 'Codex · Control Center'
-              : run.origin === 'codex_manual'
-                ? 'Codex · внесён вручную'
-                : `OpenAI · ${run.model}`}{' '}
-            · {new Date(run.createdAt).toLocaleString('ru')} · Вариант {run.generation}
-          </p>
+        <article className="analysis-discussion" key={run.id}>
           <Link
             to={`/${run.origin === 'codex_runtime' ? 'codex-analysis' : 'period-analysis'}?review=${run.reviewKey}&run=${run.id}`}
           >
-            Открыть анализ →
+            {run.title === codexDefaultQuestion ? 'Разбор проектов за период' : run.title}
           </Link>
+          <p>
+            {run.projectName} · {date(run.createdAt)}
+            {run.origin === 'codex_manual' && ' · Codex · внесён вручную'}
+            {discussionState[run.status] && ` · ${discussionState[run.status]}`}
+          </p>
         </article>
       ))}
       {query.data?.truncated && (
-        <p className="help">
-          Показаны 10 последних результатов. Более ранние доступны в истории и обзорах периодов.
-        </p>
+        <Link to="/timeline?kind=ai_analysis">Более ранние разборы в истории →</Link>
       )}
     </section>
   );

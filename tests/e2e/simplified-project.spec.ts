@@ -55,7 +55,12 @@ test('simple project and task list expose useful work without legacy scheduling 
       await expect(page.locator('.overview-shortcuts')).toHaveCount(0);
       await expect(page.locator('.project-settings')).toBeHidden();
       await expect(page.getByRole('heading', { name: 'Источники контекста' })).toBeHidden();
-      await expect(page.getByRole('button', { name: 'Удалить из Control Center' })).toBeVisible();
+      await expect(
+        page.getByRole('button', { name: 'Действия проекта', exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole('menuitem', { name: 'Удалить из Control Center' })).toHaveCount(
+        0,
+      );
       await expect(
         page.getByText('Метаданные ещё не пересматривались', { exact: true }),
       ).toBeHidden();
@@ -73,7 +78,8 @@ test('simple project and task list expose useful work without legacy scheduling 
         path: `.local/simplify-review/project-${width}.png`,
         fullPage: true,
       });
-      await page.getByText('Настройки проекта', { exact: true }).focus();
+      await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Настройки проекта', exact: true }).focus();
       await page.keyboard.press('Enter');
       await expect(page.getByRole('heading', { name: 'Источники контекста' })).toBeVisible();
       await expect(page.getByText('Дополнительные каталоги решений', { exact: true })).toHaveCount(

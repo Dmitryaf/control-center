@@ -73,9 +73,10 @@ test('schedule consent is separate from manual preview; saved policy can be insp
   try {
     await page.goto(`/period-analysis?review=${review.id}`);
     await page.getByText('Автоматический анализ завершённых периодов', { exact: true }).click();
-    const form = page
-      .locator('details')
-      .filter({ has: page.getByRole('button', { name: 'Включить с текущего периода' }) });
+    const form = page.getByRole('group', {
+      name: 'Автоматический анализ завершённых периодов',
+      exact: true,
+    });
     const enable = form.getByRole('button', { name: 'Включить с текущего периода' });
     await expect(enable).toBeDisabled();
     await form.getByLabel('Общие и отвязанные записи без проекта', { exact: true }).check();

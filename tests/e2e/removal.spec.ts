@@ -10,17 +10,17 @@ test('remove an available project, cancel, recover from failure, rescan and rest
   const f = await fixture();
   try {
     const repo = await f.repo('removable-product');
-    await f.repo('retained-tool');
+    const other = await f.repo('retained-tool');
     const state = async () =>
       (await (await page.request.get('/api/workspace')).json()) as Workspace;
     await page.goto('/settings');
-    await page.getByLabel('Полные пути').fill(f.root);
+    await page.getByLabel('Полные пути').fill([f.root, repo, other].join('\n'));
     await page.getByRole('button', { name: 'Сохранить и сканировать' }).click();
     await expect(page.getByRole('status')).toContainText('Настройки сохранены');
     const project = (await state()).projects.find((p) => p.path === repo)!;
     await page.goto(`/projects/${project.id}`);
-    await page.getByText('Настройки проекта', { exact: true }).click();
-    const remove = page.getByRole('button', { name: 'Удалить из Control Center' });
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    const remove = page.getByRole('menuitem', { name: 'Удалить из Control Center' });
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });
       await expect(remove).toBeVisible();
@@ -32,18 +32,22 @@ test('remove an available project, cancel, recover from failure, rescan and rest
     page.once('dialog', (dialog) => dialog.dismiss());
     await remove.click();
     expect((await state()).projects.some((p) => p.id === project.id)).toBe(true);
+    expect((await state()).settings.roots).toContain(repo);
     await page.route(`**/api/projects/${project.id}`, (route) => {
       if (route.request().method() === 'DELETE')
         return route.fulfill({ status: 409, json: { error: 'Дождитесь сканирования.' } });
       return route.continue();
     });
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
     page.once('dialog', (dialog) => dialog.accept());
     await remove.click();
     await expect(page.getByRole('alert', { name: 'Ошибка действия' })).toContainText(
       'Дождитесь сканирования',
     );
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
     await expect(remove).toBeEnabled();
     expect((await state()).projects.some((p) => p.id === project.id)).toBe(true);
+    expect((await state()).settings.roots).toContain(repo);
     await page.unroute(`**/api/projects/${project.id}`);
     page.once('dialog', (dialog) => {
       expect(dialog.message()).toContain('Каталог и файлы останутся на диске');
@@ -56,6 +60,7 @@ test('remove an available project, cancel, recover from failure, rescan and rest
     await page.getByRole('button', { name: '↻ Обновить', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Данные обновлены');
     expect((await state()).projects.map((p) => p.path)).not.toContain(repo);
+    expect((await state()).settings.roots).toEqual([f.root, other]);
     const legacySettings = { ...(await state()).settings };
     Reflect.deleteProperty(legacySettings, 'excludedProjectPaths');
     const saved = await page.request.put('/api/settings', {
@@ -67,6 +72,7 @@ test('remove an available project, cancel, recover from failure, rescan and rest
     expect((await state()).projects.map((p) => p.path)).not.toContain(repo);
     expect(await readFile(path.join(repo, 'README.md'), 'utf8')).toBe('# Fixture\n');
     await page.goto('/settings');
+    await expect(page.getByLabel('Полные пути')).toHaveValue([f.root, other].join('\n'));
     await page.getByText('Проекты, удалённые из Control Center', { exact: true }).click();
     await page.getByLabel('Исключённые пути проектов, каждый с новой строки').fill('');
     await page.getByRole('button', { name: 'Сохранить и сканировать' }).click();

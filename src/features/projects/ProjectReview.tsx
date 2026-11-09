@@ -55,11 +55,7 @@ export function ProjectReview({ projectId }: { projectId: string }) {
           </Link>
         </article>
       )}
-      {query.isSuccess && !review && (
-        <p className="empty">
-          Итогов пока нет. В конце недели запишите, что получилось и что хотите попробовать дальше.
-        </p>
-      )}
+      {query.isSuccess && !review && <p className="empty">Итогов пока нет.</p>}
       <div className="row section-space">
         <Link className="button primary" to={`/reviews?project=${projectId}&kind=week`}>
           Подвести итоги недели

@@ -5,10 +5,9 @@ import { useQuery } from '@tanstack/react-query';
 import type { HistoryPage } from '../../../shared/history';
 import { api } from '../../shared/http';
 import { useWorkspace } from '../../shared/workspace';
-import { date, priorityLabels } from '../../shared/labels';
-import { RecentHistory } from '../history/RecentHistory';
+import { date, priorityLabels, statusLabels } from '../../shared/labels';
+import { RecentHistory, RecentHistoryResult } from '../history/RecentHistory';
 import { dateInZone } from '../../../shared/periods';
-import { ProjectCard } from '../projects/Projects';
 export default function Overview() {
   const { data: w } = useWorkspace();
   const timezone = w!.settings.timezone;
@@ -106,91 +105,27 @@ export default function Overview() {
     <>
       <div className="page-heading">
         <div>
-          <p className="section-label">Проекты и работа</p>
           <h1>Обзор</h1>
-          <p className="subtitle">Где находятся проекты, что в работе и что удалось сохранить.</p>
         </div>
-        <p className="scan-stamp">
-          Последнее сканирование
-          <br />
-          <time>
-            {w!.scan.scannedAt
-              ? new Date(w!.scan.scannedAt).toLocaleString('ru')
-              : 'Сканирования ещё не было'}
-          </time>
-        </p>
       </div>
-      <div className="row overview-shortcuts">
-        <Link to="/observations">Записать наблюдение</Link>
-        <Link to="/reviews?kind=week">Обзор недели →</Link>
-        <Link to="/reviews?kind=month">Обзор месяца →</Link>
-        <a href="#attention">Решения и внимание · {attention.length} ↓</a>
-        <a href="#recent-work">Записи за период ↓</a>
-      </div>
-      <section className="current-work" aria-labelledby="current-work-heading">
-        <div className="section-heading">
-          <h2 id="current-work-heading">Проекты сейчас</h2>
-          <Link to="/projects">Все проекты · {projects.length} →</Link>
-        </div>
-        <div className="project-register">
-          {projects.map((project) => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              overview
-              recentHistory={latestHistory}
-            />
-          ))}
-        </div>
-        {!projects.length && (
-          <p className="empty">Проектов пока нет. Добавьте каталог в настройках.</p>
-        )}
-        {openTasks.some(
-          (task) => !task.projectId || !projects.some((project) => project.id === task.projectId),
-        ) && (
-          <section className="general-work section-space" aria-labelledby="general-work-heading">
-            <h3 id="general-work-heading">Общие открытые задачи</h3>
-            <ul className="work-list current-task-list">
-              {openTasks
-                .filter(
-                  (task) =>
-                    !task.projectId || !projects.some((project) => project.id === task.projectId),
-                )
-                .map((t) => (
-                  <li key={t.id}>
-                    <Link to={`/tasks?task=${t.code}`}>
-                      {t.code} · {t.title}
-                    </Link>
-                    <div className="row">
-                      <span className="muted">
-                        {t.projectId ? 'Проект недоступен в списке' : 'Общая задача'}
-                      </span>
-                      <span className="help">{priorityLabels[t.priority]}</span>
-                    </div>
-                  </li>
-                ))}
-            </ul>
-          </section>
-        )}
-        <p className="help section-space">
-          <Link to="/tasks">Все задачи →</Link>
-        </p>
-      </section>
       {!w!.settings.roots.length && (
         <div className="panel welcome">
           <h2>Начните с каталога проектов</h2>
-          <p>Укажите, где лежат ваши репозитории. GitHub и PROJECT.yaml не обязательны.</p>
+          <p>Выберите папку проекта или папку с несколькими проектами.</p>
           <Link to="/settings" className="button primary">
             Добавить каталог →
           </Link>
         </div>
       )}
+      <div className="row">
+        <Link to="/observations">Записать наблюдение</Link>
+        <Link to="/reviews">Открыть обзор периода</Link>
+      </div>
       <section id="attention" className="attention-queue" aria-labelledby="attention-heading">
         <div className="section-heading">
           <h2 id="attention-heading">
             Требуют внимания <span className="count">{attention.length}</span>
           </h2>
-          <span className="help">Сначала — решения, затем — сигналы</span>
         </div>
         {attention.map((item) => (
           <div key={item.key} className={`attention-line ${item.level}`}>
@@ -231,27 +166,81 @@ export default function Overview() {
             <option value="30">Последние 30 дней</option>
           </select>
         </label>
-        <p className="help">
-          До пяти последних записей: результаты, наблюдения, решения, проверки и обзоры. Часовой
-          пояс: {w!.settings.timezone}. Сохранённые сведения не являются независимой проверкой.
-          {period !== 'all' &&
-            ` Диапазон: ${start.toISOString().slice(0, 10)} — ${today}; текущий день ещё не завершён.`}
-        </p>
+        {period !== 'all' && (
+          <p className="help">
+            {start.toISOString().slice(0, 10)} — {today} · {w!.settings.timezone}
+          </p>
+        )}
         <RecentHistory
           from={period === 'all' ? undefined : start.toISOString().slice(0, 10)}
           to={period === 'all' ? undefined : today}
         />
       </section>
-      <div className="row overview-links section-space">
-        <Link to="/analysis">Анализ проектов →</Link>
-        <Link to="/projects">Все проекты · {w!.projects.length} →</Link>
-        <Link to="/ideas">
-          Идеи · {w!.ideas.filter((i) => ['new', 'consider', 'testing'].includes(i.state)).length} →
-        </Link>
-        {w!.decisions.some((d) => d.status === 'pending') && (
-          <Link to="/decisions">Ожидают решения →</Link>
-        )}
-      </div>
+      <section className="current-work" aria-labelledby="current-work-heading">
+        <div className="section-heading">
+          <h2 id="current-work-heading">Открытые задачи</h2>
+          <Link to="/tasks">Все задачи →</Link>
+        </div>
+        <ul className="work-list current-task-list">
+          {openTasks.slice(0, 5).map((task) => (
+            <li key={task.id}>
+              <Link to={`/tasks?task=${task.code}`}>
+                {task.code} · {task.title}
+              </Link>
+              <small>
+                {w!.projects.find((project) => project.id === task.projectId)?.metadata.name ??
+                  (task.projectId ? 'Проект недоступен' : 'Общая задача')}{' '}
+                · {priorityLabels[task.priority]}
+              </small>
+            </li>
+          ))}
+        </ul>
+        {!openTasks.length && <p className="empty">Открытых задач нет.</p>}
+      </section>
+      <section className="section-space" aria-labelledby="overview-projects">
+        <div className="section-heading">
+          <h2 id="overview-projects">Проекты сейчас</h2>
+          <Link to="/projects">Все проекты · {projects.length} →</Link>
+        </div>
+        {!projects.length && <p className="empty">Пока нет проектов.</p>}
+        <div className="project-register">
+          {projects.map((project) => (
+            <article
+              key={project.id}
+              className="overview-project-row"
+              aria-label={project.metadata.name}
+            >
+              <div className="row between">
+                <Link to={`/projects/${project.id}`}>{project.metadata.name}</Link>
+                <small>
+                  {statusLabels[project.metadata.status]}
+                  {project.metadata.stage && ` · ${project.metadata.stage}`}
+                </small>
+              </div>
+              {!project.available && (
+                <p className="warning-text">Каталог недоступен · сохранённый снимок</p>
+              )}
+              <details className="project-latest">
+                <summary>О проекте и последняя запись</summary>
+                {project.metadata.goal && <p>{project.metadata.goal}</p>}
+                <RecentHistoryResult
+                  query={{
+                    ...latestHistory,
+                    data: latestHistory.data && {
+                      ...latestHistory.data,
+                      items: latestHistory.data.items.filter(
+                        (entry) => entry.scopeProjectId === project.id,
+                      ),
+                    },
+                  }}
+                  timezone={timezone}
+                  compact
+                />
+              </details>
+            </article>
+          ))}
+        </div>
+      </section>
       <details className="overview-details section-space">
         <summary>Внешние проверки: {checks.length} · изменения в Git</summary>
         <div className="section-space">

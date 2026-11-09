@@ -34,12 +34,12 @@ export class Store {
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].includes(version.user_version)) {
+    if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].includes(version.user_version)) {
       this.db.close();
       throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
     }
     try {
-      if (existing && version.user_version < 14) {
+      if (existing && version.user_version < 15) {
         const directory = join(dirname(path), 'backups');
         mkdirSync(directory, { recursive: true });
         const prefix =
@@ -63,7 +63,9 @@ export class Store {
                             ? 'before-simple-tasks-v12'
                             : version.user_version < 13
                               ? 'before-project-lifecycle-v13'
-                              : 'before-task-cancellation-v14';
+                              : version.user_version < 14
+                                ? 'before-task-cancellation-v14'
+                                : 'before-codex-schedules-v15';
         snapshotDatabase(this.db, join(directory, `${prefix}-${randomUUID()}.sqlite`));
       }
       this.transaction(() => {
@@ -72,7 +74,9 @@ export class Store {
         const lockedVersion = this.db.prepare('PRAGMA user_version').get() as {
           user_version: number;
         };
-        if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].includes(lockedVersion.user_version))
+        if (
+          ![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].includes(lockedVersion.user_version)
+        )
           throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
         this.db.exec(`
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL);
@@ -264,7 +268,16 @@ export class Store {
             .prepare("UPDATE sqlite_sequence SET seq=MAX(seq,?) WHERE name='task_history'")
             .run(sequence);
         }
-        this.db.exec('PRAGMA user_version = 14;');
+        if (
+          !this.db
+            .prepare('PRAGMA table_info(analysis_schedules)')
+            .all()
+            .some((column) => column.name === 'provider')
+        )
+          this.db.exec(
+            "ALTER TABLE analysis_schedules ADD COLUMN provider TEXT NOT NULL DEFAULT 'openai' CHECK(provider IN ('openai','codex'))",
+          );
+        this.db.exec('PRAGMA user_version = 15;');
       });
     } catch (error) {
       this.db.close();

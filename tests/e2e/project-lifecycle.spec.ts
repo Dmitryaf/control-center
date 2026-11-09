@@ -58,11 +58,13 @@ test('project closure: explanation, open tasks, retry, restart, history and reop
   await start();
   try {
     await page.goto(`${base}/projects/${project.id}`);
-    await page.getByRole('button', { name: 'Закрыть проект', exact: true }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Закрыть проект', exact: true }).click();
     const form = page.getByRole('form', { name: 'Закрытие проекта', exact: true });
     await form.getByRole('button', { name: 'Отмена', exact: true }).click();
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM project_lifecycle_events').get()?.n).toBe(0);
-    await page.getByRole('button', { name: 'Закрыть проект', exact: true }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Закрыть проект', exact: true }).click();
     await expect(form).toContainText('Проверить всходы');
     await expect(form).toContainText('будут отменены');
     await form.getByLabel('Больше не развиваю', { exact: true }).focus();
@@ -74,6 +76,8 @@ test('project closure: explanation, open tasks, retry, restart, history and reop
     page.once('dialog', (dialog) => dialog.dismiss());
     await form.getByRole('button', { name: 'Отмена', exact: true }).click();
     await expect(form.getByLabel('Пояснение', { exact: true })).toHaveValue(reason);
+    const navToggle = page.getByRole('button', { name: 'Меню', exact: true });
+    if (await navToggle.isVisible()) await navToggle.click();
     await page
       .getByRole('navigation', { name: 'Основная навигация' })
       .getByRole('link', { name: 'Проекты', exact: true })
@@ -124,11 +128,13 @@ test('project closure: explanation, open tasks, retry, restart, history and reop
         fullPage: true,
       });
     }
-    await page.getByRole('button', { name: 'Вернуть в работу', exact: true }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Вернуть в работу', exact: true }).click();
     await page.getByRole('button', { name: 'Подтвердить возврат', exact: true }).focus();
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('button', { name: 'Закрыть проект', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Закрыть проект', exact: true }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await expect(page.getByRole('menuitem', { name: 'Закрыть проект', exact: true })).toBeVisible();
+    await page.getByRole('menuitem', { name: 'Закрыть проект', exact: true }).click();
     await form.getByLabel('Завершён', { exact: true }).check();
     await form
       .getByLabel('Пояснение', { exact: true })
@@ -136,7 +142,7 @@ test('project closure: explanation, open tasks, retry, restart, history and reop
     await form.getByRole('button', { name: 'Подтвердить закрытие', exact: true }).click();
     await expect(outcome).toContainText('Цель достигнута');
     await page.goto(`${base}/projects`);
-    await page.getByRole('button', { name: 'Закрытые', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Статус проекта' }).selectOption('closed');
     await expect(
       page.getByRole('heading', { name: project.metadata.name, exact: true }),
     ).toBeVisible();
@@ -153,11 +159,13 @@ test('project closure: explanation, open tasks, retry, restart, history and reop
     await expect(page.getByRole('article', { name: 'Сохранённое событие проекта' })).toContainText(
       reason,
     );
+    await navToggle.click();
     await expect(
       page
         .getByRole('navigation', { name: 'Основная навигация' })
         .getByRole('link', { name: 'История', exact: true }),
     ).toHaveAttribute('aria-current', 'page');
+    await page.keyboard.press('Escape');
     const saved = new Tasks(store).read(task.id);
     expect(saved.completedAt).toBe(null);
     expect(saved.cancellation?.projectEventId).toBeTruthy();
@@ -190,7 +198,8 @@ test('project closure: explanation, open tasks, retry, restart, history and reop
     await expect(page.getByText('Возвращена в работу', { exact: true })).toBeVisible();
     // Refetch must not replace the revision captured by an already open summary form.
     await page.goto(`${base}/projects/${project.id}`);
-    await page.getByRole('button', { name: 'Изменить сводку', exact: true }).click();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Изменить сводку', exact: true }).click();
     await page.getByLabel('Зачем существует', { exact: true }).fill('Несохранённое пояснение');
     const reopened = await page.request.post(`${base}/api/projects/${project.id}/reopen`, {
       headers: { 'X-Control-Center': '1' },
@@ -198,7 +207,9 @@ test('project closure: explanation, open tasks, retry, restart, history and reop
     });
     expect(reopened.ok()).toBe(true);
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(page.getByRole('button', { name: 'Закрыть проект', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Действия проекта', exact: true }).click();
+    await expect(page.getByRole('menuitem', { name: 'Закрыть проект', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Сохранить сводку', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('Состояние проекта изменилось');
     await expect(page.getByLabel('Зачем существует', { exact: true })).toHaveValue(

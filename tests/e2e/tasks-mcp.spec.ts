@@ -30,7 +30,7 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
       .locator('.task-card')
       .filter({ has: page.getByRole('heading', { name: title }) });
     await expect(card.getByText(found.code, { exact: true })).toBeVisible();
-    await card.getByRole('button', { name: 'Изменить', exact: true }).click();
+    await card.getByRole('button', { name: title, exact: true }).click();
     await expect(page.getByLabel('Название задачи')).toBeFocused();
     await page.getByLabel('Название задачи').fill('Мой несохранённый текст');
     const changed = await mcp.call('task_update', {
@@ -50,7 +50,11 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
     );
     await expect(page.getByLabel('Название задачи')).toHaveValue('Мой несохранённый текст');
     await page.getByRole('button', { name: 'Отмена', exact: true }).click();
-    await expect(card.getByText('Изменено другим агентом', { exact: true })).toBeVisible();
+    await card.getByRole('button', { name: title, exact: true }).click();
+    await expect(page.getByLabel('Описание', { exact: true })).toHaveValue(
+      'Изменено другим агентом',
+    );
+    await page.getByRole('button', { name: 'Отмена', exact: true }).click();
     const completed = await mcp.call('task_complete', {
       identifier: found.code,
       revision: changed.value.revision,
@@ -70,6 +74,7 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
     await expect(card.getByText(/Завершена:/)).toBeVisible();
     await card.getByRole('button', { name: 'Вернуть', exact: true }).click();
     await page.getByRole('combobox', { name: 'Состояние задач', exact: true }).selectOption('open');
+    await page.getByRole('button', { name: 'Поиск по задачам' }).click();
     await page.getByLabel('Поиск задач', { exact: true }).fill(found.code);
     await expect(card).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Состояние', exact: true })).toHaveCount(0);
@@ -97,12 +102,13 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );
-      await card.getByRole('button', { name: 'Изменить', exact: true }).focus();
+      await card.getByRole('button', { name: title, exact: true }).focus();
       await page.keyboard.press('Enter');
       await expect(page.getByLabel('Название задачи')).toBeFocused();
       await expect(page.locator('form').first().getByRole('textbox')).toHaveCount(2);
       await page.getByRole('button', { name: 'Отмена', exact: true }).click();
-      await card.getByRole('button', { name: 'Изменить итог', exact: true }).click();
+      await card.getByRole('button', { name: 'Действия ' + found.code }).click();
+      await page.getByRole('menuitem', { name: 'Изменить итог', exact: true }).click();
       await expect(
         page
           .getByRole('form', { name: `Итог ${found.code}`, exact: true })

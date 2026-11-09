@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Review } from '../../../shared/reviews';
 import type { PeriodRun, PeriodSelection } from '../../../shared/period-analysis';
@@ -9,12 +9,15 @@ import type {
   CodexExecutionStatus,
   CodexFileList,
 } from '../../../shared/codex-analysis';
+import { NotebookHeading } from '../../shared/NotebookHeading';
 import { api } from '../../shared/http';
 import { useWorkspace } from '../../shared/workspace';
 import { UnsavedChanges } from '../../shared/UnsavedChanges';
 import { SourceSelection, coreSelection, emptySelection } from '../period-analysis/SourceSelection';
 import { RunDetail } from '../period-analysis/PeriodAnalysis';
-
+import { codexDefaultQuestion as defaultQuestion } from '../../../shared/codex-analysis';
+import { RequestPreview } from './RequestPreview';
+import { AnalysisProgress } from './AnalysisProgress';
 type View = { run: PeriodRun; progress: string | null };
 const stateLabel = {
   pending: 'Пакет готов к просмотру',
@@ -71,11 +74,17 @@ export default function CodexAnalysis() {
   const latest = turns.at(-1);
   const pending = latest?.status === 'pending' ? latest : null;
   const running = latest?.status === 'running';
-  const [question, setQuestion] = useState(() =>
-    runId
-      ? ''
-      : 'Помоги осмыслить развитие выбранных проектов: что изменилось, что это значит и на чём стоит сосредоточиться?',
-  );
+  const executionProgress = useQuery({
+    queryKey: ['codex-run', latest?.id],
+    enabled: !!running,
+    queryFn: ({ signal }) =>
+      api<View>(`/codex-analysis/${encodeURIComponent(latest!.id)}`, 'GET', undefined, signal),
+    refetchInterval: running ? 1000 : false,
+  });
+  const { hash, state } = useLocation();
+  const incomingQuestion = !runId && typeof state?.question === 'string' ? state.question : '';
+  const [question, setQuestion] = useState(runId ? '' : incomingQuestion || defaultQuestion);
+  const questionRef = useRef<HTMLTextAreaElement>(null);
   const [model, setModel] = useState('');
   const [selection, setSelection] = useState<PeriodSelection>(() => ({
     ...coreSelection(emptySelection(null)),
@@ -83,13 +92,11 @@ export default function CodexAnalysis() {
   }));
   const [files, setFiles] = useState<{ projectId: string; path: string }[]>([]);
   const [inventory, setInventory] = useState<CodexFileList | null>(null);
-  const [approved, setApproved] = useState(false);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [failure, setFailure] = useState('');
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(!!incomingQuestion);
   const key = useRef(crypto.randomUUID());
-  useEffect(() => setApproved(false), [pending?.id, pending?.packetHash]);
   useEffect(() => {
     if (['running', 'succeeded'].includes(view.data?.run.status ?? '')) setFailure('');
   }, [view.data?.run.status, runId]);
@@ -123,30 +130,83 @@ export default function CodexAnalysis() {
   }
   const followup =
     latest?.status === 'succeeded' && latest.payload.origin?.kind === 'codex_runtime';
-  const canCompose = !latest || followup;
+  const canCompose = !runId || (followup && conversation.isSuccess);
+  const focusQuestion = hash === '#question' && !!followup && !!review.data && canCompose;
+  useEffect(() => {
+    if (focusQuestion) questionRef.current?.focus();
+  }, [focusQuestion, runId]);
   return (
     <div className="analysis-page codex-analysis-page">
       <UnsavedChanges dirty={dirty} />
-      <div className="page-heading">
-        <div>
-          <p className="section-label">Осмысление проектов</p>
-          <h1>Обсуждение с Codex</h1>
+      <NotebookHeading
+        date={view.data ? new Date(view.data.run.createdAt) : undefined}
+        title={runId ? 'Анализ проектов' : 'Обсуждение с Codex'}
+      />
+      <Link className="analysis-back" to="/analysis">
+        Все анализы
+      </Link>
+      {(failure || view.error || conversation.error || (review.error && !runId)) && (
+        <div className="message error" role="alert">
+          {failure || view.error?.message || conversation.error?.message || review.error?.message}
         </div>
-        <Link to="/analysis">К анализу проектов →</Link>
-      </div>
-      <p>
-        Задайте вопрос о выбранных проектах. Пакет, ответы и уточнения сохраняются здесь. Каждый
-        запуск использует доступ и лимиты установленного Codex CLI.
-      </p>
+      )}
+      {view.isPending && runId && <p role="status">Загрузка обсуждения…</p>}
+      {turns.length > 0 && (
+        <section aria-label="Обсуждение анализа" className="section-space">
+          {turns.map((turn) => {
+            if (turn.id === latest?.id && ['pending', 'running'].includes(turn.status)) return null;
+            const questionText =
+              turn.payload.origin?.kind === 'codex_runtime' ? turn.payload.origin.question : '';
+            const content = turn.report ? (
+              <RunDetail
+                embedded
+                run={turn}
+                status={undefined}
+                onDeleted={() => {
+                  client.removeQueries({ queryKey: ['codex-run', turn.id] });
+                  const remaining = turns.filter((t) => t.id !== turn.id);
+                  if (remaining.length)
+                    setParams({ review: reviewId || turn.reviewKey, run: remaining.at(-1)!.id });
+                  else
+                    setParams({
+                      review: reviewId || turn.reviewKey,
+                      projects: turn.selection.projectIds.join(','),
+                    });
+                  void refresh();
+                }}
+              />
+            ) : (
+              <div className="section-space">
+                <h2>
+                  {questionText === defaultQuestion ? 'Разбор проектов за период' : questionText}
+                </h2>
+                <p className="help">{stateLabel[turn.status]}</p>
+                {turn.error && <p role="alert">{turn.error}</p>}
+              </div>
+            );
+            return turn.id === latest?.id ? (
+              <div key={turn.id}>{content}</div>
+            ) : (
+              <details
+                className="analysis-earlier"
+                key={turn.id}
+                open={turn.id === runId || !!turn.report}
+              >
+                <summary>
+                  {questionText === defaultQuestion ? 'Разбор проектов за период' : questionText}
+                </summary>
+                {content}
+              </details>
+            );
+          })}
+        </section>
+      )}
       {status.isPending && <p role="status">Проверка подключения Codex…</p>}
       {(status.error || (status.data && !status.data.available)) && (
         <div className="message warning" role="alert">
           {status.error?.message || status.data?.reason}
           <button onClick={() => void status.refetch()}>Проверить подключение</button>
         </div>
-      )}
-      {status.data?.available && status.data.authenticated !== false && (
-        <p className="help">Codex установлен. Вход и доступный лимит проверяются при запуске.</p>
       )}
       {status.data?.available && status.data.authenticated === false && (
         <section className="panel" aria-label="Вход в Codex">
@@ -211,152 +271,71 @@ export default function CodexAnalysis() {
           </button>
         </section>
       )}
-      {(failure || view.error || conversation.error || (review.error && !runId)) && (
-        <div className="message error" role="alert">
-          {failure || view.error?.message || conversation.error?.message || review.error?.message}
-        </div>
-      )}
-      {view.isPending && runId && <p role="status">Загрузка обсуждения…</p>}
-      {turns.length > 0 && (
-        <section aria-label="Обсуждение анализа" className="section-space">
-          {turns.map((turn) => (
-            <article key={turn.id} className="section-space">
-              <div className="panel">
-                <h2>Ваш вопрос</h2>
-                <p className="preserve">
-                  {turn.payload.origin?.kind === 'codex_runtime'
-                    ? turn.payload.origin.question
-                    : ''}
-                </p>
-                <p className="help">{stateLabel[turn.status]}</p>
-              </div>
-              {turn.report ? (
-                <RunDetail
-                  embedded
-                  run={turn}
-                  status={undefined}
-                  onDeleted={() => {
-                    client.removeQueries({ queryKey: ['codex-run', turn.id] });
-                    const remaining = turns.filter((t) => t.id !== turn.id);
-                    if (remaining.length)
-                      setParams({ review: reviewId || turn.reviewKey, run: remaining.at(-1)!.id });
-                    else
-                      setParams({
-                        review: reviewId || turn.reviewKey,
-                        projects: turn.selection.projectIds.join(','),
-                      });
-                    void refresh();
-                  }}
-                />
-              ) : (
-                turn.error && (
-                  <p className="message warning" role="alert">
-                    {turn.error}
-                  </p>
-                )
-              )}
-            </article>
-          ))}
-        </section>
-      )}
       {pending && (
-        <section className="panel section-space" aria-label="Просмотр запроса Codex">
-          <h2>Что получит Codex</h2>
-          <p>
-            Источников: {pending.payload.sources.length}.{' '}
-            {pending.payload.origin?.kind === 'codex_runtime' && pending.payload.origin.parentRunId
-              ? 'Также будут переданы предыдущие успешные вопросы и ответы этого обсуждения.'
-              : 'Предыдущие диалоги не подключаются автоматически.'}
-          </p>
-          <ul>
-            {pending.payload.sources.map((source) => (
-              <li key={source.id}>{source.title}</li>
-            ))}
-          </ul>
-          <details>
-            <summary>Точный контекст и ограничения</summary>
-            <pre className="analysis-packet">{JSON.stringify(pending.payload, null, 2)}</pre>
-            {turns
-              .filter((t) => t.status === 'succeeded')
-              .map((t) => (
-                <div key={t.id}>
-                  <p>
-                    {t.payload.origin?.kind === 'codex_runtime' ? t.payload.origin.question : ''}
-                  </p>
-                  <pre className="analysis-packet">{JSON.stringify(t.report, null, 2)}</pre>
-                </div>
-              ))}
-          </details>
-          <label className="checkbox section-space">
-            <input
-              type="checkbox"
-              checked={approved}
-              onChange={(event) => setApproved(event.target.checked)}
-            />
-            Я просмотрел контекст и разрешаю отправить этот запрос через Codex с использованием
-            моего лимита или оплатой API при таком способе входа
-          </label>
-          <div className="row section-space">
-            <button
-              className="primary"
-              disabled={
-                busy || !approved || !status.data?.available || status.data?.authenticated === false
-              }
-              onClick={() =>
-                void action(async () => {
-                  const saved = await api<View>(`/codex-analysis/${pending.id}/start`, 'POST', {
-                    packetHash: pending.packetHash,
-                    consent: true,
-                  });
-                  client.setQueryData(['codex-run', pending.id], saved);
-                  await refresh();
-                })
-              }
-            >
-              Запустить Codex
-            </button>
-            <button
-              disabled={busy}
-              onClick={() =>
-                void action(async () => {
-                  await api(`/period-analysis/${pending.id}/cancel`, 'POST', {});
-                  await refresh();
-                })
-              }
-            >
-              Отменить запрос
-            </button>
-          </div>
-          <p className="help">
-            Пакет действует до {new Date(pending.expiresAt).toLocaleString('ru')}. Автоматической
-            повторной отправки нет.
-          </p>
-        </section>
+        <RequestPreview
+          key={pending.id}
+          run={pending}
+          turns={turns}
+          busy={busy}
+          canStart={!!status.data?.available && status.data?.authenticated !== false}
+          onStart={() =>
+            void action(async () => {
+              const saved = await api<View>(`/codex-analysis/${pending.id}/start`, 'POST', {
+                packetHash: pending.packetHash,
+                consent: true,
+              });
+              client.setQueryData(['codex-run', pending.id], saved);
+              await refresh();
+            })
+          }
+          onCancel={() =>
+            void action(async () => {
+              await api(`/period-analysis/${pending.id}/cancel`, 'POST', {});
+              await refresh();
+            })
+          }
+          onReprepare={(nextSelection) =>
+            void action(async () => {
+              const origin = pending.payload.origin;
+              if (origin?.kind !== 'codex_runtime' || origin.parentRunId) return;
+              const prepared = await api<PeriodRun>('/codex-analysis/prepare', 'POST', {
+                reviewId: pending.reviewKey,
+                requestKey: crypto.randomUUID(),
+                question: origin.question,
+                selection: nextSelection,
+                files: origin.files,
+                ...(pending.model === 'codex-default' ? {} : { model: pending.model }),
+                readConsent: true,
+              });
+              await api(`/period-analysis/${pending.id}/cancel`, 'POST', {});
+              client.setQueryData(['codex-run', prepared.id], { run: prepared, progress: null });
+              setParams({ review: prepared.reviewKey, run: prepared.id });
+              await refresh();
+            })
+          }
+        />
       )}
-      {running && (
-        <section className="panel section-space" aria-label="Ход анализа">
-          <h2>Codex работает</h2>
-          <p role="status">{view.data?.progress || 'Codex анализирует утверждённый контекст'}</p>
-          <p>
-            Страницу можно закрыть и вернуться к обсуждению. После остановки сервера запрос сам не
-            запускается повторно.
-          </p>
-          <button
-            disabled={busy || latest?.cancelRequested}
-            onClick={() =>
-              void action(async () => {
-                await api(`/period-analysis/${latest!.id}/cancel`, 'POST', {});
-                await refresh();
-              })
-            }
-          >
-            {latest?.cancelRequested ? 'Остановка запрошена' : 'Остановить анализ'}
-          </button>
-        </section>
+      {running && latest && (
+        <AnalysisProgress
+          scope={`${latest.payload.period.from.split('-').reverse().join('.')} — ${latest.payload.period.to.split('-').reverse().join('.')} · ${latest.payload.sources
+            .filter((source) => source.kind === 'project')
+            .map((source) => source.title)
+            .join(', ')}`}
+          startedAt={latest.startedAt}
+          stage={executionProgress.data?.progress ?? null}
+          stopping={latest.cancelRequested}
+          busy={busy}
+          onStop={() =>
+            void action(async () => {
+              await api(`/period-analysis/${latest.id}/cancel`, 'POST', {});
+              await refresh();
+            })
+          }
+        />
       )}
       {canCompose && review.data && (
         <form
-          className="panel form section-space"
+          className={followup ? 'analysis-follow-form' : 'form analysis-new-form'}
           aria-label={followup ? 'Уточнение анализа' : 'Новый анализ Codex'}
           onSubmit={(event) => {
             event.preventDefault();
@@ -388,13 +367,18 @@ export default function CodexAnalysis() {
             });
           }}
         >
-          <h2>{followup ? 'Уточнить выводы' : 'Новый анализ'}</h2>
+          {!followup && <h2>Новый анализ</h2>}
           <label>
-            <span id="codex-question-label">{followup ? 'Уточняющий вопрос' : 'Вопрос Codex'}</span>
+            <span className={followup ? 'visually-hidden' : undefined} id="codex-question-label">
+              {followup ? 'Уточняющий вопрос' : 'Вопрос Codex'}
+            </span>
             <textarea
               aria-labelledby="codex-question-label"
-              required
-              rows={3}
+              required={!!followup}
+              id="question"
+              ref={questionRef}
+              placeholder={followup ? 'Уточнить у Codex…' : undefined}
+              rows={followup ? 1 : 3}
               maxLength={4000}
               disabled={busy}
               value={question}
@@ -404,12 +388,7 @@ export default function CodexAnalysis() {
               }}
             />
           </label>
-          {followup ? (
-            <p className="help">
-              Используется тот же сохранённый пакет и успешные ответы этого обсуждения. Для другого
-              состава источников начните новый анализ.
-            </p>
-          ) : (
+          {!followup && (
             <>
               <details>
                 <summary>Источники анализа</summary>
@@ -429,8 +408,8 @@ export default function CodexAnalysis() {
               <details>
                 <summary>Добавить файлы проектов — по необходимости</summary>
                 <p className="help">
-                  Только выбранные файлы, добавленные в Git: до 12 файлов, каждый до 8 КБ. Сначала
-                  загрузится список имён; содержимое читается при подготовке контекста.
+                  До 12 файлов из Git, каждый до 8 КБ. Список содержит только имена. Содержимое
+                  выбранных файлов читается при подготовке контекста.
                 </p>
                 <button
                   type="button"
@@ -496,20 +475,42 @@ export default function CodexAnalysis() {
               </details>
             </>
           )}
-          <p className="help">
-            Подготовка читает выбранные локальные источники и сохраняет пакет. Отправка Codex
-            подтверждается отдельно на следующем шаге.
-          </p>
+          {!followup && (
+            <p className="help">На следующем шаге вы увидите, какие данные получит Codex.</p>
+          )}
           <button
             className="primary"
-            disabled={busy || !question.trim() || (!followup && !selection.projectIds.length)}
+            disabled={
+              busy || (followup && !question.trim()) || (!followup && !selection.projectIds.length)
+            }
           >
-            Подготовить контекст
+            {busy ? (
+              'Готовим запрос…'
+            ) : followup ? (
+              <>
+                <span aria-hidden="true">↑</span>
+                <span className="visually-hidden">Подготовить уточнение</span>
+              </>
+            ) : (
+              'Подготовить контекст'
+            )}
           </button>
         </form>
       )}
       {latest && !running && (
-        <p className="section-space">
+        <p className="analysis-restart-links section-space">
+          <Link
+            to={`/analysis?${new URLSearchParams({ projects: latest.selection.projectIds.join(','), kind: latest.payload.period.kind, date: latest.payload.period.from })}`}
+            state={{
+              question:
+                question.trim() ||
+                (latest.payload.origin?.kind === 'codex_runtime'
+                  ? latest.payload.origin.question
+                  : ''),
+            }}
+          >
+            Изменить период или проекты
+          </Link>
           <Link
             to={`/codex-analysis?review=${latest.reviewKey}&projects=${latest.selection.projectIds.join(',')}`}
             onClick={(event) => {
@@ -517,7 +518,7 @@ export default function CodexAnalysis() {
                 event.preventDefault();
                 return;
               }
-              setQuestion('Помоги осмыслить развитие выбранных проектов.');
+              setQuestion(defaultQuestion);
               setSelection(latest.selection);
               setFiles([]);
               flushSync(() => setDirty(false));
