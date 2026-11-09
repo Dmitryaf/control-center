@@ -331,6 +331,9 @@ export class Projects {
     const row = this.require(id);
     this.store.transaction(() => {
       const settings = this.store.settings();
+      settings.roots = settings.roots.filter(
+        (root) => !(within(root, row.path) && within(row.path, root)),
+      );
       settings.excludedProjectPaths = [...new Set([...settings.excludedProjectPaths, row.path])];
       this.store.saveSettings(settings);
       this.store.db
