@@ -2,42 +2,31 @@
 
 ## Get started
 
-Install **Node.js 22.17+** and **Git**, then run:
+Install Node.js 22.17+ and Git. From the project checkout:
 
 ```sh
-git clone https://github.com/Dmitryaf/control-center.git
-cd control-center
 npm ci
 npm run dev
 ```
 
-In PowerShell, use `npm.cmd` instead of `npm`.
+In PowerShell use `npm.cmd`. Open [http://127.0.0.1:4310](http://127.0.0.1:4310). Add the folders containing your projects in Settings and scan. Open a project, describe its purpose and add a task or observation.
 
-Open [Control Center](http://127.0.0.1:4310). In Settings, add the folders containing your projects and scan them. Open a project, describe its purpose and add a task or observation.
-
-## Windows desktop shortcut
-
-Run this once from the project folder:
+## Windows shortcut
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-shortcut.ps1
 ```
 
-Double-click **Control Center** on your desktop to open the app. Keep the project folder in place. Closing the browser leaves the app running; restart it after updating backend code.
+The shortcut launches the current sources and checks that an existing process belongs to this checkout and database. Closing the browser leaves the server running. Restart after backend updates; startup with Windows is not configured by the launcher.
 
-## Connect Codex
+## Analysis
 
-With Codex CLI installed:
+With a compatible Codex CLI installed, open analysis, select projects and period, prepare context and sign in to the separate Control Center profile when prompted. Inspect the packet before confirming a question. Opening analysis alone does not dispatch it.
 
-1. Select the projects and review period.
-2. Start a Codex analysis and sign in when prompted.
-3. Follow the sign-in link and enter the displayed code. This is a separate profile for Control Center.
-4. Ask a question, inspect the prepared context and confirm the analysis.
+The OpenAI API is a separate optional provider. Its credentials remain in the HTTP server environment. [Provider, context and task access](guides/ANALYSIS.md).
 
-See [analysis and Codex](guides/ANALYSIS.md) for OpenAI API setup, task access from Codex and integration details.
+## Data
 
-## Storage, backup and restore
+Windows defaults to `%USERPROFILE%/.control-center/control-center.sqlite`. `CONTROL_CENTER_DATA_DIR` overrides the directory. If an older AppData database exists and the new location is empty, startup asks for recovery rather than creating an apparently empty workspace.
 
-Create a backup in Settings. For restoring a backup, moving an installation or recovering an older Windows database, follow [backup and maintenance](guides/MAINTENANCE.md#storage-backup-and-restore).
-
-Developer commands and project-file details are also in the [maintenance guide](guides/MAINTENANCE.md).
+Create a verified backup in Settings. Before moving or replacing a database, stop all HTTP and MCP writers and follow [storage, backup and restore](guides/MAINTENANCE.md#storage-backup-and-restore). Repository files and private context need their own backup.

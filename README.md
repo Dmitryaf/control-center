@@ -1,36 +1,32 @@
 # Control Center
 
-Control Center brings projects, tasks, ideas and results together in one place. It helps you see what is happening across your projects, review completed work and decide what to focus on next.
+A local workspace for projects, tasks, observations, decisions and weekly or monthly reviews. The interface is in Russian.
 
-## What you can do
+## Current workflows
 
-- Keep an overview of projects, their goals, stages and priorities.
-- Create tasks, track completed work and record results.
-- Save ideas, observations and decisions alongside the projects they relate to.
-- Test ideas and track actions, evidence and conclusions.
-- Review a week or month for one project or several projects together.
-- Discuss projects with Codex, ask follow-up questions and keep the analysis for later.
+- Discover local repositories and keep a project summary, goal, stage and focus.
+- Create numbered tasks, record results, complete or reopen work, and inspect its history.
+- Save ideas and observations; read project decisions from their original files.
+- Track a question, external actions, evidence and a conclusion in a check.
+- Close or return a project. Closing cancels its open tasks while preserving completed results and history.
+- Review one or several projects, discuss the prepared context with Codex or use the OpenAI API, and explicitly accept useful proposals.
+- Enable separate opt-in weekly/monthly review schedules while the HTTP server is running.
 
-Each project page shows its purpose, open tasks, recent work and latest review. A shared history lets you look back across projects.
+Project pages show their purpose, tasks, history and latest meaningful review. Removing a project from this catalogue does not delete its repository.
 
-## Screenshots
+![Project overview](assets/screenshots/overview.png)
+![Tasks](assets/screenshots/tasks.png)
+![Project analysis](assets/screenshots/analysis.png)
 
-### Overview
+## Start
 
-![Project overview with current tasks and recent results](assets/screenshots/overview.png)
+Use Node.js 22.17+ and Git. From the checkout:
 
-### Tasks
+```sh
+npm ci
+npm run dev
+```
 
-![Compact task list grouped by project](assets/screenshots/tasks.png)
+Open [Control Center](http://127.0.0.1:4310), add project folders in Settings and scan them. [Setup](SETUP.md) covers the Windows shortcut and first connection. [Analysis](guides/ANALYSIS.md) covers context and consent; [maintenance](guides/MAINTENANCE.md) covers storage, recovery, architecture and checks.
 
-### Ideas
-
-![Idea editor and ideas linked to projects](assets/screenshots/ideas.png)
-
-### Project analysis
-
-![Saved project analysis with per-project conclusions and a follow-up question](assets/screenshots/analysis.png)
-
-## Get started
-
-See [setup and usage](SETUP.md#get-started) to get started.
+The application uses React, TypeScript, Express and SQLite. It runs on loopback; it has no shared user accounts or cloud database sync.
