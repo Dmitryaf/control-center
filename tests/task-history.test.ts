@@ -52,7 +52,7 @@ test('v4 upgrade backs up committed WAL, preserves records/identity, seeds only 
     upgraded.db.prepare('SELECT * FROM task_identity ORDER BY number').all(),
     identity,
   );
-  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 15);
+  assert.equal(upgraded.db.prepare('PRAGMA user_version').get()?.user_version, 16);
   const history = new TaskHistory(upgraded).list();
   assert.equal(history.total, 3);
   assert.ok(history.items.every((item) => item.kind === 'baseline'));
@@ -149,7 +149,7 @@ test('upgrade rechecks a stale schema version after another SQLite connection co
     const late = new Store(file);
     try {
       assert.ok(interleaved);
-      assert.equal(late.db.prepare('PRAGMA user_version').get()?.user_version, 15);
+      assert.equal(late.db.prepare('PRAGMA user_version').get()?.user_version, 16);
       assert.equal(new TaskHistory(late).list().total, 1);
     } finally {
       late.close();
@@ -249,7 +249,8 @@ test('history survives result edits, clearing, reopening, deletion and project r
   assert.ok(history.list({ identifier: initial.id }).items.every((entry) => !entry.taskExists));
   assert.equal(history.list({ projectId: project.id }).total, 5);
   await projects.forget(project.id);
-  assert.equal(history.list({ projectId: project.id }).total, 0);
+  // Historical membership survives detachment and can still be selected by its old identity.
+  assert.equal(history.list({ projectId: project.id }).total, 5);
   assert.equal(history.list({ projectId: null }).total, 0);
   assert.ok(
     history

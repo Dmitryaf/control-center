@@ -12,6 +12,7 @@ import { dateInZone } from '../shared/periods.js';
 import { reviewPageSchema, type Review } from '../shared/reviews.js';
 import { z } from 'zod';
 import { timezoneSchema } from '../shared/periods.js';
+import { taskProjectsSql } from './task-scope.js';
 
 // A read projection over existing owners, never an event journal or a copy of their bodies.
 const entriesSql = `WITH options(zone) AS (VALUES(?)), entries(key,kind,event,sourceId,day,recordedAt,dateQuality,projectId,scopeProjectId,projectName,title,body,href) AS (
@@ -156,8 +157,10 @@ export class History {
     }
     if (query.projectId === null) where.push('projectId IS NULL');
     else if (query.projectId) {
-      where.push('scopeProjectId=?');
-      values.push(query.projectId);
+      where.push(
+        `(scopeProjectId=? OR (kind='task' AND EXISTS(SELECT 1 FROM task_history h,json_each(${taskProjectsSql('h.snapshot')}) links WHERE h.id=CAST(sourceId AS INTEGER) AND links.value=?)))`,
+      );
+      values.push(query.projectId, query.projectId);
     }
     if (query.kind) {
       where.push('kind=?');
@@ -177,6 +180,19 @@ export class History {
       where.push('day<=?');
       values.push(query.to);
     }
+    if (query.groupTasks) {
+      where.push(`(kind!='task' OR sourceId IN (
+        SELECT CAST(id AS TEXT) FROM (
+          SELECT id,row_number() OVER(PARTITION BY task_id ORDER BY recorded_at DESC,id DESC) AS position
+          FROM task_history WHERE 1=1
+          ${query.from ? 'AND history_day(recorded_at,?)>=?' : ''}
+          ${query.to ? 'AND history_day(recorded_at,?)<=?' : ''}
+          ${query.projectId === null ? 'AND project_id IS NULL' : query.projectId ? `AND EXISTS(SELECT 1 FROM json_each(${taskProjectsSql('snapshot')}) WHERE value=?)` : ''}
+        ) WHERE position=1))`);
+      if (query.from) values.push(query.timezone, query.from);
+      if (query.to) values.push(query.timezone, query.to);
+      if (query.projectId) values.push(query.projectId);
+    }
     if (cursor) {
       where.push("(day,COALESCE(recordedAt,''),key)<(?,?,?)");
       values.push(cursor.day, cursor.time, cursor.key);
@@ -186,12 +202,18 @@ export class History {
       .prepare(
         entriesSql +
           (latest
-            ? `, ranked AS (
-            SELECT *,row_number() OVER(PARTITION BY scopeProjectId ORDER BY day DESC,COALESCE(recordedAt,'') DESC,key DESC) AS position
-            FROM entries WHERE scopeProjectId IN (SELECT id FROM projects)
+            ? `, scoped AS (
+            SELECT entries.*,scopeProjectId AS selectedScope FROM entries WHERE kind!='task'
+            UNION ALL
+            SELECT entries.*,links.value AS selectedScope FROM entries
+            JOIN task_history h ON entries.kind='task' AND h.id=CAST(entries.sourceId AS INTEGER)
+            JOIN json_each(${taskProjectsSql('h.snapshot')}) links
+          ), ranked AS (
+            SELECT *,row_number() OVER(PARTITION BY selectedScope ORDER BY day DESC,COALESCE(recordedAt,'') DESC,key DESC) AS position
+            FROM scoped WHERE selectedScope IN (SELECT id FROM projects)
           ) `
             : '') +
-          `SELECT key,kind,event,sourceId,day,recordedAt,dateQuality,projectId,scopeProjectId,projectName,title,
+          `SELECT key,kind,event,sourceId,day,recordedAt,dateQuality,projectId,${latest ? 'selectedScope' : 'scopeProjectId'} AS scopeProjectId,projectName,title,
       substr(COALESCE(body,''),1,600) AS excerpt,length(COALESCE(body,''))>600 AS truncated,href FROM ${latest ? 'ranked' : 'entries'}
       ${latest ? 'WHERE position=1' : where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY day DESC,COALESCE(recordedAt,'') DESC,key DESC ${latest ? '' : 'LIMIT ?'}`,

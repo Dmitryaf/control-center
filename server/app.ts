@@ -252,7 +252,7 @@ export function createApp(
       checks: checks.views(),
       checkEntries: checks.entries(),
       fileDecisions: projects.decisions.list(),
-      storage: { databasePath: store.path },
+      storage: { databasePath: store.path, taskProjects: true },
       proposalLinks: acceptances.links(),
     }),
   );

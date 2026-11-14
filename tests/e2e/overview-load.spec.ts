@@ -31,6 +31,8 @@ for (const count of [10, 20, 30]) {
     });
     const started = Date.now();
     await page.goto('/');
+    await expect(page.locator('.overview-project-row')).toHaveCount(6);
+    await page.getByRole('button', { name: `Показать все проекты (${count})` }).click();
     await expect(page.locator('.overview-project-row')).toHaveCount(count);
     await expect(page.getByText('Записей работы пока нет.', { exact: true })).toHaveCount(count);
     const readyMs = Date.now() - started;

@@ -6,15 +6,25 @@ import {
   type TaskHistoryPage,
 } from '../shared/contracts.js';
 import type { Store } from './db.js';
+import { taskProjectsSql } from './task-scope.js';
+import { taskProjectIds } from '../shared/task-projects.js';
 
 export class TaskHistory {
   constructor(private store: Store) {}
 
   append(task: Task, kind: TaskHistoryEntry['kind']) {
+    const names = taskProjectIds(task).map((id) => {
+      const row = this.store.project(id)!;
+      const snapshot = JSON.parse(row.snapshot);
+      return (
+        (row.metadata ? JSON.parse(row.metadata).name : snapshot.yaml.metadata?.name) ??
+        snapshot.directoryName
+      );
+    });
     this.store.db
       .prepare(
         `INSERT INTO task_history(task_id,revision,kind,recorded_at,project_id,project_name,snapshot)
-      VALUES(?,?,?,?,?,(SELECT COALESCE(json_extract(metadata,'$.name'),json_extract(snapshot,'$.yaml.metadata.name'),json_extract(snapshot,'$.directoryName')) FROM projects WHERE id=?),?)`,
+      VALUES(?,?,?,?,?,?,?)`,
       )
       .run(
         task.id,
@@ -22,8 +32,8 @@ export class TaskHistory {
         kind,
         task.updatedAt,
         task.projectId,
-        task.projectId,
-        JSON.stringify(task),
+        names.join(' · ') || null,
+        JSON.stringify({ ...task, projectNames: names }),
       );
   }
 
@@ -35,8 +45,8 @@ export class TaskHistory {
       // A forgotten project is not a task that was originally general.
       conditions.push(
         query.projectId === null
-          ? "json_extract(h.snapshot,'$.projectId') IS NULL"
-          : 'h.project_id=?',
+          ? `json_array_length(${taskProjectsSql('h.snapshot')})=0`
+          : `EXISTS(SELECT 1 FROM json_each(${taskProjectsSql('h.snapshot')}) WHERE value=?)`,
       );
       if (query.projectId !== null) values.push(query.projectId);
     }
@@ -74,13 +84,18 @@ export class TaskHistory {
     return {
       total: total.total,
       items: rows.map((row) => {
-        const snapshot = JSON.parse(row.snapshot) as Task;
+        const snapshot = JSON.parse(row.snapshot) as Task & { projectNames?: string[] };
         return {
           id: row.id,
           kind: row.kind,
           recordedAt: row.recorded_at,
           projectId: row.project_id,
           projectName: row.project_name,
+          projects: taskProjectIds(snapshot).map((id, index) => ({
+            id,
+            name: snapshot.projectNames?.[index] ?? row.project_name ?? 'Проект',
+            exists: Boolean(this.store.project(id)),
+          })),
           taskExists: Boolean(row.task_exists),
           task: { ...snapshot, ...taskSchema.parse(snapshot) },
         };

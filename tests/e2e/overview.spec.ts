@@ -200,6 +200,8 @@ test('overview shows project context and exact current tasks once, keeps attenti
       'CC-22',
     ]);
     await expect(page.locator('.current-task-list li').last()).toContainText('Общая задача');
+    await expect(page.locator('.overview-project-row')).toHaveCount(6);
+    await page.getByRole('button', { name: 'Показать все проекты (12)' }).click();
     await expect(page.locator('.overview-project-row')).toHaveCount(12);
     await expect(
       page.locator('.overview-project-row').filter({ hasText: 'Поддержка' }),
@@ -241,7 +243,7 @@ test('overview shows project context and exact current tasks once, keeps attenti
     const attention = (await page.locator('#attention').boundingBox())!;
     const history = (await page.locator('.recent-work').boundingBox())!;
     expect(attention.y).toBeLessThan(history.y);
-    expect(history.y).toBeLessThan(tasks.y);
+    expect(tasks.y).toBeLessThan(attention.y);
     expect(tasks.y).toBeLessThan((await page.locator('#overview-projects').boundingBox())!.y);
     await expect(page.locator('.recent-work')).toContainText('Сохранённый результат');
     await expect(page.locator('.recent-work')).toContainText(

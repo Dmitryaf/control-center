@@ -1,3 +1,4 @@
+import { taskInProject, taskProjectIds } from '../../../shared/task-projects';
 import { isTaskOpen } from '../../../shared/task-status';
 import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -32,8 +33,16 @@ function TransitionForm({
     defaultValues: { outcome: 'completed' as 'completed' | 'stopped', reason: '' },
   });
   const tasks = workspace!.tasks.filter(
-    (task) => task.projectId === project.id && isTaskOpen(task),
+    (task) => taskInProject(task, project.id) && isTaskOpen(task),
   );
+  const retained = tasks.filter((task) =>
+    taskProjectIds(task).some(
+      (id) =>
+        id !== project.id &&
+        workspace!.projects.some((p) => p.id === id && !isClosedProject(p.metadata.status)),
+    ),
+  );
+  const cancelled = tasks.filter((task) => !retained.includes(task));
   const changed = () => {
     key.current = crypto.randomUUID();
   };
@@ -95,15 +104,30 @@ function TransitionForm({
           </p>
           {tasks.length > 0 && (
             <div>
-              <h3>Открытые задачи · {tasks.length}</h3>
+              <h3>Будут отменены · {cancelled.length}</h3>
               <ul>
-                {tasks.map((task) => (
+                {cancelled.map((task) => (
                   <li key={task.id}>
                     {task.code} · {task.title}
                   </li>
                 ))}
               </ul>
-              <p>Эти задачи будут отменены при закрытии проекта. Их результаты сохранятся.</p>
+              {cancelled.length > 0 && (
+                <p>Эти задачи будут отменены при закрытии проекта. Их результаты сохранятся.</p>
+              )}
+              {retained.length > 0 && (
+                <>
+                  <h3>Останутся открытыми · {retained.length}</h3>
+                  <p>Связаны с другими незакрытыми проектами.</p>
+                  <ul>
+                    {retained.map((task) => (
+                      <li key={task.id}>
+                        {task.code} · {task.title}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
           )}
         </>

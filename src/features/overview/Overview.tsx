@@ -1,3 +1,4 @@
+import { taskProjectIds } from '../../../shared/task-projects';
 import { isTaskOpen } from '../../../shared/task-status';
 import { Link } from 'react-router';
 import { useState } from 'react';
@@ -24,6 +25,8 @@ export default function Overview() {
     refetchInterval: 5000,
   });
   const [period, setPeriod] = useState('all');
+  const [allAttention, setAllAttention] = useState(false);
+  const [allProjects, setAllProjects] = useState(false);
   const today = dateInZone(new Date(), w!.settings.timezone);
   const start = new Date(`${today}T00:00:00Z`);
   start.setUTCDate(start.getUTCDate() - (period === 'all' ? 0 : Number(period) - 1));
@@ -85,7 +88,7 @@ export default function Overview() {
   ]
     .map((v) => ({
       ...v,
-      signals: v.signals.filter((s) => s.level !== 'info'),
+      signals: v.signals.filter((s) => s.level !== 'info' && s.code !== 'review'),
       level: v.signals.some((s) => s.level === 'decision') ? 'decision' : 'attention',
     }))
     .filter((v) => v.signals.length)
@@ -121,13 +124,39 @@ export default function Overview() {
         <Link to="/observations">Записать наблюдение</Link>
         <Link to="/reviews">Открыть обзор периода</Link>
       </div>
+      <section className="current-work" aria-labelledby="current-work-heading">
+        <div className="section-heading">
+          <h2 id="current-work-heading">Открытые задачи</h2>
+          <Link to="/tasks">Все задачи →</Link>
+        </div>
+        <ul className="work-list current-task-list">
+          {openTasks.slice(0, 5).map((task) => (
+            <li key={task.id}>
+              <Link to={`/tasks?task=${task.code}`}>
+                {task.code} · {task.title}
+              </Link>
+              <small>
+                {taskProjectIds(task)
+                  .map(
+                    (id) =>
+                      w!.projects.find((project) => project.id === id)?.metadata.name ??
+                      'Проект недоступен',
+                  )
+                  .join(' · ') || 'Общая задача'}{' '}
+                · {priorityLabels[task.priority]}
+              </small>
+            </li>
+          ))}
+        </ul>
+        {!openTasks.length && <p className="empty">Открытых задач нет.</p>}
+      </section>
       <section id="attention" className="attention-queue" aria-labelledby="attention-heading">
         <div className="section-heading">
           <h2 id="attention-heading">
             Требуют внимания <span className="count">{attention.length}</span>
           </h2>
         </div>
-        {attention.map((item) => (
+        {(allAttention ? attention : attention.slice(0, 3)).map((item) => (
           <div key={item.key} className={`attention-line ${item.level}`}>
             <span className="signal-label">
               {item.level === 'decision' ? 'Решение' : 'Внимание'}
@@ -144,6 +173,17 @@ export default function Overview() {
           </div>
         ))}
         {!attention.length && <p className="empty">По доступным данным сигналов нет.</p>}
+        {attention.length > 3 && (
+          <button
+            type="button"
+            aria-expanded={allAttention}
+            onClick={() => setAllAttention(!allAttention)}
+          >
+            {allAttention
+              ? 'Свернуть поводы для внимания'
+              : `Все поводы для внимания (${attention.length})`}
+          </button>
+        )}
       </section>
       <section
         id="recent-work"
@@ -172,31 +212,38 @@ export default function Overview() {
           </p>
         )}
         <RecentHistory
+          overview
           from={period === 'all' ? undefined : start.toISOString().slice(0, 10)}
           to={period === 'all' ? undefined : today}
         />
       </section>
-      <section className="current-work" aria-labelledby="current-work-heading">
-        <div className="section-heading">
-          <h2 id="current-work-heading">Открытые задачи</h2>
-          <Link to="/tasks">Все задачи →</Link>
-        </div>
-        <ul className="work-list current-task-list">
-          {openTasks.slice(0, 5).map((task) => (
-            <li key={task.id}>
-              <Link to={`/tasks?task=${task.code}`}>
-                {task.code} · {task.title}
-              </Link>
-              <small>
-                {w!.projects.find((project) => project.id === task.projectId)?.metadata.name ??
-                  (task.projectId ? 'Проект недоступен' : 'Общая задача')}{' '}
-                · {priorityLabels[task.priority]}
-              </small>
-            </li>
-          ))}
-        </ul>
-        {!openTasks.length && <p className="empty">Открытых задач нет.</p>}
-      </section>
+      {projects.some((project) => project.signals.some((signal) => signal.code === 'review')) && (
+        <details className="overview-details section-space">
+          <summary>
+            Проверить описание проектов ·{' '}
+            {
+              projects.filter((project) =>
+                project.signals.some((signal) => signal.code === 'review'),
+              ).length
+            }
+          </summary>
+          <p className="help">
+            Напоминание по дате: проверьте, актуальны ли цель, этап и ограничения.
+          </p>
+          <ul className="work-list">
+            {projects
+              .filter((project) => project.signals.some((signal) => signal.code === 'review'))
+              .map((project) => (
+                <li key={project.id}>
+                  <Link to={`/projects/${project.id}?review=1`}>
+                    {project.metadata.name} · Проверить описание →
+                  </Link>
+                  <small>Последняя проверка: {date(project.metadata.last_reviewed)}</small>
+                </li>
+              ))}
+          </ul>
+        </details>
+      )}
       <section className="section-space" aria-labelledby="overview-projects">
         <div className="section-heading">
           <h2 id="overview-projects">Проекты сейчас</h2>
@@ -204,7 +251,7 @@ export default function Overview() {
         </div>
         {!projects.length && <p className="empty">Пока нет проектов.</p>}
         <div className="project-register">
-          {projects.map((project) => (
+          {(allProjects ? projects : projects.slice(0, 6)).map((project) => (
             <article
               key={project.id}
               className="overview-project-row"
@@ -240,6 +287,15 @@ export default function Overview() {
             </article>
           ))}
         </div>
+        {projects.length > 6 && (
+          <button
+            type="button"
+            aria-expanded={allProjects}
+            onClick={() => setAllProjects(!allProjects)}
+          >
+            {allProjects ? 'Свернуть список проектов' : `Показать все проекты (${projects.length})`}
+          </button>
+        )}
       </section>
       <details className="overview-details section-space">
         <summary>Внешние проверки: {checks.length} · изменения в Git</summary>

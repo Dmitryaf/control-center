@@ -1,3 +1,4 @@
+import { taskInProject } from '../../../shared/task-projects';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { Project } from '../../../shared/contracts';
@@ -12,7 +13,7 @@ import './projects.css';
 function CatalogRow({ project }: { project: Project }) {
   const { data: w } = useWorkspace();
   const { name, status, goal, type, priority } = project.metadata;
-  const count = w!.tasks.filter((t) => t.projectId === project.id && isTaskOpen(t)).length;
+  const count = w!.tasks.filter((t) => taskInProject(t, project.id) && isTaskOpen(t)).length;
   const checks = w!.checks.filter((c) => c.projectId === project.id && c.status === 'active');
   const lastAction = checks
     .flatMap((c) => (c.lastExternalActionAt ? [c.lastExternalActionAt] : []))

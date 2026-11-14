@@ -40,4 +40,6 @@ The optional stdio MCP server uses the same database and task/lifecycle owners a
 
 ## Implementation map
 
+Tasks can belong to several projects through `projectIds`; an empty array means no project. `projectId` remains a compatibility alias for the first project. Use `projectIds` to change a shared task's links. Its number, completion and result are shared across projects. Closing a project cancels a task only when none of its other projects remain open; removing a project detaches that link and preserves history. Selected analysis context includes a shared task once and includes only the selected project identities.
+
 `server/analysis/period-context.ts` builds period context; `period-analysis.ts` owns packets and dispatch; `acceptances.ts` persists proposal acceptance; `schedules.ts` and `schedule-guard.ts` own schedules. `server/codex/` owns bounded chat reading, repository context, CLI execution and discussion. `src/features/codex-analysis/` supplies the interface. All persistent discussion attempts use `analysis_runs` with immutable successful results, claims/leases and no automatic replay.

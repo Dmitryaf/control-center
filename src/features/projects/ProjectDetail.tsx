@@ -1,6 +1,8 @@
+import { taskInProject } from '../../../shared/task-projects';
+import { dateInZone } from '../../../shared/periods';
 import { isTaskOpen } from '../../../shared/task-status';
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Metadata, Project } from '../../../shared/contracts';
@@ -8,7 +10,6 @@ import { api } from '../../shared/http';
 import {
   date,
   lines,
-  today,
   statusLabels,
   typeLabels,
   priorityLabels,
@@ -27,6 +28,7 @@ import { Plus, NotebookPen } from 'lucide-react';
 
 function MetadataEditor({ project, onClose }: { project: Project; onClose: () => void }) {
   const { act, busy } = useActions();
+  const { data: workspace } = useWorkspace();
   const [expectedHash] = useState(project.snapshot.yaml.hash);
   const [expectedLifecycleRevision] = useState(project.lifecycle?.revision ?? 0);
   const {
@@ -69,6 +71,10 @@ function MetadataEditor({ project, onClose }: { project: Project; onClose: () =>
     >
       <UnsavedChanges dirty={isDirty} />
       <h2>Сводка проекта</h2>
+      <p className="help">
+        Проверьте цель, этап и ограничения. Последняя проверка:{' '}
+        {date(project.metadata.last_reviewed)}.
+      </p>
       <div className="form-grid">
         <label>
           Название
@@ -92,6 +98,10 @@ function MetadataEditor({ project, onClose }: { project: Project; onClose: () =>
       <label>
         Зачем существует
         <textarea rows={3} {...register('goal')} />
+      </label>
+      <label>
+        Блокировки, по одной на строку
+        <textarea rows={2} {...register('blocked')} />
       </label>
       <details className="editor-advanced">
         <summary>Дополнительные поля</summary>
@@ -117,10 +127,7 @@ function MetadataEditor({ project, onClose }: { project: Project; onClose: () =>
             Дата пересмотра
             <input type="date" {...register('last_reviewed')} />
           </label>
-          <label>
-            Блокировки, по одной на строку
-            <textarea rows={2} {...register('blocked')} />
-          </label>
+
           <label>
             Связанные имена для PROJECT.yaml
             <textarea rows={2} {...register('relatedText')} />
@@ -131,7 +138,11 @@ function MetadataEditor({ project, onClose }: { project: Project; onClose: () =>
           </label>
           <button
             type="button"
-            onClick={() => setValue('last_reviewed', today(), { shouldDirty: true })}
+            onClick={() =>
+              setValue('last_reviewed', dateInZone(new Date(), workspace!.settings.timezone), {
+                shouldDirty: true,
+              })
+            }
           >
             Пересмотрено сегодня
           </button>
@@ -140,6 +151,18 @@ function MetadataEditor({ project, onClose }: { project: Project; onClose: () =>
       <div className="row">
         <button className="primary" disabled={busy}>
           Сохранить сводку
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={(event) => {
+            setValue('last_reviewed', dateInZone(new Date(), workspace!.settings.timezone), {
+              shouldDirty: true,
+            });
+            event.currentTarget.form?.requestSubmit();
+          }}
+        >
+          Всё актуально — сохранить
         </button>
         <button
           type="button"
@@ -574,7 +597,8 @@ export default function ProjectDetail() {
   const client = useQueryClient();
   const { data: w } = useWorkspace();
   const { act, busy } = useActions();
-  const [editing, setEditing] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [editing, setEditing] = useState(searchParams.get('review') === '1');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [lifecycleAction, setLifecycleAction] = useState<LifecycleAction>(null);
   const [target, setTarget] = useState('');
@@ -593,7 +617,7 @@ export default function ProjectDetail() {
   }, [id, client]);
   if (!p) return <p className="empty">Проект не загружен.</p>;
   const tasks = w!.tasks
-    .filter((t) => t.projectId === p.id && isTaskOpen(t))
+    .filter((t) => taskInProject(t, p.id) && isTaskOpen(t))
     .sort(
       (a, b) =>
         ({ high: 0, normal: 1, low: 2 })[a.priority] - { high: 0, normal: 1, low: 2 }[b.priority] ||
@@ -688,6 +712,15 @@ export default function ProjectDetail() {
       {!p.available && (
         <div className="message warning">
           Каталог недоступен или вне настроек. Показан сохранённый снимок.
+        </div>
+      )}
+      {!editing && p.signals.some((signal) => signal.code === 'review') && (
+        <div className="panel section-space">
+          <p>Проверьте описание проекта: цель, этап и ограничения.</p>
+          <p className="help">
+            Последняя проверка: {date(p.metadata.last_reviewed)}. Напоминание основано на дате.
+          </p>
+          <button onClick={() => setEditing(true)}>Проверить описание</button>
         </div>
       )}
       {editing && (

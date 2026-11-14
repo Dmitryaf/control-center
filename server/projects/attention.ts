@@ -25,9 +25,16 @@ export function attention(
         });
     }
     // Tasks own current work. An empty board or legacy plan is not itself a problem.
-    if (!metadata.last_reviewed) add('review', 'Метаданные ещё не пересматривались');
+    if (!metadata.last_reviewed)
+      add(
+        'review',
+        'Проверьте описание проекта: цель, этап и ограничения. Дата последней проверки не указана.',
+      );
     else if ((now - Date.parse(metadata.last_reviewed)) / 86400000 >= settings.reviewDays)
-      add('review', 'Пора пересмотреть метаданные');
+      add(
+        'review',
+        `Проверьте описание проекта: цель, этап и ограничения. Последняя проверка — ${metadata.last_reviewed}.`,
+      );
   }
   return signals;
 }

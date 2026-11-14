@@ -106,6 +106,8 @@ test('public audit → allowlist → private context → combined decisions → 
     await expect(page.getByRole('status')).toContainText('Данные обновлены');
     await expect(panel).toContainText('Приватный контекст недоступен');
     await page.goto('/');
+    const allAttention = page.getByRole('button', { name: /^Все поводы для внимания/ });
+    if (await allAttention.isVisible()) await allAttention.click();
     await expect(
       page.getByText('Не найден ранее подключённый приватный контекст', { exact: true }),
     ).toBeVisible();

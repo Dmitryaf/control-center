@@ -34,12 +34,12 @@ export class Store {
       `PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`,
     );
     const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
-    if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].includes(version.user_version)) {
+    if (![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].includes(version.user_version)) {
       this.db.close();
       throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
     }
     try {
-      if (existing && version.user_version < 15) {
+      if (existing && version.user_version < 16) {
         const directory = join(dirname(path), 'backups');
         mkdirSync(directory, { recursive: true });
         const prefix =
@@ -65,7 +65,9 @@ export class Store {
                               ? 'before-project-lifecycle-v13'
                               : version.user_version < 14
                                 ? 'before-task-cancellation-v14'
-                                : 'before-codex-schedules-v15';
+                                : version.user_version < 15
+                                  ? 'before-codex-schedules-v15'
+                                  : 'before-task-projects-v16';
         snapshotDatabase(this.db, join(directory, `${prefix}-${randomUUID()}.sqlite`));
       }
       this.transaction(() => {
@@ -75,7 +77,9 @@ export class Store {
           user_version: number;
         };
         if (
-          ![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].includes(lockedVersion.user_version)
+          ![0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].includes(
+            lockedVersion.user_version,
+          )
         )
           throw new Error('Версия базы не поддерживается этой сборкой Control Center.');
         this.db.exec(`
@@ -277,7 +281,7 @@ export class Store {
           this.db.exec(
             "ALTER TABLE analysis_schedules ADD COLUMN provider TEXT NOT NULL DEFAULT 'openai' CHECK(provider IN ('openai','codex'))",
           );
-        this.db.exec('PRAGMA user_version = 15;');
+        this.db.exec('PRAGMA user_version = 16;');
       });
     } catch (error) {
       this.db.close();

@@ -79,7 +79,10 @@ export function validatePeriodReport(payload: PeriodPayload, report: PeriodRepor
       (proposal.kind !== 'idea' &&
         proposal.sources.some((id) => {
           const source = sources.get(id);
-          return source?.projectId && !proposal.projectIds.includes(source.projectId);
+          const ids = source?.projectIds ?? (source?.projectId ? [source.projectId] : []);
+          return (
+            ids.length > 0 && !ids.some((projectId) => proposal.projectIds.includes(projectId))
+          );
         })) ||
       (proposal.kind === 'connection' && proposal.projectIds.length !== 2) ||
       (proposal.kind === 'improvement' && proposal.projectIds.length !== 1)

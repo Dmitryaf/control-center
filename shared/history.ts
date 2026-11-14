@@ -21,6 +21,7 @@ export const historyQuerySchema = z
     timezone: timezoneSchema.default('UTC'),
     cursor: z.string().max(512).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(30),
+    groupTasks: z.enum(['latest']).optional(),
   })
   .strict()
   .refine((value) => !value.from || !value.to || value.from <= value.to, {

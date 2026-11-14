@@ -7,6 +7,7 @@ import { Link } from 'react-router';
 
 export function TaskRow({
   task,
+  projectNames,
   selected,
   busy,
   resultOpen,
@@ -16,6 +17,7 @@ export function TaskRow({
   onDelete,
 }: {
   task: Task;
+  projectNames?: string;
   selected?: boolean;
   busy: boolean;
   resultOpen: boolean;
@@ -52,6 +54,7 @@ export function TaskRow({
           <span className="task-code">{task.code}</span>
         </h3>
         <div className="task-meta">
+          {projectNames && <span>{projectNames}</span>}
           {task.priority !== 'normal' && (
             <span className={`task-priority ${task.priority}`}>
               <Flag size={12} aria-hidden="true" />

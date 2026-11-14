@@ -64,6 +64,7 @@ export const taskResultSchema = z.object({
 });
 export const taskSchema = z.object({
   ...recordBase,
+  projectIds: z.array(z.string().uuid()).max(30).optional(),
   description: text.default(''),
   expectedResult: text.default(''),
   acceptance: text.default(''),
@@ -84,6 +85,7 @@ export const taskPatchSchema = z
   .object({
     title: taskSchema.shape.title.optional(),
     projectId: taskSchema.shape.projectId.unwrap().optional(),
+    projectIds: taskSchema.shape.projectIds,
     description: taskSchema.shape.description.unwrap().optional(),
     expectedResult: taskSchema.shape.expectedResult.unwrap().optional(),
     acceptance: taskSchema.shape.acceptance.unwrap().optional(),
@@ -122,6 +124,7 @@ export interface TaskHistoryEntry {
   recordedAt: string;
   projectId: string | null;
   projectName: string | null;
+  projects?: { id: string; name: string; exists: boolean }[];
   task: Task;
   taskExists: boolean;
 }
@@ -219,6 +222,6 @@ export interface Workspace {
   checks: CheckView[];
   checkEntries: CheckEntry[];
   fileDecisions: FileDecision[];
-  storage: { databasePath: string };
+  storage: { databasePath: string; taskProjects?: boolean };
   proposalLinks?: Record<string, string>;
 }

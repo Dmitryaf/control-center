@@ -97,6 +97,7 @@ export interface PeriodSource {
   id: string;
   kind: string;
   projectId: string | null;
+  projectIds?: string[];
   title: string;
   text: string;
   day: string | null;

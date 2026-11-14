@@ -45,6 +45,15 @@ test('owner journey across active, paused, waiting and completed projects: brows
         stage: 'Цель достигнута',
       },
     ];
+    // Exercise the bounded overview independently of records left by other scenarios.
+    inputs.push(
+      ...Array.from({ length: 3 }, (_, index) => ({
+        folder: `extra-${index}`,
+        name: `Дополнительный проект ${index + 1}`,
+        status: 'active',
+        stage: 'В работе',
+      })),
+    );
     const roots: string[] = [];
     for (const input of inputs) {
       const repo = await f.repo(input.folder);
@@ -75,6 +84,9 @@ test('owner journey across active, paused, waiting and completed projects: brows
 
     await test.step('1–2: visible project states and current work', async () => {
       await page.goto('/');
+      const allProjects = page.getByRole('button', { name: /^Показать все проекты/ });
+      await expect(page.locator('.overview-project-row')).toHaveCount(6);
+      await allProjects.click();
       for (const input of inputs) {
         const row = page.getByRole('article', { name: input.name, exact: true });
         await expect(row).toContainText(input.stage);

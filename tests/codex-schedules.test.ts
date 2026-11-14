@@ -426,7 +426,7 @@ test('schema14 → 15 preserves previous schedules and markers, backs up and rol
   raw.close();
   const migrated = new Store(file);
   try {
-    assert.equal(migrated.db.prepare('PRAGMA user_version').get()?.user_version, 15);
+    assert.equal(migrated.db.prepare('PRAGMA user_version').get()?.user_version, 16);
     const kept = migrated.db
       .prepare('SELECT * FROM analysis_schedules WHERE id=?')
       .get(oldSchedule.id)!;

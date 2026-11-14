@@ -1,3 +1,4 @@
+import { taskInProject, taskProjectIds } from '../../shared/task-projects.js';
 import { isTaskOpen } from '../../shared/task-status.js';
 import { randomUUID } from 'node:crypto';
 import {
@@ -57,6 +58,7 @@ export class ProjectAnalysis {
       );
     const allTasks = new Tasks(this.store).list();
     const preparedAt = new Date(this.now()).toISOString();
+    const seenHistory = new Set<number>();
     const payload = {
       preparedAt,
       projects: [...new Set(projectIds)].map((id) => {
@@ -67,7 +69,12 @@ export class ProjectAnalysis {
         const metadata = row.metadata
           ? metadataSchema.parse(JSON.parse(row.metadata))
           : (snapshot.yaml.metadata ?? metadataSchema.parse({ name: snapshot.directoryName }));
-        const tasks = allTasks.filter((task) => task.projectId === id && isTaskOpen(task));
+        const tasks = allTasks.filter(
+          (task) =>
+            taskInProject(task, id) &&
+            isTaskOpen(task) &&
+            projectIds.find((selected) => taskInProject(task, selected)) === id,
+        );
         if (tasks.length > 200)
           throw new HttpError(
             400,
@@ -90,6 +97,7 @@ export class ProjectAnalysis {
           tasks: tasks.map((task) => ({
             source: `task:${task.code}`,
             code: task.code,
+            projectIds: taskProjectIds(task).filter((projectId) => projectIds.includes(projectId)),
             title: task.title,
             priority: task.priority,
             description: task.description,
@@ -97,13 +105,22 @@ export class ProjectAnalysis {
             acceptance: task.acceptance,
             updatedAt: task.updatedAt,
           })),
-          recentWork: history.items.map((item) => ({
-            source: `history:${item.id}`,
-            taskCode: item.task.code,
-            kind: item.kind,
-            recordedAt: item.recordedAt,
-            result: item.task.result,
-          })),
+          recentWork: history.items
+            .filter((item) => {
+              if (seenHistory.has(item.id)) return false;
+              seenHistory.add(item.id);
+              return true;
+            })
+            .map((item) => ({
+              source: `history:${item.id}`,
+              taskCode: item.task.code,
+              projectIds: taskProjectIds(item.task).filter((projectId) =>
+                projectIds.includes(projectId),
+              ),
+              kind: item.kind,
+              recordedAt: item.recordedAt,
+              result: item.task.result,
+            })),
           historyTotal: history.total,
         };
       }),
@@ -176,6 +193,14 @@ export class ProjectAnalysis {
               project.source,
               ...project.tasks.map((item) => item.source),
               ...project.recentWork.map((item) => item.source),
+              ...projects
+                .flatMap((item) => item.tasks)
+                .filter((task) => task.projectIds?.includes(project.id))
+                .map((task) => task.source),
+              ...projects
+                .flatMap((item) => item.recentWork)
+                .filter((work) => work.projectIds?.includes(project.id))
+                .map((work) => work.source),
             ])
           : null;
         if (

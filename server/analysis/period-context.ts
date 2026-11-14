@@ -1,3 +1,5 @@
+import { taskProjectIds } from '../../shared/task-projects.js';
+import { taskProjectsSql } from '../task-scope.js';
 import { isTaskOpen } from '../../shared/task-status.js';
 import {
   periodSelectionSchema,
@@ -99,7 +101,16 @@ export function buildPeriodContext(
   const sources: PeriodSource[] = [];
   const coverage = { undated: 0, unavailable: 0, notLoadedProjects: 0 };
   const add = (source: PeriodSource) => {
-    if (!sources.some((s) => s.id === source.id)) sources.push(source);
+    const existing = sources.find((s) => s.id === source.id);
+    if (!existing) sources.push(source);
+    else if (source.projectId && existing.projectId !== source.projectId) {
+      existing.projectIds = [
+        ...new Set([
+          ...(existing.projectIds ?? (existing.projectId ? [existing.projectId] : [])),
+          source.projectId,
+        ]),
+      ].sort();
+    }
   };
   const reviews = new Reviews(store);
   const scopeSet = new Set(selection.projectIds);
@@ -130,7 +141,9 @@ export function buildPeriodContext(
       .filter(
         (task) =>
           isTaskOpen(task) &&
-          (task.projectId ? scopeSet.has(task.projectId) : selection.includeGeneral),
+          (taskProjectIds(task).length
+            ? taskProjectIds(task).some((id) => scopeSet.has(id))
+            : selection.includeGeneral),
       );
     if (tasks.length > 100)
       throw new HttpError(
@@ -141,7 +154,8 @@ export function buildPeriodContext(
       add({
         id: `open-task:${task.id}`,
         kind: 'open_task',
-        projectId: task.projectId,
+        projectId: taskProjectIds(task).find((id) => scopeSet.has(id)) ?? null,
+        projectIds: taskProjectIds(task).filter((id) => scopeSet.has(id)),
         title: task.title,
         text: JSON.stringify({
           code: task.code,
@@ -159,7 +173,7 @@ export function buildPeriodContext(
   }
   if (selection.sourceKinds.length) {
     const scopes = [...selection.projectIds, ...(selection.includeGeneral ? [null] : [])];
-    let total = 0;
+    const seenEvents = new Set<string>();
     for (const id of scopes) {
       const kinds = id
         ? selection.sourceKinds
@@ -178,7 +192,8 @@ export function buildPeriodContext(
           coverage.notLoadedProjects += page.files.notLoadedProjects;
         }
         for (const entry of page.items) {
-          if (++total > 200)
+          seenEvents.add(entry.key);
+          if (seenEvents.size > 200)
             throw new HttpError(
               400,
               'Больше 200 исходных событий. Выберите неделю вместо месяца, меньше проектов или источников; пакет не обрезается и не отправлен.',
@@ -198,7 +213,7 @@ export function buildPeriodContext(
           add({
             id: entry.key,
             kind: entry.kind,
-            projectId: entry.scopeProjectId,
+            projectId: entry.kind === 'task' ? id : entry.scopeProjectId,
             title: entry.title,
             text: decision
               ? JSON.stringify({
@@ -267,14 +282,14 @@ export function buildPeriodContext(
         .prepare(
           `
         SELECT h.id,h.recorded_at,h.snapshot FROM task_history h
-        WHERE h.project_id=? AND h.kind='completed' AND h.recorded_at<?
+        WHERE EXISTS(SELECT 1 FROM json_each(${taskProjectsSql('h.snapshot')}) WHERE value=?) AND h.kind='completed' AND h.recorded_at<?
           AND h.id=(SELECT MAX(previous.id) FROM task_history previous
-            WHERE previous.task_id=h.task_id AND previous.project_id=h.project_id
+            WHERE previous.task_id=h.task_id AND EXISTS(SELECT 1 FROM json_each(${taskProjectsSql('previous.snapshot')}) WHERE value=?)
               AND previous.kind='completed' AND previous.recorded_at<?)
         ORDER BY h.recorded_at DESC,h.id DESC LIMIT 5
       `,
         )
-        .all(projectId, review.startAt, review.startAt) as unknown as {
+        .all(projectId, review.startAt, projectId, review.startAt) as unknown as {
         id: number;
         recorded_at: string;
         snapshot: string;

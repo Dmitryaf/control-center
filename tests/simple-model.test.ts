@@ -55,7 +55,7 @@ test('v11 upgrade removes active scheduling and extra sources, preserves task id
   seed.close();
   const migrated = new Store(file);
   try {
-    assert.equal(migrated.db.prepare('PRAGMA user_version').get()?.user_version, 15);
+    assert.equal(migrated.db.prepare('PRAGMA user_version').get()?.user_version, 16);
     assert.deepEqual(migrated.db.prepare('SELECT * FROM task_identity').all(), identities);
     assert.deepEqual(migrated.db.prepare('SELECT * FROM task_history').all(), history);
     assert.equal(

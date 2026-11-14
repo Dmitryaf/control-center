@@ -53,6 +53,7 @@ export interface AnalysisPayload {
     tasks: {
       source: string;
       code: string;
+      projectIds?: string[];
       title: string;
       priority: string;
       description: string;
@@ -63,6 +64,7 @@ export interface AnalysisPayload {
     recentWork: {
       source: string;
       taskCode: string;
+      projectIds?: string[];
       kind: string;
       recordedAt: string;
       result: { summary: string; verified: string; unverified: string; remaining: string } | null;

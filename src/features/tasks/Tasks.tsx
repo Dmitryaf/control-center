@@ -1,3 +1,4 @@
+import { taskInProject, taskProjectIds } from '../../../shared/task-projects';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
@@ -15,10 +16,11 @@ import { TaskRow } from './TaskRow';
 import { TaskDetails } from './TaskDetails';
 import './tasks.css';
 
-type Draft = Pick<TaskInput, 'title' | 'projectId' | 'priority' | 'description'>;
+type Draft = Pick<TaskInput, 'title' | 'projectId' | 'projectIds' | 'priority' | 'description'>;
 const taskDraft = (t: Task): Draft => ({
   title: t.title,
   projectId: t.projectId,
+  projectIds: taskProjectIds(t).filter((id) => id !== t.projectId),
   priority: t.priority,
   description: t.description,
 });
@@ -109,6 +111,7 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
   const empty = (project = filter): Draft => ({
     title: '',
     description: '',
+    projectIds: [],
     projectId: project === '__general__' ? null : project || null,
     priority: 'normal',
   });
@@ -117,6 +120,8 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
     handleSubmit,
     reset,
     setFocus,
+    setValue,
+    watch,
     getValues,
     formState: { isDirty },
   } = useForm<Draft>({ defaultValues: empty() });
@@ -173,7 +178,14 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
   }
   async function save(v: Draft) {
     const ok = await act(async () => {
-      const input = { ...editing, ...v, projectId: v.projectId || null };
+      const input = {
+        ...editing,
+        ...v,
+        projectId: v.projectId || null,
+        projectIds: w!.storage.taskProjects
+          ? [...new Set([...(v.projectId ? [v.projectId] : []), ...(v.projectIds ?? [])])]
+          : undefined,
+      };
       if (!editing) return api('/tasks', 'POST', { ...input, requestKey: requestKey.current });
       try {
         return await api(`/tasks/${editing.id}`, 'PUT', input);
@@ -190,7 +202,7 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
       requestAnimationFrame(() => panelHeading.current?.focus());
       return;
     }
-    const nextFilter = v.projectId || '__general__';
+    const nextFilter = v.projectId || v.projectIds?.[0] || '__general__';
     setSelectedId(null);
     setFilter(nextFilter);
     setOutcome('open');
@@ -240,7 +252,7 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
   const items = w!.tasks
     .filter(
       (t) =>
-        (!filter || (filter === '__general__' ? !t.projectId : t.projectId === filter)) &&
+        (!filter || taskInProject(t, filter === '__general__' ? null : filter)) &&
         taskOutcome(t) === outcome &&
         `${t.code} ${t.title} ${t.description}`
           .toLocaleLowerCase('ru')
@@ -255,9 +267,10 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
   const names = new Map(projects.map((p) => [p.id, p.metadata.name]));
   const groups = new Map<string | null, Task[]>();
   for (const task of items) {
-    const group = groups.get(task.projectId);
+    const groupId = filter && filter !== '__general__' ? filter : task.projectId;
+    const group = groups.get(groupId);
     if (group) group.push(task);
-    else groups.set(task.projectId, [task]);
+    else groups.set(groupId, [task]);
   }
   const sortedGroups = [...groups].sort(([a], [b]) => {
     if (!a || !b) return a ? -1 : b ? 1 : 0;
@@ -272,7 +285,8 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
       {p.metadata.name}
     </option>
   ));
-  const draftProjectId = getValues('projectId');
+  const draftProjectId = watch('projectId');
+  const additionalProjectIds = watch('projectIds') ?? [];
   const composer = (
     <form
       className="task-composer"
@@ -321,6 +335,32 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
               {options}
             </select>
           </label>
+          {w!.storage.taskProjects && (
+            <fieldset className="task-project-options wide">
+              <legend>Ещё проекты для этой задачи</legend>
+              <p className="help">Один номер и результат для всех выбранных проектов.</p>
+              {projects
+                .filter((project) => project.id !== draftProjectId)
+                .map((project) => (
+                  <label className="checkbox" key={project.id}>
+                    <input
+                      type="checkbox"
+                      checked={additionalProjectIds.includes(project.id)}
+                      onChange={(event) =>
+                        setValue(
+                          'projectIds',
+                          event.target.checked
+                            ? [...additionalProjectIds, project.id]
+                            : additionalProjectIds.filter((id) => id !== project.id),
+                          { shouldDirty: true },
+                        )
+                      }
+                    />
+                    {project.metadata.name}
+                  </label>
+                ))}
+            </fieldset>
+          )}
           <label>
             Приоритет
             <select {...register('priority')}>
@@ -444,6 +484,13 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
                 <TaskRow
                   key={t.id}
                   task={t}
+                  projectNames={
+                    taskProjectIds(t).length > 1
+                      ? taskProjectIds(t)
+                          .map((id) => names.get(id) ?? 'Проект')
+                          .join(' · ')
+                      : undefined
+                  }
                   selected={selectedId === t.id}
                   busy={busy}
                   resultOpen={!!resultTask}
@@ -484,13 +531,19 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
               <>
                 <p className="task-panel-meta">
                   {panelTask.code} ·{' '}
-                  {panelTask.projectId
-                    ? (names.get(panelTask.projectId) ?? 'Проект')
-                    : 'Без проекта'}
+                  {taskProjectIds(panelTask)
+                    .map((id) => names.get(id) ?? 'Проект')
+                    .join(' · ') || 'Без проекта'}
                 </p>
                 <h2 ref={panelHeading} tabIndex={-1}>
                   {panelTask.title}
                 </h2>
+                {taskProjectIds(panelTask).length > 1 && (
+                  <p className="help">
+                    Это одна задача. Изменения, итог и завершение действуют во всех связанных
+                    проектах.
+                  </p>
+                )}
                 {!selected && (
                   <p role="status">Задача удалена другим клиентом. Показан открытый черновик.</p>
                 )}
@@ -661,8 +714,15 @@ export function TaskHistory() {
               {e.task.code} · {e.task.title}
             </h2>
             <p className="muted">
-              {e.projectName ?? 'Общая задача'}
-              {e.projectName && !e.projectId ? ' · Проект удалён из списка' : ''}
+              {e.projects?.length
+                ? e.projects
+                    .map(
+                      (project) =>
+                        project.name + (project.exists ? '' : ' · Проект удалён из списка'),
+                    )
+                    .join('; ')
+                : (e.projectName ?? 'Общая задача')}
+              {!e.projects && e.projectName && !e.projectId ? ' · Проект удалён из списка' : ''}
             </p>
             {e.kind === 'baseline' && (
               <p className="help">

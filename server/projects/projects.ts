@@ -1,3 +1,5 @@
+import { Tasks } from '../tasks.js';
+import { taskProjectsSql } from '../task-scope.js';
 import { randomUUID } from 'node:crypto';
 import {
   metadataSchema,
@@ -270,10 +272,10 @@ export class Projects {
       const used = this.store.db
         .prepare(
           `SELECT (
-      (SELECT count(*) FROM records WHERE project_id=?) +
+      (SELECT count(*) FROM records WHERE (kind!='tasks' AND project_id=?) OR (kind='tasks' AND EXISTS(SELECT 1 FROM json_each(${taskProjectsSql('data')}) WHERE value=?))) +
       (SELECT count(*) FROM checks WHERE project_id=?) +
       (SELECT count(*) FROM relations WHERE sourceId=? OR targetId=?) +
-      (SELECT count(*) FROM task_history WHERE project_id=?) +
+      (SELECT count(*) FROM task_history WHERE EXISTS(SELECT 1 FROM json_each(${taskProjectsSql('snapshot')}) WHERE value=?)) +
       (SELECT count(*) FROM observations WHERE project_id=?)
       + (SELECT count(*) FROM reviews WHERE project_id=?)
       + (SELECT count(*) FROM analysis_runs WHERE scope_key='project:'||? OR EXISTS(SELECT 1 FROM json_each(json_extract(selection_json,'$.projectIds')) WHERE value=?))
@@ -284,6 +286,7 @@ export class Projects {
     ) AS total`,
         )
         .get(
+          targetId,
           targetId,
           targetId,
           targetId,
@@ -336,14 +339,10 @@ export class Projects {
       );
       settings.excludedProjectPaths = [...new Set([...settings.excludedProjectPaths, row.path])];
       this.store.saveSettings(settings);
+      new Tasks(this.store).detachProjectInTransaction(id);
       this.store.db
         .prepare(
-          'UPDATE task_identity SET revision=revision+1 WHERE record_id IN (SELECT id FROM records WHERE project_id=?)',
-        )
-        .run(id);
-      this.store.db
-        .prepare(
-          "UPDATE records SET project_id=NULL,data=json_set(data,'$.projectId',NULL),updated_at=? WHERE project_id=?",
+          "UPDATE records SET project_id=NULL,data=json_set(data,'$.projectId',NULL),updated_at=? WHERE project_id=? AND kind!='tasks'",
         )
         .run(new Date().toISOString(), id);
       this.store.db.prepare('UPDATE checks SET project_id=NULL WHERE project_id=?').run(id);

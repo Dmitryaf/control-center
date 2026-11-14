@@ -11,16 +11,19 @@ export function RecentHistory({
   from,
   to,
   compact = false,
+  overview = false,
 }: {
   projectId?: string;
   from?: string;
   to?: string;
   compact?: boolean;
+  overview?: boolean;
 }) {
   const { data: workspace } = useWorkspace();
   const timezone = workspace!.settings.timezone;
   const params = new URLSearchParams({
     timezone,
+    ...(overview && workspace!.storage.taskProjects ? { groupTasks: 'latest' } : {}),
     limit: compact ? '1' : '5',
     ...(projectId ? { projectId } : {}),
     ...(from ? { from } : {}),
@@ -37,6 +40,7 @@ export function RecentHistory({
       query={query}
       timezone={timezone}
       compact={compact}
+      overview={overview}
       projectView={Boolean(projectId)}
     />
   );
@@ -52,11 +56,13 @@ export function RecentHistoryResult({
   query,
   timezone,
   compact = false,
+  overview = false,
   projectView = false,
 }: {
   query: RecentHistoryState;
   timezone: string;
   compact?: boolean;
+  overview?: boolean;
   projectView?: boolean;
 }) {
   return (
@@ -76,7 +82,15 @@ export function RecentHistoryResult({
           </button>
         </div>
       )}
-      <ol className={compact ? 'work-list' : 'recent-work-list'}>
+      <ol
+        className={
+          compact
+            ? 'work-list'
+            : overview
+              ? 'recent-work-list overview-results'
+              : 'recent-work-list'
+        }
+      >
         {query.data?.items.map((entry) => (
           <li key={entry.key} className={compact ? undefined : 'activity'}>
             <time dateTime={entry.recordedAt ?? entry.day}>
@@ -96,11 +110,11 @@ export function RecentHistoryResult({
                 <p className="help">{entry.projectName ?? 'Без связи с проектом'}</p>
               )}
               <p className="preserve">
-                {projectView && entry.excerpt.length > 280
-                  ? entry.excerpt.slice(0, 280) + '…'
+                {(projectView || overview) && entry.excerpt.length > (overview ? 180 : 280)
+                  ? entry.excerpt.slice(0, overview ? 180 : 280) + '…'
                   : entry.excerpt}
               </p>
-              {entry.truncated && (
+              {entry.truncated && !overview && (
                 <p className="help">Показан фрагмент; полный текст — в источнике.</p>
               )}
               {entry.dateQuality === 'baseline' && (
@@ -108,7 +122,7 @@ export function RecentHistoryResult({
                   Известная запись при переходе; более ранняя история недоступна.
                 </p>
               )}
-              {entry.dateQuality === 'declared' && !projectView && (
+              {entry.dateQuality === 'declared' && !projectView && !overview && (
                 <p className="help">Указана дата, время неизвестно.</p>
               )}
             </div>

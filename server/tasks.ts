@@ -5,6 +5,9 @@ import { Store } from './db.js';
 import { HttpError } from './errors.js';
 import { TaskHistory } from './task-history.js';
 import { isTaskOpen } from '../shared/task-status.js';
+import { taskInProject, taskProjectIds } from '../shared/task-projects.js';
+import { metadataSchema } from '../shared/contracts.js';
+import { isClosedProject } from '../shared/project-lifecycle.js';
 
 interface TaskRow {
   id: string;
@@ -69,9 +72,31 @@ export class Tasks {
   }
 
   // Caller owns the same write transaction as the project event/status.
+  detachProjectInTransaction(projectId: string) {
+    for (const task of this.list().filter((task) => taskInProject(task, projectId))) {
+      this.saveInTransaction(
+        { ...task, projectIds: taskProjectIds(task).filter((id) => id !== projectId) },
+        task.id,
+        true,
+      );
+    }
+  }
+
+  // Caller owns the same write transaction as the project event/status.
   cancelProjectInTransaction(projectId: string, projectEventId: string, at: string) {
     for (const task of this.list().filter(
-      (task) => task.projectId === projectId && isTaskOpen(task),
+      (task) =>
+        taskInProject(task, projectId) &&
+        isTaskOpen(task) &&
+        !taskProjectIds(task).some((id) => {
+          if (id === projectId) return false;
+          const row = this.store.project(id);
+          if (!row) return false;
+          const metadata = row.metadata
+            ? JSON.parse(row.metadata)
+            : JSON.parse(row.snapshot).yaml.metadata;
+          return !isClosedProject(metadataSchema.parse(metadata ?? {}).status);
+        }),
     ))
       this.saveInTransaction({ ...task, revision: task.revision }, task.id, true, {
         at,
@@ -89,6 +114,16 @@ export class Tasks {
     const options = taskWriteOptions.parse(input);
     const data = taskSchema.parse(input);
     const existing = update ? this.read(id) : null;
+    if (data.projectIds === undefined) {
+      if (existing && taskProjectIds(existing).length > 1 && data.projectId !== existing.projectId)
+        throw new HttpError(409, 'У задачи несколько проектов. Измените projectIds явно.');
+      data.projectIds =
+        existing && data.projectId === existing.projectId
+          ? taskProjectIds(existing)
+          : taskProjectIds(data);
+    }
+    data.projectIds = [...new Set(data.projectIds)].sort();
+    data.projectId = data.projectIds[0] ?? null;
     if (existing && !Object.hasOwn(input as object, 'cancellation'))
       data.cancellation = existing.cancellation;
     if (cancellation) data.cancellation = cancellation;
@@ -108,10 +143,13 @@ export class Tasks {
     if (data.completedAt && data.result?.remaining)
       throw new HttpError(400, 'Осталась работа: сохраните результат без завершения задачи.');
     // Preserve durable create keys recorded before cancellation was introduced.
-    const { cancellation: cancellationValue, ...originalFields } = data;
-    const hash = createHash('sha256')
-      .update(JSON.stringify(cancellationValue ? data : originalFields))
-      .digest('hex');
+    const { cancellation: cancellationValue, projectIds, ...originalFields } = data;
+    const hashFields = {
+      ...originalFields,
+      ...(cancellationValue ? { cancellation: cancellationValue } : {}),
+      ...(projectIds.length > 1 ? { projectIds } : {}),
+    };
+    const hash = createHash('sha256').update(JSON.stringify(hashFields)).digest('hex');
     if (!update && options.requestKey) {
       const repeated = this.store.db
         .prepare('SELECT record_id, request_hash FROM task_identity WHERE request_key=?')
@@ -135,13 +173,13 @@ export class Tasks {
         409,
         `${existing.code} уже изменена. Прочитайте задачу и согласуйте изменения; ваш ввод не записан.`,
       );
-    if (data.projectId && !this.store.project(data.projectId))
+    if (data.projectIds.some((id) => !this.store.project(id)))
       throw new HttpError(400, 'Связанный проект не найден.');
     if (!update && !options.allowDuplicate) {
       const duplicate = this.list().find(
         (task) =>
           isTaskOpen(task) &&
-          task.projectId === data.projectId &&
+          JSON.stringify([...taskProjectIds(task)].sort()) === JSON.stringify(data.projectIds) &&
           normalizeTitle(task.title) === normalizeTitle(data.title),
       );
       if (duplicate)
@@ -193,6 +231,16 @@ export class Tasks {
     rejectRemovedState(change);
     const patch = taskPatchSchema.parse(change);
     const current = this.read(identifier);
+    if (patch.projectId !== undefined && patch.projectIds === undefined) {
+      if (taskProjectIds(current).length > 1 && patch.projectId !== current.projectId)
+        throw new HttpError(409, 'У задачи несколько проектов. Измените projectIds явно.');
+      patch.projectIds =
+        patch.projectId === current.projectId
+          ? taskProjectIds(current)
+          : patch.projectId
+            ? [patch.projectId]
+            : [];
+    }
     return this.save({ ...current, ...patch, revision }, current.id, true);
   }
 
@@ -212,7 +260,7 @@ export class Tasks {
     return steps.map((title) => {
       const existing = this.list().find(
         (task) =>
-          task.projectId === projectId && normalizeTitle(task.title) === normalizeTitle(title),
+          taskInProject(task, projectId) && normalizeTitle(task.title) === normalizeTitle(title),
       );
       if (existing) return existing;
       const requestKey =
