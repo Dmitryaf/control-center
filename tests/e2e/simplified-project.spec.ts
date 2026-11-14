@@ -97,6 +97,7 @@ test('simple project and task list expose useful work without legacy scheduling 
     }
     const later = tasks[2];
     await page.goto(`/tasks?task=${later.code}`);
+    await page.getByRole('button', { name: 'Изменить задачу', exact: true }).click();
     await page
       .getByLabel('Название задачи', { exact: true })
       .fill('Обсудить первый опыт использования');

@@ -159,7 +159,11 @@ test('selected saved payload → explicit approval → proposals → one edited 
     await expect(draft.getByRole('button')).toHaveCount(0);
     expect(calls).toBe(1);
     await link.click();
-    await expect(page.getByLabel('Название задачи')).toHaveValue(created.title);
+    await expect(
+      page
+        .getByRole('complementary', { name: 'Подробности задачи' })
+        .getByRole('heading', { name: created.title, exact: true }),
+    ).toBeVisible();
   } finally {
     release();
     await request.put('/api/settings', {

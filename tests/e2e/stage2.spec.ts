@@ -87,8 +87,9 @@ test('idea → check → external action/evidence → archive; canonical sources
     const ideaCard = page
       .locator('article')
       .filter({ has: page.getByRole('heading', { name: 'Validate demand', exact: true }) });
-    await expect(ideaCard).toContainText('Идея существует');
-    await ideaCard.getByRole('link', { name: 'Начать проверку' }).click();
+    await expect(ideaCard).toContainText('Новая');
+    await ideaCard.getByRole('link', { name: 'Validate demand', exact: true }).click();
+    await page.getByRole('link', { name: 'Начать проверку' }).click();
     await page.getByLabel('Ожидаемый внешний результат').fill('Two participants agree to a pilot');
     await page.getByLabel('Продолжаем, если').fill('Two agree');
     await page.getByLabel('Останавливаемся, если').fill('Nobody agrees');
@@ -177,11 +178,9 @@ test('idea → check → external action/evidence → archive; canonical sources
     await expect(page.getByRole('status')).toContainText('Проект удалён из Control Center');
     expect((await state()).checks.find((c) => c.id === checkId)?.projectId).toBe(null);
     await page.goto('/ideas');
-    await page
-      .locator('article')
-      .filter({ has: page.getByRole('heading', { name: 'Validate demand', exact: true }) })
-      .getByRole('button', { name: 'Удалить', exact: true })
-      .click();
+    await page.getByRole('link', { name: 'Validate demand', exact: true }).click();
+    await page.getByRole('button', { name: 'Действия идеи', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Удалить', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Validate demand', exact: true })).toHaveCount(
       0,
     );

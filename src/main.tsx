@@ -10,7 +10,8 @@ import ProjectLifecycleHistory from './features/projects/ProjectLifecycleHistory
 import Overview from './features/overview/Overview';
 import Tasks, { TaskHistory } from './features/tasks/Tasks';
 import Checks, { CheckDetail } from './features/checks/Checks';
-import { Ideas, Decisions } from './features/records/Records';
+import { Decisions } from './features/records/Records';
+import Ideas from './features/records/Ideas';
 import Analysis from './features/analysis/Analysis';
 import History from './features/history/History';
 import Observations from './features/observations/Observations';
@@ -42,7 +43,7 @@ const router = createBrowserRouter([
       { path: '/proposal-acceptances', element: <Acceptances /> },
       { path: '/checks', element: <Checks /> },
       { path: '/checks/:id', element: <CheckDetail /> },
-      { path: '/ideas', element: <Ideas /> },
+      { path: '/ideas/:id?', element: <Ideas /> },
       { path: '/decisions', element: <Decisions /> },
       { path: '/analysis', element: <Analysis /> },
       { path: '/codex-analysis', element: <CodexAnalysis /> },

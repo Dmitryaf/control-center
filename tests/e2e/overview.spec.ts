@@ -269,7 +269,11 @@ test('overview shows project context and exact current tasks once, keeps attenti
     .locator('.current-work')
     .getByRole('link', { name: `${base.code} · ${base.title}`, exact: true })
     .click();
-  await expect(page.getByLabel('Название задачи')).toHaveValue(base.title);
+  await expect(
+    page
+      .getByRole('complementary', { name: 'Подробности задачи' })
+      .getByRole('heading', { name: base.title, exact: true }),
+  ).toBeVisible();
 });
 
 test('project card reads persisted history and keeps it visible after a failed refresh', async ({
@@ -521,7 +525,11 @@ test('legacy plans remain readable and importable, editing/export preserve origi
       .getByRole('link', { name: `${task.code} · Новая текущая задача` });
     await expect(link).toBeVisible();
     await link.click();
-    await expect(page.getByLabel('Название задачи')).toHaveValue('Новая текущая задача');
+    await expect(
+      page
+        .getByRole('complementary', { name: 'Подробности задачи' })
+        .getByRole('heading', { name: 'Новая текущая задача', exact: true }),
+    ).toBeVisible();
     await request.post(`/api/tasks/${task.id}/complete`, {
       headers,
       data: {

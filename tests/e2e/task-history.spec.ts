@@ -144,7 +144,12 @@ test('work history preserves repeated results from production MCP, filters, dele
       .first()
       .getByRole('link', { name: 'Открыть текущую задачу →' })
       .click();
-    await expect(page.getByLabel('Название задачи')).toHaveValue(title);
+    await expect(
+      page
+        .getByRole('complementary', { name: 'Подробности задачи' })
+        .getByRole('heading', { name: title, exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: '← К списку задач' }).click();
     await page.getByRole('button', { name: 'Действия ' + task.code, exact: true }).click();
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('menuitem', { name: 'Удалить', exact: true }).click();

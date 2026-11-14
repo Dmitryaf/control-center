@@ -31,6 +31,8 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
       .filter({ has: page.getByRole('heading', { name: title }) });
     await expect(card.getByText(found.code, { exact: true })).toBeVisible();
     await card.getByRole('button', { name: title, exact: true }).click();
+    const panel = page.getByRole('complementary', { name: 'Подробности задачи' });
+    await panel.getByRole('button', { name: 'Изменить задачу', exact: true }).click();
     await expect(page.getByLabel('Название задачи')).toBeFocused();
     await page.getByLabel('Название задачи').fill('Мой несохранённый текст');
     const changed = await mcp.call('task_update', {
@@ -49,12 +51,14 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
       'уже изменена',
     );
     await expect(page.getByLabel('Название задачи')).toHaveValue('Мой несохранённый текст');
+    page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Отмена', exact: true }).click();
-    await card.getByRole('button', { name: title, exact: true }).click();
+    await panel.getByRole('button', { name: 'Изменить задачу', exact: true }).click();
     await expect(page.getByLabel('Описание', { exact: true })).toHaveValue(
       'Изменено другим агентом',
     );
     await page.getByRole('button', { name: 'Отмена', exact: true }).click();
+    await panel.getByRole('button', { name: '← К списку задач' }).click();
     const completed = await mcp.call('task_complete', {
       identifier: found.code,
       revision: changed.value.revision,
@@ -68,13 +72,13 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
     await expect(card).toHaveCount(0);
     await page.getByRole('combobox', { name: 'Состояние задач', exact: true }).selectOption('done');
     await expect(card).toBeVisible();
-    await card.locator('summary').click();
-    await expect(card.getByText(/Добавлен поиск обращений/)).toBeVisible();
-    await expect(card.getByText(/Рабочая база владельца/)).toBeVisible();
-    await expect(card.getByText(/Завершена:/)).toBeVisible();
+    await card.getByRole('button', { name: title, exact: true }).click();
+    await expect(panel.getByText(/Добавлен поиск обращений/)).toBeVisible();
+    await expect(panel.getByText(/Рабочая база владельца/)).toBeVisible();
+    await expect(panel.getByText(/Завершена:/)).toBeVisible();
+    await panel.getByRole('button', { name: '← К списку задач' }).click();
     await card.getByRole('button', { name: 'Вернуть', exact: true }).click();
     await page.getByRole('combobox', { name: 'Состояние задач', exact: true }).selectOption('open');
-    await page.getByRole('button', { name: 'Поиск по задачам' }).click();
     await page.getByLabel('Поиск задач', { exact: true }).fill(found.code);
     await expect(card).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Состояние', exact: true })).toHaveCount(0);
@@ -104,9 +108,12 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
       );
       await card.getByRole('button', { name: title, exact: true }).focus();
       await page.keyboard.press('Enter');
+      await expect(panel.getByRole('heading', { name: title, exact: true })).toBeFocused();
+      await panel.getByRole('button', { name: 'Изменить задачу', exact: true }).click();
       await expect(page.getByLabel('Название задачи')).toBeFocused();
       await expect(page.locator('form').first().getByRole('textbox')).toHaveCount(2);
       await page.getByRole('button', { name: 'Отмена', exact: true }).click();
+      await panel.getByRole('button', { name: '← К списку задач' }).click();
       await card.getByRole('button', { name: 'Действия ' + found.code }).click();
       await page.getByRole('menuitem', { name: 'Изменить итог', exact: true }).click();
       await expect(
@@ -116,6 +123,7 @@ test('browser ↔ production stdio MCP, filters, completion, draft conflict and 
       ).toHaveValue('Добавлен поиск обращений');
       await page.screenshot({ path: `.local/tasks-mcp-review/board-${width}.png`, fullPage: true });
       await page.getByRole('button', { name: 'Отмена', exact: true }).click();
+      await panel.getByRole('button', { name: '← К списку задач' }).click();
     }
     // Explicit migration leaves metadata intact and does not duplicate tasks on repeat.
     await request.put(`/api/projects/${project.id}`, {

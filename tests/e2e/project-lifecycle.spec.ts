@@ -176,10 +176,11 @@ test('project closure: explanation, open tasks, retry, restart, history and reop
       .getByRole('combobox', { name: 'Состояние задач', exact: true })
       .selectOption('cancelled');
     const card = page.getByRole('article').filter({ hasText: task.title });
-    await expect(card).toContainText('Отменена при закрытии проекта');
-    await card.getByText('Условия и результат', { exact: true }).click();
-    await expect(card).toContainText(task.result!.summary);
-    await expect(card).toContainText(task.result!.remaining);
+    await card.getByRole('button', { name: task.title, exact: true }).click();
+    const panel = page.getByRole('complementary', { name: 'Подробности задачи' });
+    await expect(panel).toContainText('Отменена при закрытии проекта');
+    await expect(panel).toContainText(task.result!.summary);
+    await expect(panel).toContainText(task.result!.remaining);
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -190,7 +191,8 @@ test('project closure: explanation, open tasks, retry, restart, history and reop
         fullPage: true,
       });
     }
-    await card.getByRole('button', { name: 'Вернуть', exact: true }).click();
+    await panel.getByRole('button', { name: 'Вернуть', exact: true }).click();
+    await panel.getByRole('button', { name: '← К списку задач' }).click();
     await page.getByRole('combobox', { name: 'Состояние задач', exact: true }).selectOption('open');
     await expect(card).toBeVisible();
     await page.goto(`${base}/history?task=${task.code}`);

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useForm } from 'react-hook-form';
 import type { Task, TaskInput, TaskHistoryPage } from '../../../shared/contracts';
@@ -9,9 +9,10 @@ import { UnsavedChanges } from '../../shared/UnsavedChanges';
 import { useQuery } from '@tanstack/react-query';
 import { isTaskOpen, taskOutcome } from '../../../shared/task-status';
 
-import { CornerDownLeft, ListFilter, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { CornerDownLeft, ListFilter, Plus, SlidersHorizontal } from 'lucide-react';
 import { NotebookHeading } from '../../shared/NotebookHeading';
 import { TaskRow } from './TaskRow';
+import { TaskDetails } from './TaskDetails';
 import './tasks.css';
 
 type Draft = Pick<TaskInput, 'title' | 'projectId' | 'priority' | 'description'>;
@@ -21,7 +22,15 @@ const taskDraft = (t: Task): Draft => ({
   priority: t.priority,
   description: t.description,
 });
-function ResultEditor({ task, onClose }: { task: Task; onClose: () => void }) {
+function ResultEditor({
+  task,
+  onClose,
+  onDirty,
+}: {
+  task: Task;
+  onClose: () => void;
+  onDirty: (dirty: boolean) => void;
+}) {
   const { act, busy } = useActions();
   const {
     register,
@@ -31,6 +40,10 @@ function ResultEditor({ task, onClose }: { task: Task; onClose: () => void }) {
   } = useForm({
     defaultValues: { summary: task.result?.summary ?? '' },
   });
+  useEffect(() => {
+    onDirty(isDirty);
+    return () => onDirty(false);
+  }, [isDirty, onDirty]);
   return (
     <form
       className="panel form section-space"
@@ -79,12 +92,19 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
   const { data: w, refetch } = useWorkspace();
   const { act, busy } = useActions();
   const [details, setDetails] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [filter, setFilter] = useState(params.get('project') || '');
   const [outcome, setOutcome] = useState<'open' | 'done' | 'cancelled'>('open');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Task | null>(null);
   const [resultTask, setResultTask] = useState<Task | null>(null);
+  const [resultDirty, setResultDirty] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const panelHeading = useRef<HTMLHeadingElement>(null);
+  const selected = w!.tasks.find((task) => task.id === selectedId);
+  const panelTask = selected ?? editing ?? resultTask;
+  useEffect(() => {
+    if (selectedId && !resultTask) panelHeading.current?.focus();
+  }, [selectedId, resultTask]);
   const requestKey = useRef(crypto.randomUUID());
   const empty = (project = filter): Draft => ({
     title: '',
@@ -114,20 +134,39 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
     reset(taskDraft(t));
     requestAnimationFrame(() => setFocus('title'));
   }
+  function canDiscard() {
+    return !(isDirty || resultDirty) || confirm('Отбросить несохранённые изменения?');
+  }
+  function openTask(t: Task, result = false) {
+    if (!canDiscard()) return;
+    clear();
+    setResultTask(result ? t : null);
+    setSelectedId(t.id);
+  }
+  function closePanel() {
+    if (!canDiscard()) return;
+    const id = selectedId;
+    clear();
+    setResultTask(null);
+    setSelectedId(null);
+    requestAnimationFrame(() =>
+      (
+        document.getElementById(`task-open-${id}`) ?? document.getElementById('task-list-heading')
+      )?.focus(),
+    );
+  }
   useEffect(() => {
     const identifier = params.get('task');
     if (identifier === loadedIdentifier.current) return;
     const t = w!.tasks.find((t) => t.code === identifier || t.id === identifier);
     if (t) {
       setOutcome(taskOutcome(t));
-      edit(t);
+      setSelectedId(t.id);
       loadedIdentifier.current = identifier;
     }
   });
   function clear(project = filter) {
     reset(empty(project));
-    if (editing)
-      requestAnimationFrame(() => document.getElementById(`task-open-${editing.id}`)?.focus());
     setEditing(null);
     setDetails(false);
     requestKey.current = crypto.randomUUID();
@@ -148,9 +187,11 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
     if (JSON.stringify(getValues()) !== JSON.stringify(v)) return;
     if (editing) {
       clear();
+      requestAnimationFrame(() => panelHeading.current?.focus());
       return;
     }
-    const nextFilter = filter ? v.projectId || '__general__' : '';
+    const nextFilter = v.projectId || '__general__';
+    setSelectedId(null);
     setFilter(nextFilter);
     setOutcome('open');
     setSearch('');
@@ -158,6 +199,16 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
   }
   function update(t: Task, change: Partial<TaskInput>) {
     return act(() => api(`/tasks/${t.id}`, 'PUT', { ...t, ...change }), 'Задача обновлена');
+  }
+  async function removeTask(t: Task) {
+    if (!canDiscard() || !confirm(`Удалить «${t.title}»?`)) return;
+    const ok = await act(() => api(`/tasks/${t.id}`, 'DELETE'), 'Запись удалена');
+    if (ok && selectedId === t.id) {
+      clear();
+      setResultTask(null);
+      setSelectedId(null);
+      requestAnimationFrame(() => document.getElementById('task-list-heading')?.focus());
+    }
   }
   function finish(t: Task) {
     if (
@@ -193,7 +244,7 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
         taskOutcome(t) === outcome &&
         `${t.code} ${t.title} ${t.description}`
           .toLocaleLowerCase('ru')
-          .includes(search.toLocaleLowerCase('ru')),
+          .includes(search.trim().toLocaleLowerCase('ru')),
     )
     .sort(
       (a, b) =>
@@ -207,16 +258,6 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
     const group = groups.get(task.projectId);
     if (group) group.push(task);
     else groups.set(task.projectId, [task]);
-  }
-  // An open editor keeps its place and its draft even if the task leaves the current filter.
-  const visible = new Set(items);
-  for (const draft of [editing, resultTask]) {
-    if (!draft) continue;
-    const group = groups.get(draft.projectId) ?? [];
-    if (!group.some((task) => task.id === draft.id)) {
-      group.push(draft);
-      groups.set(draft.projectId, group);
-    }
   }
   const sortedGroups = [...groups].sort(([a], [b]) => {
     if (!a || !b) return a ? -1 : b ? 1 : 0;
@@ -234,7 +275,7 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
   const draftProjectId = getValues('projectId');
   const composer = (
     <form
-      className={editing ? 'task-composer inline-task-editor' : 'task-composer'}
+      className="task-composer"
       aria-label={editing ? 'Изменить задачу' : 'Новая задача'}
       onSubmit={handleSubmit(save)}
     >
@@ -295,7 +336,15 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
             <textarea rows={3} maxLength={10000} {...register('description')} />
           </label>
           {editing && (
-            <button type="button" onClick={() => clear()}>
+            <button
+              type="button"
+              onClick={() => {
+                if (canDiscard()) {
+                  clear();
+                  requestAnimationFrame(() => panelHeading.current?.focus());
+                }
+              }}
+            >
               Отмена
             </button>
           )}
@@ -313,7 +362,7 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
     <div className="task-desk">
       <UnsavedChanges dirty={isDirty} />
       <NotebookHeading title="Задачи" />
-      {!editing && composer}
+      {!editing && !resultTask && <div className="task-create">{composer}</div>}
       <div className="task-filters">
         <select
           aria-label="Состояние задач"
@@ -325,19 +374,6 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
           <option value="cancelled">Отменённые</option>
         </select>
         <div>
-          <button
-            className="task-icon"
-            type="button"
-            aria-label="Поиск по задачам"
-            title="Поиск по задачам"
-            aria-expanded={searchOpen}
-            onClick={() => {
-              setSearchOpen(!searchOpen);
-              if (searchOpen) setSearch('');
-            }}
-          >
-            <Search size={16} aria-hidden="true" />
-          </button>
           <label className="task-project-filter">
             <ListFilter size={16} aria-hidden="true" />
             <select
@@ -352,78 +388,172 @@ function TaskWorkspace({ params }: { params: URLSearchParams }) {
           </label>
         </div>
       </div>
-      {searchOpen && (
-        <input
-          autoFocus
-          className="task-search-input"
-          type="search"
-          aria-label="Поиск задач"
-          placeholder="Номер, название или описание"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      )}
-      <section aria-label="Список задач">
-        {!items.length && (
-          <p className="empty">
-            {search
-              ? 'По запросу задач не найдено.'
-              : {
-                  open: 'Открытых задач нет.',
-                  done: 'Завершённых задач пока нет.',
-                  cancelled: 'Отменённых задач пока нет.',
-                }[outcome]}
-          </p>
-        )}
-        {sortedGroups.map(([projectId, tasks]) => (
-          <div className="task-group" key={projectId ?? 'general'}>
-            <h2>
-              {projectId ? (
-                <Link to={`/projects/${projectId}`}>{names.get(projectId) ?? 'Проект'}</Link>
-              ) : (
-                'Без проекта'
+      <input
+        className="task-search-input"
+        type="search"
+        aria-label="Поиск задач"
+        placeholder="Номер, название или описание"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+      <div className={`task-workspace${selectedId ? ' has-detail' : ''}`}>
+        <section className="task-list-pane" aria-label="Список задач">
+          <h2 id="task-list-heading" className="task-list-heading" tabIndex={-1}>
+            Задачи <span className="count">{items.length}</span>
+          </h2>
+          {!items.length && (
+            <p className="empty">
+              {search
+                ? 'По запросу задач не найдено.'
+                : {
+                    open: 'Открытых задач нет.',
+                    done: 'Завершённых задач пока нет.',
+                    cancelled: 'Отменённых задач пока нет.',
+                  }[outcome]}
+            </p>
+          )}
+          {sortedGroups.map(([projectId, tasks]) => (
+            <div className="task-group" key={projectId ?? 'general'}>
+              <div className="task-group-heading">
+                <h2>
+                  {projectId ? (
+                    <Link to={`/projects/${projectId}`}>{names.get(projectId) ?? 'Проект'}</Link>
+                  ) : (
+                    'Без проекта'
+                  )}
+                </h2>
+                <span className="count">{tasks.length}</span>
+                <button
+                  type="button"
+                  className="task-icon"
+                  aria-label={`Добавить задачу: ${projectId ? (names.get(projectId) ?? 'Проект') : 'Без проекта'}`}
+                  onClick={() => {
+                    if (!canDiscard()) return;
+                    const next = projectId ?? '__general__';
+                    setSelectedId(null);
+                    setResultTask(null);
+                    setFilter(next);
+                    clear(next);
+                    requestAnimationFrame(() => setFocus('title'));
+                  }}
+                >
+                  <Plus size={16} aria-hidden="true" />
+                </button>
+              </div>
+              {tasks.slice(0, filter || search.trim() ? undefined : 4).map((t) => (
+                <TaskRow
+                  key={t.id}
+                  task={t}
+                  selected={selectedId === t.id}
+                  busy={busy}
+                  resultOpen={!!resultTask}
+                  onEdit={() => openTask(t)}
+                  onResult={() => openTask(t, true)}
+                  onFinish={() => void finish(t)}
+                  onDelete={() => void removeTask(t)}
+                />
+              ))}
+              {!filter && !search.trim() && tasks.length > 4 && (
+                <button
+                  className="task-show-all"
+                  type="button"
+                  onClick={() => changeFilter(projectId ?? '__general__')}
+                >
+                  Все задачи проекта ({tasks.length}) →
+                </button>
               )}
-            </h2>
-            {tasks.map((t) => (
-              <Fragment key={t.id}>
-                {visible.has(t) && (
-                  <TaskRow
-                    task={t}
-                    proposalId={w!.proposalLinks?.[t.id]}
-                    busy={busy}
-                    resultOpen={!!resultTask}
-                    onEdit={() => {
-                      if (
-                        !isDirty ||
-                        confirm('Открыть задачу и отбросить несохранённые изменения?')
-                      )
-                        edit(t);
-                    }}
-                    onResult={() => setResultTask(t)}
-                    onFinish={() => void finish(t)}
-                    onDelete={() => {
-                      if (confirm(`Удалить «${t.title}»?`))
-                        void act(() => api(`/tasks/${t.id}`, 'DELETE'), 'Запись удалена');
-                    }}
-                  />
+            </div>
+          ))}
+        </section>
+        {selectedId && (
+          <aside
+            id="task-detail-panel"
+            className="task-detail-panel"
+            aria-label="Подробности задачи"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.stopPropagation();
+                closePanel();
+              }
+            }}
+          >
+            <button type="button" className="task-panel-back" onClick={closePanel}>
+              ← К списку задач
+            </button>
+            {panelTask ? (
+              <>
+                <p className="task-panel-meta">
+                  {panelTask.code} ·{' '}
+                  {panelTask.projectId
+                    ? (names.get(panelTask.projectId) ?? 'Проект')
+                    : 'Без проекта'}
+                </p>
+                <h2 ref={panelHeading} tabIndex={-1}>
+                  {panelTask.title}
+                </h2>
+                {!selected && (
+                  <p role="status">Задача удалена другим клиентом. Показан открытый черновик.</p>
                 )}
-                {editing?.id === t.id && editing.projectId === projectId && composer}
-                {resultTask?.id === t.id && resultTask.projectId === projectId && (
+                {editing ? (
+                  composer
+                ) : resultTask ? (
                   <ResultEditor
+                    key={resultTask.id}
                     task={resultTask}
+                    onDirty={setResultDirty}
                     onClose={() => {
                       setResultTask(null);
-                      requestAnimationFrame(() =>
-                        document.getElementById(`task-open-${t.id}`)?.focus(),
-                      );
+                      requestAnimationFrame(() => panelHeading.current?.focus());
                     }}
                   />
+                ) : (
+                  <>
+                    <div className="row task-panel-actions">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (canDiscard()) {
+                            clear();
+                            edit(panelTask);
+                          }
+                        }}
+                      >
+                        Изменить задачу
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (canDiscard()) {
+                            clear();
+                            setResultTask(panelTask);
+                          }
+                        }}
+                      >
+                        {panelTask.result ? 'Изменить итог' : 'Добавить итог'}
+                      </button>
+                      <button type="button" disabled={busy} onClick={() => void finish(panelTask)}>
+                        {isTaskOpen(panelTask) ? 'Завершить' : 'Вернуть'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void removeTask(panelTask)}
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                    <TaskDetails task={panelTask} proposalId={w!.proposalLinks?.[panelTask.id]} />
+                  </>
                 )}
-              </Fragment>
-            ))}
-          </div>
-        ))}
-      </section>
+              </>
+            ) : (
+              <h2 ref={panelHeading} tabIndex={-1}>
+                Задача больше недоступна
+              </h2>
+            )}
+          </aside>
+        )}
+      </div>
       <Link className="task-history-link" to={filter ? `/history?project=${filter}` : '/history'}>
         История работы →
       </Link>

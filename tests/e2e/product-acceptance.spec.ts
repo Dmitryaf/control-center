@@ -109,9 +109,10 @@ test('owner journey across active, paused, waiting and completed projects: brows
         .getByRole('combobox', { name: 'Состояние задач', exact: true })
         .selectOption('done');
       const card = page.locator('.task-card').filter({ hasText: taskTitle });
-      await card.locator('summary').click();
-      await expect(card).toContainText('Сохранён тестовый экспорт');
-      await expect(card).toContainText('Вложения и рабочие данные');
+      await card.getByRole('button', { name: taskTitle, exact: true }).click();
+      const panel = page.getByRole('complementary', { name: 'Подробности задачи' });
+      await expect(panel).toContainText('Сохранён тестовый экспорт');
+      await expect(panel).toContainText('Вложения и рабочие данные');
     });
     await test.step('5–7: own observation → scoped week history → manual review', async () => {
       await page.goto(`/observations?project=${project.id}`);

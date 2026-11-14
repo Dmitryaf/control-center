@@ -76,10 +76,9 @@ test('short task form and separate result preserve existing conditions, links, s
     });
     await expect(quick).toBeVisible();
     await quick.getByRole('heading').getByRole('button').click();
-    await expect(quick.locator('xpath=following-sibling::*[1]')).toHaveAttribute(
-      'aria-label',
-      'Изменить задачу',
-    );
+    const panel = page.getByRole('complementary', { name: 'Подробности задачи' });
+    await panel.getByRole('button', { name: 'Изменить задачу', exact: true }).click();
+    await expect(panel.getByRole('form', { name: 'Изменить задачу' })).toBeVisible();
     await expect(form.getByLabel('Описание', { exact: true })).toHaveValue(
       'Сохранить при сворачивании',
     );
@@ -87,11 +86,14 @@ test('short task form and separate result preserve existing conditions, links, s
     page.once('dialog', (dialog) => dialog.dismiss());
     await card.getByRole('button', { name: saved.title, exact: true }).click();
     await expect(titleInput).toHaveValue('Черновик редактирования');
+    page.once('dialog', (dialog) => dialog.accept());
     await form.getByRole('button', { name: 'Отмена' }).click();
+    await panel.getByRole('button', { name: '← К списку задач' }).click();
     await quick.getByRole('button', { name: 'Завершить', exact: true }).click();
     await expect(quick).toHaveCount(0);
     const resultForm = page.getByRole('form', { name: `Итог ${saved.code}`, exact: true });
     await card.getByRole('button', { name: saved.title, exact: true }).click();
+    await panel.getByRole('button', { name: 'Изменить задачу', exact: true }).click();
     await page
       .getByLabel('Описание', { exact: true })
       .fill('Уточнение постановки без изменения отчёта');
@@ -106,10 +108,7 @@ test('short task form and separate result preserve existing conditions, links, s
     await card.getByRole('button', { name: 'Действия ' + saved.code }).click();
     await page.getByRole('menuitem', { name: 'Изменить итог', exact: true }).click();
     await expect(resultForm.getByLabel('Итог работы')).toBeFocused();
-    await expect(card.locator('xpath=following-sibling::*[1]')).toHaveAttribute(
-      'aria-label',
-      `Итог ${saved.code}`,
-    );
+    await expect(panel.getByRole('form', { name: `Итог ${saved.code}` })).toBeVisible();
     await resultForm
       .getByLabel('Итог работы', { exact: true })
       .fill('Уточнённый итог с прежними основаниями');
@@ -125,16 +124,12 @@ test('short task form and separate result preserve existing conditions, links, s
     await card.getByRole('button', { name: 'Действия ' + saved.code }).click();
     await page.getByRole('menuitem', { name: 'Изменить итог', exact: true }).click();
     await resultForm.getByLabel('Итог работы', { exact: true }).fill('Мой несохранённый итог');
-    await titleInput.fill('Отдельная задача');
-    await parameters.click();
-    await form.getByRole('combobox', { name: 'Проект', exact: true }).selectOption({ value: '' });
-    await titleInput.press('Enter');
-    const other = page.getByRole('button', { name: 'Отдельная задача', exact: true });
-    await expect(other).toBeVisible();
+    await page.getByLabel('Показать проект').selectOption('__general__');
     await expect(page.getByLabel('Показать проект')).toHaveValue('__general__');
-    await other.click();
     await expect(resultForm.getByLabel('Итог работы')).toHaveValue('Мой несохранённый итог');
-    await form.getByRole('button', { name: 'Отмена' }).click();
+    page.once('dialog', (dialog) => dialog.dismiss());
+    await panel.getByRole('button', { name: '← К списку задач' }).click();
+    await expect(resultForm.getByLabel('Итог работы')).toHaveValue('Мой несохранённый итог');
     await page.getByLabel('Показать проект').selectOption(project.id);
     await request.put(`/api/tasks/${saved.id}`, {
       headers,
@@ -169,6 +164,7 @@ test('short task form and separate result preserve existing conditions, links, s
     }
     page.once('dialog', (dialog) => dialog.accept());
     await resultForm.getByRole('button', { name: 'Отмена', exact: true }).click();
+    await panel.getByRole('button', { name: '← К списку задач' }).click();
     const partial = (await (
       await request.post('/api/tasks', {
         headers,

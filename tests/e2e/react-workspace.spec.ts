@@ -33,6 +33,7 @@ test('React settings → real scan → tasks → immutable history → backup; d
       page.getByRole('heading', { name: 'React contract task', exact: true }),
     ).toBeVisible();
     await page.getByRole('button', { name: 'React contract task', exact: true }).click();
+    await page.getByRole('button', { name: 'Изменить задачу', exact: true }).click();
     await page.getByLabel('Название задачи').fill('Retained draft');
     const current = (await (await request.get('/api/workspace')).json()) as Workspace;
     const task = current.tasks.find((t) => t.title === 'React contract task')!;
@@ -55,7 +56,9 @@ test('React settings → real scan → tasks → immutable history → backup; d
     await page.getByRole('button', { name: 'Сохранить задачу', exact: true }).click();
     await expect(page.getByRole('alert', { name: 'Ошибка действия', exact: true })).toBeVisible();
     await expect(page.getByLabel('Название задачи')).toHaveValue('Retained draft');
+    page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Отмена', exact: true }).click();
+    await page.getByRole('button', { name: '← К списку задач' }).click();
     await page.getByRole('button', { name: 'Завершить', exact: true }).click();
     await expect(
       page.getByRole('heading', { name: 'React contract task', exact: true }),

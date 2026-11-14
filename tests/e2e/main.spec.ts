@@ -97,6 +97,7 @@ test('complete personal workspace workflow from an empty database', async ({ pag
     await expect(
       page.getByRole('heading', { name: 'Общий инструмент', exact: true }),
     ).toBeVisible();
+    await page.getByRole('link', { name: 'Общий инструмент', exact: true }).click();
     await page.getByLabel('Состояние: Общий инструмент').selectOption('consider');
     await expect(page.getByRole('status')).toContainText('Состояние идеи обновлено');
     await page
